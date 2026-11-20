@@ -46,15 +46,24 @@
     },
     "ErrorCode": {
       "description": "Error codes (A-02) and the exit code each one maps to (A-03).",
-      "type": "string",
-      "enum": [
-        "vault_not_found",
-        "note_not_found",
-        "ambiguous_note",
-        "invalid_argument",
-        "index_locked",
-        "io_error",
-        "not_utf8"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "vault_not_found",
+            "note_not_found",
+            "ambiguous_note",
+            "invalid_argument",
+            "index_locked",
+            "io_error",
+            "not_utf8"
+          ]
+        },
+        {
+          "description": "The file to create already exists (`agents init`, A-05.4).",
+          "type": "string",
+          "const": "already_exists"
+        }
       ]
     }
   }

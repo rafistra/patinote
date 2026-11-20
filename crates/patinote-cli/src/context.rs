@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use patinote_core::commands::{ErrorCode, OutputWarning};
 use patinote_core::config::{expand_home, global_config_path, load_global};
 use patinote_core::index::IndexError as CoreIndexError;
-use patinote_core::write::{Journal, recover};
+use patinote_core::write::{EntryStatus, Journal};
 use patinote_core::{IndexOptions, IndexReport, Progress, ScanError, location};
 use patinote_index::{
     IndexError, OpenOptions, RebuildReason, SqliteStore, index_path_for, update_index,
@@ -160,28 +160,39 @@ fn progress_printer(quiet: bool) -> impl FnMut(Progress) {
     }
 }
 
-/// Undoes interrupted writes, then brings the index up to date. Scan
-/// problems and an automatic rebuild become warnings.
+/// Journal entries left pending by a crash.
+pub fn pending_writes(journal: &Journal) -> usize {
+    journal
+        .ids()
+        .unwrap_or_default()
+        .iter()
+        .filter(|id| {
+            journal
+                .entry(id)
+                .is_ok_and(|e| e.status == EntryStatus::Pending)
+        })
+        .count()
+}
+
+/// Brings the index up to date. Scan problems, an automatic rebuild and
+/// pending writes become warnings.
 pub fn refresh(
     vault: &mut Vault,
     store: &mut SqliteStore,
     quiet: bool,
     cancel: &'static AtomicBool,
 ) -> Result<IndexReport, Failure> {
-    match recover(&vault.root, &vault.journal) {
-        Ok(ids) if !ids.is_empty() => vault.warnings.push(warning(
-            "recovered",
+    // Reading never writes to the vault (F-01.2, A-04.4), so writes left
+    // pending by a crash are only reported here; the app and `agents init`
+    // undo them before they write.
+    let pending = pending_writes(&vault.journal);
+    if pending > 0 {
+        vault.warnings.push(warning(
+            "pending_write",
             None,
             None,
-            format!("undid {} interrupted write(s) from the journal", ids.len()),
-        )),
-        Ok(_) => {}
-        Err(e) => vault.warnings.push(warning(
-            "journal",
-            None,
-            None,
-            format!("cannot check the journal: {e}"),
-        )),
+            format!("{pending} interrupted write(s) are pending; opening Patinote undoes them"),
+        ));
     }
     let options = IndexOptions {
         cancel: Some(cancel),

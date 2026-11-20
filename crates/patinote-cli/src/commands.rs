@@ -7,7 +7,7 @@ use patinote_core::commands::{
     Backlink, BacklinksOutput, ConflictOut, ConflictsOutput, ErrorBody, ErrorCode, HeadingOut,
     LineRange, LinkOut, LinksOutput, ListOutput, NoteRef, NoteSummary, OrphansOutput, ReadOutput,
     ResolveOutput, SearchOutput, SearchResult, SourceLine, TagOut, TagsOutput, UnresolvedOutput,
-    UnresolvedTarget,
+    UnresolvedTarget, VaultInfoOutput,
 };
 use patinote_core::model::LinkKind;
 use patinote_core::names::{fold, link_key, nfc, stem};
@@ -17,7 +17,7 @@ use patinote_core::{Resolver, ScanOptions, scan};
 use patinote_index::SqliteStore;
 use patinote_index::query::NoteRow;
 
-use crate::context::{Vault, index_failure, io_failure};
+use crate::context::{Vault, index_failure, io_failure, warning, warning_message};
 use crate::output::Failure;
 
 /// Default number of results for `list` and `search` (A-02).
@@ -539,6 +539,34 @@ pub fn resolve(ctx: &Ctx<'_>, input: &str) -> Result<ResolveOutput, Failure> {
             .map(|f| f.candidates.iter().map(|c| (*c).to_owned()).collect())
             .unwrap_or_default(),
         warnings: vec![],
+    })
+}
+
+/// `vault.info`: counts from the index, the Syncthing conflicts on disk, and
+/// the per-file warnings stored in the index.
+pub fn vault_info(ctx: &Ctx<'_>) -> Result<VaultInfoOutput, Failure> {
+    let counts = ctx.store.counts().map_err(index_failure)?;
+    let conflicts = scan(&ctx.vault.root, &ScanOptions::default()).map_or(0, |s| s.conflicts.len());
+    let warnings = ctx
+        .store
+        .warnings()
+        .map_err(index_failure)?
+        .into_iter()
+        .map(|w| warning(&w.code, Some(&w.path), w.line, warning_message(&w.code)))
+        .collect();
+    Ok(VaultInfoOutput {
+        v: 1,
+        vault: ctx.vault.root.to_string_lossy().into_owned(),
+        vault_id: ctx.vault.id.clone(),
+        index: ctx.vault.index_path.to_string_lossy().into_owned(),
+        notes: counts.notes,
+        attachments: counts.attachments,
+        canvases: counts.canvases,
+        excluded: counts.excluded,
+        links: counts.links,
+        unresolved_links: counts.unresolved_links,
+        sync_conflicts: conflicts,
+        warnings,
     })
 }
 

@@ -1104,12 +1104,12 @@ Agent (Claude Code, Codex CLI, Gemini CLI) mencari, membaca, dan menelusuri vaul
 **Kriteria penerimaan**
 
 - [ ] A-04.1 MCP Inspector menampilkan ke-11 tool dengan skema argumennya.
-- [ ] A-04.2 Hasil setiap tool identik dengan `--json` perintah CLI yang setara untuk argumen yang sama.
+- [x] A-04.2 Hasil setiap tool identik dengan `--json` perintah CLI yang setara untuk argumen yang sama. `a04_2_tool_results_equal_the_cli_json`
 - [ ] A-04.3 Dalam sesi Claude Code sungguhan, agent mencari, membaca, dan menelusuri backlinks hanya lewat tool Patinote.
-- [ ] A-04.4 Hash semua file vault identik sebelum dan sesudah sesi agent yang memanggil semua tool.
-- [ ] A-04.5 `read_note` dengan `../../etc/passwd` ditolak dengan `invalid_argument`.
-- [ ] A-04.6 Catatan 300 KB terbaca utuh dalam tiga potongan tanpa bagian hilang atau tumpang tindih.
-- [ ] A-04.7 Selama sesi, stdout tidak pernah berisi teks di luar protokol MCP.
+- [x] A-04.4 Hash semua file vault identik sebelum dan sesudah sesi agent yang memanggil semua tool. `a04_4_a_session_calling_every_tool_changes_nothing_in_the_vault`
+- [x] A-04.5 `read_note` dengan `../../etc/passwd` ditolak dengan `invalid_argument`. `a04_5_paths_outside_the_vault_are_rejected`
+- [x] A-04.6 Catatan 300 KB terbaca utuh dalam tiga potongan tanpa bagian hilang atau tumpang tindih. `a04_6_a_300_kb_note_reads_in_three_parts_without_gaps_or_overlap`
+- [x] A-04.7 Selama sesi, stdout tidak pernah berisi teks di luar protokol MCP. `a04_7_stdout_only_carries_protocol_messages`
 
 ### A-05 · `AGENTS.md` di vault
 
@@ -1136,7 +1136,7 @@ Agent yang bekerja di folder vault langsung tahu cara memperlakukan vault ini: l
 **Kriteria penerimaan**
 
 - [ ] A-05.1 `patinote agents init` di vault asli pengguna menghasilkan konvensi yang benar (folder, tag, gaya link).
-- [ ] A-05.2 Setelah pengguna menulis di bagian catatan pribadi, `--update` tidak mengubah bagian itu satu karakter pun.
-- [ ] A-05.3 `--for claude,gemini` membuat `CLAUDE.md` dan `GEMINI.md` yang merujuk ke `AGENTS.md`.
-- [ ] A-05.4 `init` pada vault yang sudah punya `AGENTS.md` tidak menimpa file dan keluar dengan exit code 4.
+- [x] A-05.2 Setelah pengguna menulis di bagian catatan pribadi, `--update` tidak mengubah bagian itu satu karakter pun. `a05_2_update_never_changes_the_personal_part`
+- [x] A-05.3 `--for claude,gemini` membuat `CLAUDE.md` dan `GEMINI.md` yang merujuk ke `AGENTS.md`. `a05_3_for_claude_and_gemini_point_to_agents_md`
+- [x] A-05.4 `init` pada vault yang sudah punya `AGENTS.md` tidak menimpa file dan keluar dengan exit code 4. `a05_4_init_never_overwrites_and_exits_4`
 - [ ] A-05.5 Dalam sesi Claude Code sungguhan di folder vault, agent memakai `patinote` untuk mencari catatan, bukan `grep` atau `find`, tanpa diminta khusus.

@@ -141,6 +141,14 @@ pub enum Command {
         /// A name, alias, path or [[link]]
         name: String,
     },
+    /// Instructions for AI agents working in the vault
+    #[command(subcommand)]
+    Agents(AgentsCommand),
+    /// Read-only MCP server over stdio, for AI agents
+    #[command(
+        after_help = "Examples:\n  patinote mcp --vault ~/Vault\n\nMCP client configuration:\n  {\"mcpServers\": {\"patinote\": {\"command\": \"patinote\", \"args\": [\"mcp\", \"--vault\", \"/path/to/Vault\"]}}}"
+    )]
+    Mcp,
     /// Syncthing conflict copies
     #[command(after_help = "Examples:\n  patinote conflicts\n  patinote conflicts --json")]
     Conflicts,
@@ -171,4 +179,20 @@ pub enum CacheCommand {
     /// Remove indexes of vaults that no longer exist
     #[command(after_help = "Examples:\n  patinote cache clean\n  patinote cache clean --json")]
     Clean,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AgentsCommand {
+    /// Write AGENTS.md in the vault with rules, detected conventions and commands
+    #[command(
+        after_help = "Examples:\n  patinote agents init --for claude,gemini\n  patinote agents init --update"
+    )]
+    Init {
+        /// Replace only the generated part of an existing AGENTS.md
+        #[arg(long)]
+        update: bool,
+        /// Also write a short CLAUDE.md and/or GEMINI.md that point to AGENTS.md
+        #[arg(long = "for", value_delimiter = ',', value_enum)]
+        agents: Vec<crate::agents::Agent>,
+    },
 }
