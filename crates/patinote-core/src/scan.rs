@@ -41,6 +41,9 @@ pub struct ScannedFile {
     pub size: u64,
     /// Modification time in nanoseconds since the Unix epoch; 0 if unknown.
     pub mtime_ns: i64,
+    /// Matched by `.patinote/ignore`: still a link target, but left out of
+    /// search, the quick switcher and note lists (0001 section 7, Q-007).
+    pub excluded: bool,
 }
 
 /// A Syncthing conflict copy. It is not a note; it goes to the conflict list (F-11).
@@ -125,16 +128,22 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Scan, ScanError> {
         .hidden(true)
         .parents(false)
         .follow_links(options.follow_symlinks);
+    // `.patinote/ignore` does not hide files from the walk: matches are listed
+    // with `excluded` so they stay link targets (Q-007).
     let ignore_file = root.join(IGNORE_FILE);
-    if ignore_file.is_file() {
+    let user_ignore = if ignore_file.is_file() {
+        let mut gi = ignore::gitignore::GitignoreBuilder::new(root);
         // On a partial error the valid lines still apply.
-        if builder.add_ignore(&ignore_file).is_some() {
+        if gi.add(&ignore_file).is_some() {
             out.issues.push(ScanIssue {
                 path: IGNORE_FILE.to_owned(),
                 kind: ScanIssueKind::InvalidIgnoreFile,
             });
         }
-    }
+        gi.build().ok()
+    } else {
+        None
+    };
 
     for result in builder.build() {
         let entry = match result {
@@ -183,11 +192,16 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Scan, ScanError> {
             continue;
         }
         let kind = kind_of(name);
+        let excluded = user_ignore.as_ref().is_some_and(|gi| {
+            gi.matched_path_or_any_parents(entry.path(), false)
+                .is_ignore()
+        });
         out.files.push(ScannedFile {
             path: rel,
             kind,
             size,
             mtime_ns,
+            excluded,
         });
     }
 

@@ -81,7 +81,7 @@ File lengkap: `crates/patinote-index/migrations/0001_init.sql`. Ringkasan:
 | Tabel | Fungsi | Catatan desain |
 | --- | --- | --- |
 | `meta` | Versi aplikasi, path vault, waktu indeks penuh terakhir | |
-| `notes` | Satu baris per file: catatan, lampiran, canvas | Lampiran ikut dicatat karena `[[gambar.png]]` juga link. `path` relatif dengan separator `/` dan Unicode NFC |
+| `notes` | Satu baris per file: catatan, lampiran, canvas | Lampiran ikut dicatat karena `[[gambar.png]]` juga link. `path` relatif dengan separator `/` dan Unicode NFC. `excluded = 1` untuk file yang cocok dengan `.patinote/ignore`: hanya tujuan link, tanpa isi FTS, tag, atau link keluar (Q-007) |
 | `aliases` | Dari frontmatter `aliases:` | Dipakai resolver dan autocomplete `[[` |
 | `links` | Semua link keluar | `dst_id NULL` = belum ada catatannya. Posisi byte disimpan agar rename (Fase 3) bisa menulis ulang link dengan presisi tanpa parse ulang |
 | `tags` | Tag inline dan frontmatter | Tag bersarang disimpan utuh (`proyek/patinote`) |
@@ -114,6 +114,15 @@ Untuk `[[target]]`, setelah dinormalisasi (huruf kecil, NFC, tanpa ekstensi `.md
 3. Kalau tidak ada yang cocok: cocokkan dengan `alias_lower`.
 4. Kalau ada lebih dari satu kandidat: pilih yang path-nya paling pendek, lalu urutan abjad. Kasus ini dicatat sebagai link ambigu untuk diperingatkan.
 5. Kalau tetap tidak ada: `dst_id = NULL`.
+
+Tambahan dari langkah 1.4:
+
+- Target kosong (`[[#Heading]]`, `[[#^blok]]`) menunjuk catatan itu sendiri.
+- Lampiran dicocokkan dengan nama file beserta ekstensinya (`[[foto.png]]`); catatan dengan atau tanpa `.md`.
+- Link Markdown (`[teks](path)`) dan embed gambar yang berisi `/` dibaca sebagai path: relatif terhadap folder catatan sumber, lalu dari root vault (dengan `.md` bila tanpa ekstensi), lalu dengan aturan nama di atas. Path yang keluar dari vault (`../..`) tidak pernah cocok sebagai path.
+- File yang dikecualikan `.patinote/ignore` tetap menjadi tujuan (Q-007).
+- Status ambigu tidak disimpan; resolver menghitungnya saat dibutuhkan (`patinote resolve`, garis bawah link ambigu).
+- Resolusi dijalankan ulang untuk semua link setelah setiap run pengindeks yang mengubah file, karena catatan baru atau yang dihapus bisa memindahkan tujuan link lain.
 
 Aturan ini perlu diverifikasi terhadap vault Obsidian asli dengan test kompatibilitas.
 

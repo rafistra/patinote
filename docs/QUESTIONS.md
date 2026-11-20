@@ -83,3 +83,13 @@ Rekomendasi agent: A. Skema tetap satu file selama belum ada pengguna, dan `0001
 
 Rekomendasi agent: A. Indeks hanyalah cache yang aman dibangun ulang, jadi deteksi saat dipakai sudah cukup aman, dan target kecepatan adalah alasan utama Patinote dibuat. Teks F-03 di PRD perlu disesuaikan oleh pemilik bila A dipilih.
 **Jawaban:** A, disetujui pemilik (20 November 2026). Teks F-03 di PRD disesuaikan oleh pemilik.
+
+## Q-007 · File yang dikecualikan `.patinote/ignore` tetap jadi tujuan link (langkah 1.4, 20 November 2026)
+
+**Konteks:** `0001` bagian 7 menyatakan file yang dikecualikan "tetap ada di disk, tetapi tidak muncul di pencarian, quick switcher, graf, dan unlinked mentions", dan "tetap dikenali sebagai tujuan link, sehingga link ke sana tidak dilaporkan rusak". Pemindai di langkah 1.2 membuang file yang cocok dengan `.patinote/ignore` sepenuhnya, jadi link ke file itu akan tercatat sebagai link ke catatan yang belum ada. Skema `notes` tidak punya kolom untuk menandai file yang dikecualikan.
+**Pilihan:**
+- A. Pemindai tetap mendaftar file yang cocok dengan `.patinote/ignore` dengan tanda `excluded`. Indeks menyimpannya di `notes` dengan kolom baru `excluded INTEGER NOT NULL DEFAULT 0` (diubah langsung di `0001_init.sql`, seperti Q-005), tanpa isi FTS, tag, atau link keluar. Resolver memakainya sebagai tujuan link; pencarian, quick switcher, dan daftar catatan melewatinya. Folder bawaan (`.obsidian/`, `.git/`, `.trash/`, folder tersembunyi) tetap dilewati sepenuhnya.
+- B. File yang dikecualikan dibuang sepenuhnya seperti sekarang; link ke sana dilaporkan sebagai link ke catatan yang belum ada. `0001` bagian 7 diubah.
+
+Rekomendasi agent: A, sesuai `0001` bagian 7. Pengguna biasanya mengecualikan folder arsip atau template yang tetap ditautkan dari catatan lain.
+**Jawaban:** A, disetujui pemilik (20 November 2026).

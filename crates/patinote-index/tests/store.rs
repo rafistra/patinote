@@ -19,6 +19,7 @@ fn note(path: &str, text: &str) -> IndexedFile {
         size: text.len() as u64,
         mtime_ns: 1,
         hash: Some([7; 32]),
+        excluded: false,
         text: Some(text.to_owned()),
         note: Some(patinote_core::parse(text)),
         warnings: Vec::new(),
@@ -178,6 +179,7 @@ fn warnings_and_attachments_are_stored() {
         size: 10,
         mtime_ns: 1,
         hash: Some([1; 32]),
+        excluded: false,
         text: None,
         note: None,
         warnings: vec![FileWarning {

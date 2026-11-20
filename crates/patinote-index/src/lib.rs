@@ -14,8 +14,9 @@ use std::{fs, io};
 
 use patinote_core::model::{LinkKind, PropertyValue, TagSource};
 use patinote_core::names::{extension, fold, link_key, stem};
+use patinote_core::resolve::Target;
 use patinote_core::scan::FileKind;
-use patinote_core::store::{Batch, FileState, IndexedFile, Store};
+use patinote_core::store::{Batch, FileState, IndexedFile, LinkRecord, Store};
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use rusqlite_migration::{M, Migrations};
 
@@ -340,13 +341,13 @@ fn upsert(tx: &rusqlite::Transaction<'_>, f: &IndexedFile, now: i64) -> rusqlite
     };
     let id: i64 = tx
         .prepare_cached(
-            "INSERT INTO notes (path, path_lower, stem, stem_lower, ext, kind, title, size, mtime_ns, hash, frontmatter, indexed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            "INSERT INTO notes (path, path_lower, stem, stem_lower, ext, kind, title, size, mtime_ns, hash, frontmatter, indexed_at, excluded)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (path) DO UPDATE SET
                  path_lower = excluded.path_lower, stem = excluded.stem, stem_lower = excluded.stem_lower,
                  ext = excluded.ext, kind = excluded.kind, title = excluded.title, size = excluded.size,
                  mtime_ns = excluded.mtime_ns, hash = excluded.hash, frontmatter = excluded.frontmatter,
-                 indexed_at = excluded.indexed_at
+                 indexed_at = excluded.indexed_at, excluded = excluded.excluded
              RETURNING id",
         )?
         .query_row(
@@ -363,6 +364,7 @@ fn upsert(tx: &rusqlite::Transaction<'_>, f: &IndexedFile, now: i64) -> rusqlite
                 f.hash.map(|h| h.to_vec()),
                 note.and_then(|n| n.frontmatter_json.as_deref()),
                 now,
+                f.excluded,
             ],
             |r| r.get(0),
         )?;
@@ -455,7 +457,7 @@ impl Store for SqliteStore {
     fn file_states(&self) -> Result<Vec<FileState>, IndexError> {
         let mut stmt = self
             .conn
-            .prepare_cached("SELECT path, size, mtime_ns, hash FROM notes")?;
+            .prepare_cached("SELECT path, size, mtime_ns, hash, excluded FROM notes")?;
         let rows = stmt.query_map([], |r| {
             let hash: Option<Vec<u8>> = r.get(3)?;
             Ok(FileState {
@@ -463,6 +465,7 @@ impl Store for SqliteStore {
                 size: r.get::<_, i64>(1)? as u64,
                 mtime_ns: r.get(2)?,
                 hash: hash.and_then(|h| h.try_into().ok()),
+                excluded: r.get(4)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -513,6 +516,83 @@ impl Store for SqliteStore {
         self.conn
             .prepare_cached("INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value")?
             .execute([key, value])?;
+        Ok(())
+    }
+
+    fn targets(&self) -> Result<Vec<Target>, IndexError> {
+        let mut aliases: std::collections::HashMap<i64, Vec<String>> =
+            std::collections::HashMap::new();
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT note_id, alias FROM aliases")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        for row in rows {
+            let (id, alias) = row?;
+            aliases.entry(id).or_default().push(alias);
+        }
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT id, path, kind FROM notes")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, path, kind) = row?;
+            out.push(Target {
+                path,
+                kind: match kind.as_str() {
+                    "note" => FileKind::Note,
+                    "canvas" => FileKind::Canvas,
+                    _ => FileKind::Attachment,
+                },
+                aliases: aliases.remove(&id).unwrap_or_default(),
+            });
+        }
+        Ok(out)
+    }
+
+    fn links(&self) -> Result<Vec<LinkRecord>, IndexError> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT l.id, s.path, l.kind, l.target, d.path
+             FROM links l JOIN notes s ON s.id = l.src_id LEFT JOIN notes d ON d.id = l.dst_id",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let kind: String = r.get(2)?;
+            Ok(LinkRecord {
+                id: r.get(0)?,
+                source: r.get(1)?,
+                kind: match kind.as_str() {
+                    "embed" => LinkKind::Embed,
+                    "markdown" => LinkKind::Markdown,
+                    "frontmatter" => LinkKind::Frontmatter,
+                    _ => LinkKind::Wiki,
+                },
+                target: r.get(3)?,
+                destination: r.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn set_link_destinations(
+        &mut self,
+        updates: &[(i64, Option<String>)],
+    ) -> Result<(), IndexError> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        for (id, dest) in updates {
+            tx.prepare_cached(
+                "UPDATE links SET dst_id = (SELECT id FROM notes WHERE path = ?2) WHERE id = ?1",
+            )?
+            .execute(params![id, dest])?;
+        }
+        tx.commit()?;
         Ok(())
     }
 }
