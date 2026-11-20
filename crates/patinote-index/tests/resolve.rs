@@ -190,3 +190,72 @@ fn excluded_notes_are_targets_only() {
     );
     assert_eq!(count(&s, "SELECT count(*) FROM tags"), 1);
 }
+
+/// `link_candidates` loads only the files a target can match; resolving from
+/// them must give exactly what resolving from every file gives (A-01.6).
+#[test]
+fn link_candidates_resolve_like_the_full_resolver() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = dir.path().join("v");
+    vaultgen::generate(
+        &vaultgen::Config {
+            notes: 1000,
+            seed: 9,
+            long_note_lines: 0,
+        },
+        &v,
+    )
+    .unwrap();
+    // Names that stress the keys: dots, case, NFD, attachments, aliases, folders.
+    write(&v, "Dua/Versi.v2.md", "x");
+    write(&v, "Tiga/Versi.v2.md", "x");
+    write(&v, "Lampiran/Foto.Liburan.PNG", "x");
+    write(&v, "Lampiran/Foto.md", "x");
+    write(
+        &v,
+        "Kafe.md",
+        "---\naliases: [Tempat Ngopi, Café Lama]\n---\n",
+    );
+    write(&v, "Cafe\u{301}.md", "x");
+    let mut s = SqliteStore::open(&dir.path().join("index.db"), &OpenOptions::default()).unwrap();
+    index(&v, &mut s);
+
+    let full = Resolver::new(s.targets().unwrap());
+    let mut inputs: Vec<String> = s
+        .connection()
+        .prepare("SELECT DISTINCT target FROM links")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    inputs.extend(s.all_notes().unwrap().into_iter().flat_map(|n| {
+        let no_ext = n.path.strip_suffix(".md").unwrap_or(&n.path).to_owned();
+        let name = no_ext.rsplit('/').next().unwrap().to_owned();
+        [n.path.to_uppercase(), no_ext, name]
+    }));
+    inputs.extend(
+        [
+            "versi.v2",
+            "Tiga/Versi.v2",
+            "foto.liburan.png",
+            "Foto",
+            "tempat ngopi",
+            "CAFÉ LAMA",
+            "Café",
+            "/Kafe",
+            "Kafe.md",
+            "tidak ada",
+        ]
+        .map(str::to_owned),
+    );
+    assert!(inputs.len() > 3000);
+    for t in &inputs {
+        let narrow = Resolver::new(s.link_candidates(t).unwrap());
+        assert_eq!(
+            narrow.resolve("", patinote_core::model::LinkKind::Wiki, t),
+            full.resolve("", patinote_core::model::LinkKind::Wiki, t),
+            "{t}"
+        );
+    }
+}

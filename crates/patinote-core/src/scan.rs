@@ -145,70 +145,102 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Scan, ScanError> {
         None
     };
 
-    for result in builder.build() {
-        let entry = match result {
-            Ok(entry) => entry,
-            Err(err) => {
-                out.issues.push(issue_from(&err, root));
-                continue;
-            }
-        };
-        let Some(file_type) = entry.file_type() else {
-            continue;
-        };
-        if !file_type.is_file() {
-            // Directories, and symlinks when they are not followed.
-            continue;
-        }
-        let Some(rel) = relative(entry.path(), root) else {
-            out.issues.push(ScanIssue {
-                path: entry.path().to_string_lossy().into_owned(),
-                kind: ScanIssueKind::InvalidName,
-            });
-            continue;
-        };
-        let name = rel.rsplit('/').next().unwrap_or(&rel);
-        if name.ends_with('~') {
-            // Editor backup files (F-04 ignores them too).
-            continue;
-        }
-        let (size, mtime_ns) = match entry.metadata() {
-            Ok(m) => (m.len(), mtime_ns(&m)),
-            Err(_) => {
-                out.issues.push(ScanIssue {
-                    path: rel,
-                    kind: ScanIssueKind::Unreadable,
-                });
-                continue;
-            }
-        };
-        if let Some(original) = conflict_original(&rel) {
-            out.conflicts.push(SyncConflict {
-                path: rel,
-                original,
-                size,
-                mtime_ns,
-            });
-            continue;
-        }
-        let kind = kind_of(name);
-        let excluded = user_ignore.as_ref().is_some_and(|gi| {
-            gi.matched_path_or_any_parents(entry.path(), false)
-                .is_ignore()
-        });
-        out.files.push(ScannedFile {
-            path: rel,
-            kind,
-            size,
-            mtime_ns,
-            excluded,
-        });
-    }
+    // Walking in parallel: stat calls dominate the quick check (F-03.8, A-01.6).
+    // The lists are sorted below, so the result does not depend on thread order.
+    let shared = std::sync::Mutex::new(out);
+    builder.build_parallel().run(|| {
+        Box::new(|result| {
+            // The stat call happens here, outside the lock.
+            let mut one = Scan::default();
+            visit(result, root, user_ignore.as_ref(), &mut one);
+            // A poisoned lock means another walker thread panicked; stop.
+            let Ok(mut out) = shared.lock() else {
+                return ignore::WalkState::Quit;
+            };
+            out.files.append(&mut one.files);
+            out.conflicts.append(&mut one.conflicts);
+            out.issues.append(&mut one.issues);
+            ignore::WalkState::Continue
+        })
+    });
+    let mut out = shared
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
 
     out.files.sort_by(|a, b| a.path.cmp(&b.path));
     out.conflicts.sort_by(|a, b| a.path.cmp(&b.path));
-    out.issues.sort_by(|a, b| a.path.cmp(&b.path));
+    out.issues.sort_by(|a, b| {
+        a.path
+            .cmp(&b.path)
+            .then_with(|| format!("{:?}", a.kind).cmp(&format!("{:?}", b.kind)))
+    });
     Ok(out)
+}
+
+/// Adds one walk entry to the scan.
+fn visit(
+    result: Result<ignore::DirEntry, ignore::Error>,
+    root: &Path,
+    user_ignore: Option<&ignore::gitignore::Gitignore>,
+    out: &mut Scan,
+) {
+    let entry = match result {
+        Ok(entry) => entry,
+        Err(err) => {
+            out.issues.push(issue_from(&err, root));
+            return;
+        }
+    };
+    let Some(file_type) = entry.file_type() else {
+        return;
+    };
+    if !file_type.is_file() {
+        // Directories, and symlinks when they are not followed.
+        return;
+    }
+    let Some(rel) = relative(entry.path(), root) else {
+        out.issues.push(ScanIssue {
+            path: entry.path().to_string_lossy().into_owned(),
+            kind: ScanIssueKind::InvalidName,
+        });
+        return;
+    };
+    let name = rel.rsplit('/').next().unwrap_or(&rel);
+    if name.ends_with('~') {
+        // Editor backup files (F-04 ignores them too).
+        return;
+    }
+    let (size, mtime_ns) = match entry.metadata() {
+        Ok(m) => (m.len(), mtime_ns(&m)),
+        Err(_) => {
+            out.issues.push(ScanIssue {
+                path: rel,
+                kind: ScanIssueKind::Unreadable,
+            });
+            return;
+        }
+    };
+    if let Some(original) = conflict_original(&rel) {
+        out.conflicts.push(SyncConflict {
+            path: rel,
+            original,
+            size,
+            mtime_ns,
+        });
+        return;
+    }
+    let kind = kind_of(name);
+    let excluded = user_ignore.is_some_and(|gi| {
+        gi.matched_path_or_any_parents(entry.path(), false)
+            .is_ignore()
+    });
+    out.files.push(ScannedFile {
+        path: rel,
+        kind,
+        size,
+        mtime_ns,
+        excluded,
+    });
 }
 
 /// Relative path with `/` separators in NFC, or `None` if the name is not UTF-8.

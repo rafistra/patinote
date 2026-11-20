@@ -32,5 +32,9 @@ rusqlite.workspace = true
 tempfile.workspace = true
 vaultgen.workspace = true
 
+[[bench]]
+name = "cli"
+harness = false
+
 [lints]
 workspace = true
