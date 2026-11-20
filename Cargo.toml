@@ -16,6 +16,7 @@ blake3 = "1.8.7"
 clap = { version = "4.6.9", features = ["derive"] }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 ignore = "0.4.34"
+notify = { version = "8.2.2", default-features = false }
 patinote-core = { path = "crates/patinote-core" }
 pulldown-cmark = { version = "0.13.6", default-features = false }
 rusqlite = { version = "0.41", features = ["bundled"] }

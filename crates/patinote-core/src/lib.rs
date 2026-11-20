@@ -12,6 +12,7 @@ pub mod parser;
 pub mod resolve;
 pub mod scan;
 pub mod store;
+pub mod watch;
 
 pub use index::{IndexOptions, IndexReport, Progress, index_vault};
 pub use model::{
@@ -28,3 +29,4 @@ pub use store::{
     Batch, FileState, FileWarning, FileWarningCode, Hash, IndexedFile, LinkRecord, MemoryStore,
     Store,
 };
+pub use watch::{Change, PollReason, VaultWatcher, WatchMode, WatchOptions, watch};
