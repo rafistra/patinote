@@ -28,7 +28,9 @@ CREATE TABLE notes (
     mtime_ns    INTEGER NOT NULL,          -- jalur cepat deteksi perubahan
     hash        BLOB,                      -- blake3 32 byte; NULL untuk lampiran besar
     frontmatter TEXT,                      -- frontmatter mentah sebagai JSON (fidelitas penuh)
-    indexed_at  INTEGER NOT NULL           -- unix epoch detik
+    indexed_at  INTEGER NOT NULL,          -- unix epoch detik
+    excluded    INTEGER NOT NULL DEFAULT 0 CHECK (excluded IN (0, 1))
+                                           -- cocok dengan .patinote/ignore: hanya tujuan link (Q-007)
 ) STRICT;
 
 CREATE INDEX notes_stem_lower ON notes (stem_lower);

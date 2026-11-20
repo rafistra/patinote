@@ -15,7 +15,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{fs, io};
 
-use crate::model::WarningCode;
+use crate::model::{ParsedNote, WarningCode};
+use crate::resolve::Resolver;
 use crate::scan::{
     FileKind, MAX_PARSE_BYTES, ScanError, ScanIssue, ScanOptions, ScannedFile, scan,
 };
@@ -78,6 +79,10 @@ pub struct IndexReport {
     pub unchanged: usize,
     /// Warnings stored for files written in this run.
     pub warnings: usize,
+    /// Files matched by `.patinote/ignore`, kept as link targets only (Q-007).
+    pub excluded: usize,
+    /// Links whose destination changed in this run (step 1.4).
+    pub links_updated: usize,
     /// Paths the scanner could not read, and other scan problems.
     pub issues: Vec<ScanIssue>,
     pub duration: Duration,
@@ -114,6 +119,7 @@ pub fn index_vault<S: Store>(
         ..IndexReport::default()
     };
     for f in &scanned.files {
+        report.excluded += usize::from(f.excluded);
         match f.kind {
             FileKind::Note => report.notes += 1,
             FileKind::Attachment => report.attachments += 1,
@@ -132,9 +138,9 @@ pub fn index_vault<S: Store>(
         .iter()
         .filter_map(|f| {
             let old = known.remove(&f.path);
-            let same = old
-                .as_ref()
-                .is_some_and(|o| o.size == f.size && o.mtime_ns == f.mtime_ns);
+            let same = old.as_ref().is_some_and(|o| {
+                o.size == f.size && o.mtime_ns == f.mtime_ns && o.excluded == f.excluded
+            });
             if same && !options.full {
                 report.unchanged += 1;
                 None
@@ -153,7 +159,9 @@ pub fn index_vault<S: Store>(
     let mut batch = Batch::default();
     let mut done = 0;
     for (file, old) in &changed {
-        match read(root, file, old.as_ref()) {
+        // A file whose exclusion changed is stored again even if its bytes did not.
+        let old_for_hash = old.as_ref().filter(|o| o.excluded == file.excluded);
+        match read(root, file, old_for_hash) {
             Read::SameContent => {
                 batch.touch.push((file.path.clone(), file.mtime_ns));
                 report.touched += 1;
@@ -187,6 +195,12 @@ pub fn index_vault<S: Store>(
         changed: changed.len(),
     });
 
+    // Adding, changing or removing any file can move where links point (a new
+    // shorter path, a removed note), so resolution runs after every change.
+    if report.reprocessed() + report.removed > 0 {
+        report.links_updated = resolve_links(store).map_err(IndexError::Store)?;
+    }
+
     if let Ok(canonical) = fs::canonicalize(root) {
         store
             .set_meta(META_VAULT_PATH, &canonical.to_string_lossy())
@@ -204,6 +218,26 @@ pub fn index_vault<S: Store>(
 
     report.duration = started.elapsed();
     Ok(report)
+}
+
+/// Points every stored link at its destination (docs/design/0001,
+/// section 4). Returns how many links changed.
+pub fn resolve_links<S: Store>(store: &mut S) -> Result<usize, S::Error> {
+    let resolver = Resolver::new(store.targets()?);
+    let updates: Vec<(i64, Option<String>)> = store
+        .links()?
+        .into_iter()
+        .filter_map(|l| {
+            let dest = resolver
+                .resolve(&l.source, l.kind, &l.target)
+                .map(|r| r.path.to_owned());
+            (dest != l.destination).then_some((l.id, dest))
+        })
+        .collect();
+    if !updates.is_empty() {
+        store.set_link_destinations(&updates)?;
+    }
+    Ok(updates.len())
 }
 
 enum Read {
@@ -224,6 +258,7 @@ fn read(root: &Path, file: &ScannedFile, old: Option<&FileState>) -> Read {
         size: file.size,
         mtime_ns: file.mtime_ns,
         hash: None,
+        excluded: file.excluded,
         text: None,
         note: None,
         warnings: Vec::new(),
@@ -264,8 +299,19 @@ fn read(root: &Path, file: &ScannedFile, old: Option<&FileState>) -> Read {
                         line: Some(1),
                     },
                 }));
-            indexed.note = Some(note);
-            indexed.text = Some(text);
+            if file.excluded {
+                // A link target only: its title and aliases resolve links; it has
+                // no text to search and no links or tags of its own (Q-007).
+                indexed.note = Some(ParsedNote {
+                    title: note.title,
+                    aliases: note.aliases,
+                    frontmatter_json: note.frontmatter_json,
+                    ..ParsedNote::default()
+                });
+            } else {
+                indexed.note = Some(note);
+                indexed.text = Some(text);
+            }
         }
         Err(_) => indexed.warnings.push(warn(FileWarningCode::NotUtf8)),
     }

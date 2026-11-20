@@ -5,7 +5,8 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 
-use crate::model::ParsedNote;
+use crate::model::{LinkKind, ParsedNote};
+use crate::resolve::Target;
 use crate::scan::FileKind;
 
 /// A blake3 hash of a file's bytes.
@@ -19,6 +20,8 @@ pub struct FileState {
     pub mtime_ns: i64,
     /// `None` for files that are not hashed (large attachments, unreadable files).
     pub hash: Option<Hash>,
+    /// Matched by `.patinote/ignore` (Q-007).
+    pub excluded: bool,
 }
 
 /// A problem with one file that did not stop indexing (Q-005).
@@ -70,6 +73,8 @@ pub struct IndexedFile {
     pub size: u64,
     pub mtime_ns: i64,
     pub hash: Option<Hash>,
+    /// Matched by `.patinote/ignore`: kept as a link target only (Q-007).
+    pub excluded: bool,
     /// Full text for search, for notes that were read; `None` otherwise.
     pub text: Option<String>,
     /// Parse result, for notes that were parsed.
@@ -95,6 +100,19 @@ impl Batch {
     }
 }
 
+/// A stored link, for resolution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkRecord {
+    /// Store-specific link id.
+    pub id: i64,
+    /// Path of the note the link is in.
+    pub source: String,
+    pub kind: LinkKind,
+    pub target: String,
+    /// Path the link currently points to, if resolved.
+    pub destination: Option<String>,
+}
+
 /// Storage for the index.
 pub trait Store {
     type Error: std::error::Error + Send + Sync + 'static;
@@ -110,6 +128,18 @@ pub trait Store {
 
     /// Writes a metadata value.
     fn set_meta(&mut self, key: &str, value: &str) -> Result<(), Self::Error>;
+
+    /// Every file links can point to, with note aliases.
+    fn targets(&self) -> Result<Vec<Target>, Self::Error>;
+
+    /// Every stored link.
+    fn links(&self) -> Result<Vec<LinkRecord>, Self::Error>;
+
+    /// Sets where links point (`None`: a note that does not exist), atomically.
+    fn set_link_destinations(
+        &mut self,
+        updates: &[(i64, Option<String>)],
+    ) -> Result<(), Self::Error>;
 }
 
 /// An in-memory [`Store`] for tests.
@@ -117,6 +147,29 @@ pub trait Store {
 pub struct MemoryStore {
     pub files: BTreeMap<String, IndexedFile>,
     pub meta: BTreeMap<String, String>,
+    /// Link id → (source path, index in the source's links, destination).
+    pub destinations: BTreeMap<i64, (String, usize, Option<String>)>,
+    next_link: i64,
+}
+
+impl MemoryStore {
+    /// Where the `index`-th link of `source` points, if resolved.
+    pub fn destination(&self, source: &str, index: usize) -> Option<&str> {
+        self.destinations
+            .values()
+            .find(|(s, i, _)| s == source && *i == index)
+            .and_then(|(_, _, d)| d.as_deref())
+    }
+
+    fn drop_links_of(&mut self, path: &str) {
+        self.destinations.retain(|_, (s, _, _)| s != path);
+        // Like ON DELETE SET NULL: links into a removed file lose their destination.
+        for (_, _, d) in self.destinations.values_mut() {
+            if d.as_deref() == Some(path) {
+                *d = None;
+            }
+        }
+    }
 }
 
 impl Store for MemoryStore {
@@ -131,6 +184,7 @@ impl Store for MemoryStore {
                 size: f.size,
                 mtime_ns: f.mtime_ns,
                 hash: f.hash,
+                excluded: f.excluded,
             })
             .collect())
     }
@@ -138,6 +192,7 @@ impl Store for MemoryStore {
     fn apply(&mut self, batch: &Batch) -> Result<(), Infallible> {
         for path in &batch.remove {
             self.files.remove(path);
+            self.drop_links_of(path);
         }
         for (path, mtime) in &batch.touch {
             if let Some(f) = self.files.get_mut(path) {
@@ -145,6 +200,12 @@ impl Store for MemoryStore {
             }
         }
         for f in &batch.upsert {
+            self.destinations.retain(|_, (s, _, _)| s != &f.path);
+            for i in 0..f.note.as_ref().map_or(0, |n| n.links.len()) {
+                self.next_link += 1;
+                self.destinations
+                    .insert(self.next_link, (f.path.clone(), i, None));
+            }
             self.files.insert(f.path.clone(), f.clone());
         }
         Ok(())
@@ -156,6 +217,51 @@ impl Store for MemoryStore {
 
     fn set_meta(&mut self, key: &str, value: &str) -> Result<(), Infallible> {
         self.meta.insert(key.to_owned(), value.to_owned());
+        Ok(())
+    }
+
+    fn targets(&self) -> Result<Vec<Target>, Infallible> {
+        Ok(self
+            .files
+            .values()
+            .map(|f| Target {
+                path: f.path.clone(),
+                kind: f.kind,
+                aliases: f
+                    .note
+                    .as_ref()
+                    .map(|n| n.aliases.clone())
+                    .unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    fn links(&self) -> Result<Vec<LinkRecord>, Infallible> {
+        Ok(self
+            .destinations
+            .iter()
+            .filter_map(|(&id, (source, i, dest))| {
+                let link = self.files.get(source)?.note.as_ref()?.links.get(*i)?;
+                Some(LinkRecord {
+                    id,
+                    source: source.clone(),
+                    kind: link.kind,
+                    target: link.target.clone(),
+                    destination: dest.clone(),
+                })
+            })
+            .collect())
+    }
+
+    fn set_link_destinations(
+        &mut self,
+        updates: &[(i64, Option<String>)],
+    ) -> Result<(), Infallible> {
+        for (id, dest) in updates {
+            if let Some(entry) = self.destinations.get_mut(id) {
+                entry.2 = dest.clone();
+            }
+        }
         Ok(())
     }
 }

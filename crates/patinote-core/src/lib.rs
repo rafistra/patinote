@@ -9,6 +9,7 @@ pub mod location;
 pub mod model;
 pub mod names;
 pub mod parser;
+pub mod resolve;
 pub mod scan;
 pub mod store;
 
@@ -18,10 +19,12 @@ pub use model::{
     WarningCode,
 };
 pub use parser::parse;
+pub use resolve::{Resolved, Resolver, Target};
 pub use scan::{
     FileKind, MAX_PARSE_BYTES, NoteContent, Scan, ScanError, ScanIssue, ScanIssueKind, ScanOptions,
     ScannedFile, SyncConflict, load_note, scan,
 };
 pub use store::{
-    Batch, FileState, FileWarning, FileWarningCode, Hash, IndexedFile, MemoryStore, Store,
+    Batch, FileState, FileWarning, FileWarningCode, Hash, IndexedFile, LinkRecord, MemoryStore,
+    Store,
 };

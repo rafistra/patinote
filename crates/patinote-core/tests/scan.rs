@@ -206,10 +206,22 @@ fn patinote_ignore_applies_and_gitignore_does_not() {
     ] {
         write(r, rel, b"x");
     }
-    assert_eq!(
-        paths(r, ScanOptions::default()),
-        ["Notes/a.md", "keep.tmp", "pic.png"]
-    );
+    // Matches are listed as excluded, not dropped (Q-007); .gitignore and .ignore do nothing.
+    let s = scan(r, &ScanOptions::default()).unwrap();
+    let excluded: Vec<&str> = s
+        .files
+        .iter()
+        .filter(|f| f.excluded)
+        .map(|f| f.path.as_str())
+        .collect();
+    let included: Vec<&str> = s
+        .files
+        .iter()
+        .filter(|f| !f.excluded)
+        .map(|f| f.path.as_str())
+        .collect();
+    assert_eq!(excluded, ["Arsip/old.md", "Sub/Arsip/deep.md", "x.tmp"]);
+    assert_eq!(included, ["Notes/a.md", "keep.tmp", "pic.png"]);
 }
 
 #[test]
