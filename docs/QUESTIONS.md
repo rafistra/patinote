@@ -146,3 +146,14 @@ Rekomendasi agent: A.
 
 Rekomendasi agent: A.
 **Jawaban:** A, disetujui pemilik (20 November 2026). Font cadangan untuk CJK atau emoji ditambahkan bila nanti dibutuhkan.
+
+## Q-012 · Tiga dependensi Iced dinyatakan tidak dipelihara lagi (langkah 2.1, 20 November 2026)
+
+**Konteks:** `cargo deny` di CI PR #19 gagal karena tiga advisory "unmaintained" (informasional, bukan celah keamanan, tanpa versi perbaikan): RUSTSEC-2026-0206 (`rustybuzz`), RUSTSEC-2026-0192 (`ttf-parser`), dan RUSTSEC-2024-0436 (`paste`). Ketiganya dependensi transitif `iced` 0.14: `ttf-parser` dipakai `cosmic-text`, `fontdb`, dan `winit` (inti render teks), `paste` lewat renderer, dan `rustybuzz` lewat `usvg`/`resvg` (fitur `svg` untuk ikon banner, juga dipakai `iced_tiny_skia`). Tidak ada yang bisa dihilangkan tanpa mengganti versi Iced. Di laptop pemilik `cargo-deny` 0.22 tidak menandainya; CI memakai versi lebih baru.
+**Pilihan:**
+- A. Abaikan ketiga advisory di `deny.toml` dengan alasan tertulis, seperti Q-010. Ditinjau ulang saat Iced naik versi.
+- B. Ubah `unmaintained` di `deny.toml` menjadi `workspace` (hanya dependensi langsung yang diperiksa). Advisory serupa di masa depan tidak lagi menggagalkan CI, tetapi juga tidak terlihat.
+- C. Kunci `cargo-deny` di CI ke 0.22, sama seperti laptop pemilik.
+
+Rekomendasi agent: A. Pemeriksaan tetap ketat, dan setiap pengecualian punya alasan.
+**Jawaban:** A, disetujui pemilik (20 November 2026).

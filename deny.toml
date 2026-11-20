@@ -33,6 +33,11 @@ ignore = [
     # chrono is unmaintained (informational, no vulnerability, no fix). rmcp
     # (MCP server, A-04) requires it; remove this when rmcp drops chrono. Q-010.
     { id = "RUSTSEC-2026-0543", reason = "unmaintained chrono, required by rmcp; Q-010" },
+    # Unmaintained crates that iced 0.14 requires (informational, no fix).
+    # Review them when iced is upgraded. Q-012.
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser, required by iced text rendering; Q-012" },
+    { id = "RUSTSEC-2026-0206", reason = "unmaintained rustybuzz, required by iced svg via usvg; Q-012" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained paste, required by the iced renderer; Q-012" },
 ]
 
 [licenses.private]
