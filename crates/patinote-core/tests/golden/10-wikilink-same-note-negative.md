@@ -1,0 +1,1 @@
+Escape: \[[#Bagian]] bukan link.

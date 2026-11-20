@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "tag_satu",
+      "display": "tag_satu",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "tag-dua",
+      "display": "tag-dua",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "café",
+      "display": "café",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "日本",
+      "display": "日本",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "y2026",
+      "display": "y2026",
+      "source": "inline",
+      "line": 1
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

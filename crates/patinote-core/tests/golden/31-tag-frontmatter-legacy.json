@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "lama",
+      "display": "lama",
+      "source": "frontmatter",
+      "line": null
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [
+    {
+      "key": "tag",
+      "idx": 0,
+      "type": "text",
+      "value": "lama"
+    }
+  ],
+  "warnings": []
+}

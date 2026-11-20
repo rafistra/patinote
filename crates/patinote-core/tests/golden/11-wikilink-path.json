@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Proyek/Catatan]]",
+      "target": "Proyek/Catatan",
+      "subpath": null,
+      "display": null,
+      "line": 1,
+      "byte_start": 5,
+      "byte_end": 23
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan.md]]",
+      "target": "Catatan.md",
+      "subpath": null,
+      "display": null,
+      "line": 1,
+      "byte_start": 37,
+      "byte_end": 51
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Proyek/Catatan.md#Bagian|teks]]",
+      "target": "Proyek/Catatan.md",
+      "subpath": "Bagian",
+      "display": "teks",
+      "line": 1,
+      "byte_start": 65,
+      "byte_end": 98
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

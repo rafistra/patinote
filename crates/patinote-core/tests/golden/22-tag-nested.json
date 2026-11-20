@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "proyek/patinote",
+      "display": "proyek/patinote",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "area/kesehatan/olahraga",
+      "display": "area/kesehatan/olahraga",
+      "source": "inline",
+      "line": 1
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

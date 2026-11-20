@@ -1,0 +1,59 @@
+{
+  "v": 1,
+  "title": "Wikilink biasa",
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan]]",
+      "target": "Catatan",
+      "subpath": null,
+      "display": null,
+      "line": 3,
+      "byte_start": 24,
+      "byte_end": 35
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Café Bandung]]",
+      "target": "Café Bandung",
+      "subpath": null,
+      "display": null,
+      "line": 3,
+      "byte_start": 40,
+      "byte_end": 57
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Alfa]]",
+      "target": "Alfa",
+      "subpath": null,
+      "display": null,
+      "line": 4,
+      "byte_start": 89,
+      "byte_end": 97
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Beta]]",
+      "target": "Beta",
+      "subpath": null,
+      "display": null,
+      "line": 4,
+      "byte_start": 99,
+      "byte_end": 107
+    }
+  ],
+  "tags": [],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Wikilink biasa",
+      "line": 1,
+      "byte_start": 0
+    }
+  ],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

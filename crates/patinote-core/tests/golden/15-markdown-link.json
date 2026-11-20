@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "markdown",
+      "raw": "[teks](Catatan.md)",
+      "target": "Catatan.md",
+      "subpath": null,
+      "display": "teks",
+      "line": 1,
+      "byte_start": 6,
+      "byte_end": 24
+    },
+    {
+      "kind": "markdown",
+      "raw": "[catatan baru](Catatan%20Baru.md)",
+      "target": "Catatan Baru.md",
+      "subpath": null,
+      "display": "catatan baru",
+      "line": 1,
+      "byte_start": 29,
+      "byte_end": 62
+    },
+    {
+      "kind": "markdown",
+      "raw": "[bagian](Proyek/Catatan.md#Bagian%20satu)",
+      "target": "Proyek/Catatan.md",
+      "subpath": "Bagian satu",
+      "display": "bagian",
+      "line": 1,
+      "byte_start": 67,
+      "byte_end": 108
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

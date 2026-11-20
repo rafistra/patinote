@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[#Bagian satu]]",
+      "target": "",
+      "subpath": "Bagian satu",
+      "display": null,
+      "line": 3,
+      "byte_start": 26,
+      "byte_end": 42
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[#^akhir]]",
+      "target": "",
+      "subpath": "^akhir",
+      "display": null,
+      "line": 3,
+      "byte_start": 53,
+      "byte_end": 64
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[#Bagian satu|ke atas]]",
+      "target": "",
+      "subpath": "Bagian satu",
+      "display": "ke atas",
+      "line": 3,
+      "byte_start": 70,
+      "byte_end": 94
+    }
+  ],
+  "tags": [],
+  "headings": [
+    {
+      "level": 2,
+      "text": "Bagian satu",
+      "line": 1,
+      "byte_start": 0
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "akhir",
+      "line": 5
+    }
+  ],
+  "properties": [],
+  "warnings": []
+}

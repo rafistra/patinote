@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan#Bagian]]",
+      "target": "Catatan",
+      "subpath": "Bagian",
+      "display": null,
+      "line": 1,
+      "byte_start": 10,
+      "byte_end": 28
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan#Bagian#Sub bagian]]",
+      "target": "Catatan",
+      "subpath": "Bagian#Sub bagian",
+      "display": null,
+      "line": 1,
+      "byte_start": 37,
+      "byte_end": 66
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan#Bagian|lihat bagian]]",
+      "target": "Catatan",
+      "subpath": "Bagian",
+      "display": "lihat bagian",
+      "line": 2,
+      "byte_start": 80,
+      "byte_end": 111
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

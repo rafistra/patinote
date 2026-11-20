@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "proyek/alfa",
+      "display": "proyek/alfa",
+      "source": "frontmatter",
+      "line": null
+    },
+    {
+      "tag": "rust",
+      "display": "Rust",
+      "source": "frontmatter",
+      "line": null
+    },
+    {
+      "tag": "inline",
+      "display": "inline",
+      "source": "inline",
+      "line": 6
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [
+    {
+      "key": "tags",
+      "idx": 0,
+      "type": "text",
+      "value": "proyek/alfa"
+    },
+    {
+      "key": "tags",
+      "idx": 1,
+      "type": "text",
+      "value": "Rust"
+    }
+  ],
+  "warnings": []
+}

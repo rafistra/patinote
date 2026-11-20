@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "proyek",
+      "display": "Proyek",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "proyek",
+      "display": "proyek",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "proyek",
+      "display": "PROYEK",
+      "source": "inline",
+      "line": 1
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}
