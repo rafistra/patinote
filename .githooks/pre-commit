@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Pre-commit hook for Patinote. Enable once per clone:
+#   git config core.hooksPath .githooks
+# Set PATINOTE_REAL_VAULT to also compare staged files with your real vault (check D).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+cargo fmt --all -- --check
+scripts/check-vault-data.sh --staged

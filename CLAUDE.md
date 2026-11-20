@@ -201,7 +201,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
+scripts/check-vault-data.sh
 ```
+
+Hook pre-commit di `.githooks/` menjalankan `cargo fmt` dan `scripts/check-vault-data.sh --staged`; aktifkan sekali dengan `git config core.hooksPath .githooks`. Bila `PATINOTE_REAL_VAULT` diset, hook juga mencocokkan file yang di-stage dengan vault asli (Q-001 di `docs/QUESTIONS.md`).
 
 Perintah lain:
 
