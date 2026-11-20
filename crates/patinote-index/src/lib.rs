@@ -205,6 +205,57 @@ impl SqliteStore {
     }
 }
 
+/// File counts stored in the index.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Counts {
+    pub notes: usize,
+    pub attachments: usize,
+    pub canvases: usize,
+    pub excluded: usize,
+    pub links: usize,
+    pub unresolved_links: usize,
+}
+
+/// A stored per-file warning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredWarning {
+    pub path: String,
+    pub code: String,
+    pub line: Option<usize>,
+}
+
+impl SqliteStore {
+    /// How many files and links the index holds.
+    pub fn counts(&self) -> Result<Counts, IndexError> {
+        let one = |sql: &str| -> Result<usize, IndexError> {
+            Ok(self.conn.query_row(sql, [], |r| r.get::<_, i64>(0))? as usize)
+        };
+        Ok(Counts {
+            notes: one("SELECT count(*) FROM notes WHERE kind = 'note'")?,
+            attachments: one("SELECT count(*) FROM notes WHERE kind = 'attachment'")?,
+            canvases: one("SELECT count(*) FROM notes WHERE kind = 'canvas'")?,
+            excluded: one("SELECT count(*) FROM notes WHERE excluded = 1")?,
+            links: one("SELECT count(*) FROM links")?,
+            unresolved_links: one("SELECT count(*) FROM links WHERE dst_id IS NULL")?,
+        })
+    }
+
+    /// Every stored per-file warning, by path.
+    pub fn warnings(&self) -> Result<Vec<StoredWarning>, IndexError> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT n.path, w.code, w.line FROM warnings w JOIN notes n ON n.id = w.note_id ORDER BY n.path, w.line",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(StoredWarning {
+                path: r.get(0)?,
+                code: r.get(1)?,
+                line: r.get::<_, Option<i64>>(2)?.map(|l| l as usize),
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+}
+
 /// Brings the index up to date, rebuilding it once when SQLite reports
 /// damaged data along the way (F-03.6, Q-006). Check [`SqliteStore::rebuilt`]
 /// to know whether it happened.

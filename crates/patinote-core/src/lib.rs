@@ -4,6 +4,8 @@
 //! This crate must not depend on SQLite, Iced or any UI crate. Storage is
 //! reached through the `Store` trait, implemented by `patinote-index`.
 
+pub mod commands;
+pub mod config;
 pub mod index;
 pub mod location;
 pub mod model;

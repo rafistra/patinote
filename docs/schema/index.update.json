@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IndexOutput",
+  "description": "`index.update` (`patinote index`).",
+  "type": "object",
+  "properties": {
+    "added": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "attachments": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "canvases": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "excluded": {
+      "description": "Files matched by `.patinote/ignore`.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "links_updated": {
+      "description": "Links whose destination changed.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "notes": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "rebuilt": {
+      "description": "Why the index was rebuilt, if it was: `rebuild_requested`, `corrupt`,\n`newer_schema`, `migration_failed`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "removed": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "reprocessed": {
+      "description": "Files read and parsed in this run (`added + updated`).",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "sync_conflicts": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "touched": {
+      "description": "Files whose mtime moved but content did not.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "unchanged": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "updated": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "notes",
+    "attachments",
+    "canvases",
+    "excluded",
+    "sync_conflicts",
+    "reprocessed",
+    "added",
+    "updated",
+    "touched",
+    "removed",
+    "unchanged",
+    "links_updated",
+    "duration_ms",
+    "warnings"
+  ],
+  "$defs": {
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

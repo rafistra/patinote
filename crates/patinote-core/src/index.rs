@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::{fs, io};
 
@@ -39,6 +40,9 @@ pub struct IndexOptions {
     /// hash is unchanged are still only touched; a rebuild from scratch is done
     /// by deleting the index (`patinote index --rebuild`).
     pub full: bool,
+    /// Set by a Ctrl+C handler: indexing stops before the next batch, so the
+    /// index stays at its last complete batch (A-03.5).
+    pub cancel: Option<&'static AtomicBool>,
 }
 
 impl Default for IndexOptions {
@@ -47,6 +51,7 @@ impl Default for IndexOptions {
             scan: ScanOptions::default(),
             batch_size: 500,
             full: false,
+            cancel: None,
         }
     }
 }
@@ -102,6 +107,9 @@ pub enum IndexError<E: std::error::Error + 'static> {
     Scan(#[from] ScanError),
     #[error(transparent)]
     Store(E),
+    /// Stopped by [`IndexOptions::cancel`]; the index keeps every batch stored before.
+    #[error("indexing was interrupted")]
+    Cancelled,
 }
 
 /// Brings the index in `store` up to date with the vault at `root`.
@@ -156,9 +164,13 @@ pub fn index_vault<S: Store>(
         changed: changed.len(),
     });
 
+    let cancelled = || options.cancel.is_some_and(|c| c.load(Ordering::Relaxed));
     let mut batch = Batch::default();
     let mut done = 0;
     for (file, old) in &changed {
+        if cancelled() {
+            return Err(IndexError::Cancelled);
+        }
         // A file whose exclusion changed is stored again even if its bytes did not.
         let old_for_hash = old.as_ref().filter(|o| o.excluded == file.excluded);
         match read(root, file, old_for_hash) {
@@ -186,6 +198,9 @@ pub fn index_vault<S: Store>(
                 changed: changed.len(),
             });
         }
+    }
+    if cancelled() {
+        return Err(IndexError::Cancelled);
     }
     report.removed = removed.len();
     batch.remove = removed;

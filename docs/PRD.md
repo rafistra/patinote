@@ -381,14 +381,14 @@ Patinote membuka folder vault Obsidian apa adanya, tanpa mengubah atau menambah 
 **Kriteria penerimaan**
 
 - [ ] F-01.1 Vault Obsidian asli pengguna terbuka; jumlah catatan dan lampiran sama dengan yang terlihat di Obsidian.
-- [ ] F-01.2 Hash semua file vault identik sebelum dan sesudah `patinote index`.
+- [x] F-01.2 Hash semua file vault identik sebelum dan sesudah `patinote index`. `f01_2_indexing_does_not_change_the_vault`
 - [ ] F-01.3 File di `.obsidian/`, `.git/`, `.trash/`, dan folder tersembunyi lain tidak muncul di `patinote list`.
 - [x] F-01.4 File berisi teks Latin-1 tercatat dengan peringatan, tanpa crash. `f01_4_latin1_note_is_recorded_with_a_warning`
 - [x] F-01.5 File tanpa izin baca muncul di laporan error; file lain tetap terindeks. `f01_5_unreadable_file_is_reported_and_others_indexed`
 - [x] F-01.6 Vault kosong menghasilkan indeks kosong tanpa error. `f01_6_empty_vault_gives_an_empty_index`
 - [x] F-01.7 Symlink ke folder di luar vault tidak diikuti; symlink yang membentuk loop tidak membuat pemindaian macet. `f01_7_symlinks_are_not_followed_and_loops_do_not_hang`
 - [ ] F-01.8 Catatan 6 MB terdaftar tetapi tidak muncul di hasil pencarian isi.
-- [ ] F-01.9 `--vault` mengalahkan `PATINOTE_VAULT`, yang mengalahkan vault default di konfigurasi.
+- [x] F-01.9 `--vault` mengalahkan `PATINOTE_VAULT`, yang mengalahkan vault default di konfigurasi. `f01_9_vault_flag_beats_env_beats_config`
 
 ### F-02 · Parser catatan
 
@@ -480,11 +480,11 @@ Indeks selalu sesuai isi vault, cepat dibangun, aman dihapus, dan tidak rusak wa
 - [x] F-03.2 Mengubah 1 catatan lalu `patinote index` hanya memproses ulang 1 file. `f03_2_changing_one_note_reprocesses_one_file`
 - [x] F-03.3 File yang hanya di-`touch` tidak di-parse ulang. `f03_3_touched_file_is_not_parsed_again`
 - [x] F-03.4 `kill -9` di tengah pengindeksan tidak merusak indeks; perintah berikutnya berjalan normal. `f03_4_kill_during_index_keeps_db_intact`
-- [ ] F-03.5 Menghapus `~/.cache/patinote/` lalu menjalankan perintah apa pun membangun indeks baru tanpa error.
+- [x] F-03.5 Menghapus `~/.cache/patinote/` lalu menjalankan perintah apa pun membangun indeks baru tanpa error. `f03_5_deleting_the_cache_rebuilds_on_the_next_command`
 - [x] F-03.6 Database yang sengaja dirusak dideteksi dan dibangun ulang otomatis. `f03_6_corrupt_index_is_rebuilt_with_full_content`
-- [ ] F-03.7 Saat aplikasi menulis indeks, CLI tetap bisa membaca; penulisan CLI yang terkunci lebih dari 5 detik keluar dengan exit code 5.
+- [x] F-03.7 Saat aplikasi menulis indeks, CLI tetap bisa membaca; penulisan CLI yang terkunci lebih dari 5 detik keluar dengan exit code 5. `f03_7_reads_work_while_another_process_writes_and_writers_give_up_with_5`
 - [ ] F-03.8 Pengecekan cepat di vault 10.000 catatan tanpa perubahan selesai di bawah 200 ms.
-- [ ] F-03.9 `patinote cache clean` menghapus indeks vault yang foldernya sudah tidak ada, dan tidak menyentuh indeks vault lain.
+- [x] F-03.9 `patinote cache clean` menghapus indeks vault yang foldernya sudah tidak ada, dan tidak menyentuh indeks vault lain. `f03_9_cache_clean_removes_indexes_of_vaults_that_are_gone`
 
 ### F-04 · Mendeteksi perubahan dari luar
 
@@ -1020,7 +1020,7 @@ Kode error Gerbang 1: `vault_not_found`, `note_not_found`, `ambiguous_note`, `in
 
 - [ ] A-02.1 Untuk setiap perintah dan setiap kasus error, output `--json` valid untuk `jq` dan cocok dengan JSON Schema di `docs/schema/`.
 - [ ] A-02.2 Snapshot test setiap perintah gagal bila field berubah atau hilang tanpa kenaikan `v`.
-- [ ] A-02.3 Stdout `--json` tidak pernah berisi teks lain, termasuk saat pengindeksan lebih dari 1 detik.
+- [x] A-02.3 Stdout `--json` tidak pernah berisi teks lain, termasuk saat pengindeksan lebih dari 1 detik. `a02_3_stdout_stays_json_while_progress_goes_to_stderr`
 - [ ] A-02.4 `search` dengan lebih dari 50 hasil mengembalikan 50 item, `"truncated": true`, dan `"total"` yang benar.
 - [ ] A-02.5 Setiap path dalam output bisa langsung dipakai sebagai `<catatan>` di perintah lain.
 
@@ -1050,8 +1050,8 @@ Skrip dan agent tahu apa yang terjadi hanya dari exit code.
 - [ ] A-03.1 Setiap baris tabel punya test yang memicu kondisinya dan memeriksa exit code serta kode error JSON.
 - [ ] A-03.2 `backlinks` untuk catatan tanpa backlink keluar dengan 0 dan daftar kosong.
 - [ ] A-03.3 `patinote list | head -1` keluar tanpa pesan "broken pipe".
-- [ ] A-03.4 Vault dengan satu frontmatter rusak: `patinote index` keluar dengan 0 dan satu peringatan; dengan `--strict` keluar dengan 1.
-- [ ] A-03.5 `Ctrl+C` di tengah `patinote index` keluar dengan 130 dan indeks tetap utuh.
+- [x] A-03.4 Vault dengan satu frontmatter rusak: `patinote index` keluar dengan 0 dan satu peringatan; dengan `--strict` keluar dengan 1. `a03_4_warnings_exit_0_and_strict_exits_1`
+- [x] A-03.5 `Ctrl+C` di tengah `patinote index` keluar dengan 130 dan indeks tetap utuh. `a03_5_ctrl_c_during_index_exits_130_and_keeps_the_index_intact`
 
 ### A-04 · Server MCP read-only
 
