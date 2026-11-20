@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patinote mockup — F-07 — quick switcher</title>
+<!-- Static export of the Patinote design canvas. Source of truth for Phase 2 UI together with docs/design/0003-ui-design-system.md. -->
+<link rel="stylesheet" href="fonts.css">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+</style>
+</head>
+<body>
+<div style="width: 100%; min-height: 860px; display: flex; flex-direction: column; background: #121614; color: #D6DEDA; font-family: Inter, system-ui, sans-serif; font-size: 14px; box-sizing: border-box; position: relative">
+
+  <nav aria-label="Open buffers" style="height: 32px; display: flex; align-items: stretch; background: #0C0F0E; font-family: 'JetBrains Mono', monospace; font-size: 13px; flex-shrink: 0">
+    <span style="display: flex; align-items: center; padding: 0 14px; font-family: Inter, sans-serif; font-weight: 600; color: #E6EEEA">Patinote</span>
+    <span style="display: flex; align-items: center; padding: 0 14px; background: #1A211E; color: #E6EEEA; border-bottom: 2px solid #5CC4A8">1 2026-11-19</span>
+    <span style="display: flex; align-items: center; padding: 0 14px; color: #8D9A94">2 Patinote</span>
+  </nav>
+
+  <main aria-hidden="true" style="flex: 1; display: flex; justify-content: center; padding: 28px 32px; opacity: 0.35">
+    <div style="width: 100%; max-width: 920px; font-family: 'JetBrains Mono', monospace; font-size: 15px; line-height: 26px">
+      <div><span style="color: #5CC4A8; font-weight: 700"># 2026-11-19</span></div>
+      <div>&#160;</div>
+      <div>- Lanjut desain skema indeks setelah makan siang</div>
+      <div>- Cek ulang aturan pengecualian</div>
+      <div>- Baca dokumentasi Iced text_editor</div>
+    </div>
+  </main>
+
+  <section role="dialog" aria-label="Quick switcher" style="position: absolute; top: 72px; left: 50%; transform: translateX(-50%); width: 640px; max-width: calc(100% - 32px); background: #182019; background: #172019; border: 1px solid #2E3A35; border-radius: 10px; box-sizing: border-box; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #26302C">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA4A0" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <label for="qs-input" style="position: absolute; left: -9999px">Find note</label>
+      <input id="qs-input" value="dsn ind" style="flex: 1; background: transparent; border: 0; outline: none; color: #EEF3F1; font-family: 'JetBrains Mono', monospace; font-size: 16px">
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8D9A94">4 of 2,143</span>
+    </div>
+
+    <div role="listbox" aria-label="Results" style="padding: 6px; display: flex; flex-direction: column; gap: 2px">
+      <div role="option" aria-selected="true" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 6px; background: #22403A">
+        <span style="color: #EEF3F1; font-weight: 500"><b style="color: #5CC4A8">D</b>e<b style="color: #5CC4A8">s</b>ai<b style="color: #5CC4A8">n</b> <b style="color: #5CC4A8">ind</b>eks Patinote</span>
+        <span style="font-size: 12px; color: #9AA4A0">Proyek/</span>
+      </div>
+      <div role="option" aria-selected="false" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 6px">
+        <span style="color: #D6DEDA"><b style="color: #5CC4A8">D</b>aftar <b style="color: #5CC4A8">s</b>umber <b style="color: #5CC4A8">ind</b>eks <span style="color: #8D9A94">— attachment links</span></span>
+        <span style="font-size: 12px; color: #9AA4A0">Referensi/</span>
+      </div>
+      <div role="option" aria-selected="false" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 6px">
+        <span style="color: #D6DEDA"><b style="color: #5CC4A8">D</b>e<b style="color: #5CC4A8">s</b>ai<b style="color: #5CC4A8">n</b> antarmuka <b style="color: #5CC4A8">ind</b>uk</span>
+        <span style="font-size: 12px; color: #9AA4A0">Proyek/Patinote/</span>
+      </div>
+      <div role="option" aria-selected="false" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border-radius: 6px">
+        <span style="color: #D6DEDA"><b style="color: #5CC4A8">D</b>e<b style="color: #5CC4A8">s</b>ig<b style="color: #5CC4A8">n</b> <b style="color: #5CC4A8">ind</b>ex <span style="color: #8D9A94">alias →</span> Skema indeks lama</span>
+        <span style="font-size: 12px; color: #9AA4A0">Arsip/</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 10px 16px; border-top: 1px solid #26302C; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #9AA4A0">
+      <span><b style="color: #D6DEDA">Ctrl+n/p</b> move</span>
+      <span><b style="color: #D6DEDA">Enter</b> open</span>
+      <span><b style="color: #D6DEDA">Shift+Enter</b> create "dsn ind"</span>
+      <span><b style="color: #D6DEDA">Esc</b> close</span>
+    </div>
+  </section>
+
+  <footer style="flex-shrink: 0; font-family: 'JetBrains Mono', monospace">
+    <div style="height: 30px; display: flex; align-items: stretch; background: #161D1A; font-size: 13px">
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #5CC4A8; color: #121614; font-weight: 700">NORMAL</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #1F2925; color: #D6DEDA">Harian/2026-11-19.md</span>
+      <span style="margin-left: auto; display: flex; align-items: center; padding: 0 12px; color: #9AA4A0">3:1</span>
+    </div>
+    <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: #9AA4A0">&#160;</div>
+  </footer>
+</div>
+</body>
+</html>

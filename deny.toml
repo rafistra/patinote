@@ -1,0 +1,22 @@
+# cargo-deny configuration. Every dependency must use a license compatible
+# with MIT (docs/PRD.md, Platform). Extend `allow` only when a new dependency
+# needs it, and say so in the PR.
+
+[graph]
+all-features = true
+
+[licenses]
+allow = ["MIT"]
+confidence-threshold = 0.9
+
+[licenses.private]
+# Workspace crates are not published; their own license is in LICENSE.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

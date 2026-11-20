@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patinote mockup — F-06 — visual mode and search highlights</title>
+<!-- Static export of the Patinote design canvas. Source of truth for Phase 2 UI together with docs/design/0003-ui-design-system.md. -->
+<link rel="stylesheet" href="fonts.css">
+<style>
+body{margin:0}
+button{font:inherit;cursor:pointer}
+</style>
+</head>
+<body>
+<div style="width: 100%; min-height: 860px; display: flex; flex-direction: column; background: #121614; color: #D6DEDA; font-family: Inter, system-ui, sans-serif; font-size: 14px; box-sizing: border-box">
+<nav aria-label="Open buffers" style="height: 32px; display: flex; align-items: stretch; background: #0C0F0E; font-family: 'JetBrains Mono', monospace; font-size: 13px; flex-shrink: 0">
+  <span style="display: flex; align-items: center; padding: 0 14px; font-family: Inter, sans-serif; font-weight: 600; color: #E6EEEA">Patinote</span>
+  <span style="display: flex; align-items: center; padding: 0 14px; background: #1A211E; color: #E6EEEA; border-bottom: 2px solid #5CC4A8">1 Desain indeks Patinote</span>
+  <span style="display: flex; align-items: center; padding: 0 14px; color: #8D9A94">2 Patinote</span>
+</nav>
+<main style="flex: 1; display: flex; justify-content: center; padding: 28px 32px; min-height: 0">
+  <div style="width: 100%; max-width: 920px; font-family: 'JetBrains Mono', monospace; font-size: 15px; line-height: 26px; white-space: pre">
+<div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">8</span><span style="min-width: 0"><span style="color: #7A8882">---</span></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">7</span><span style="min-width: 0"><span style="color: #7A8882">tags: [proyek/patinote, rust]</span></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">6</span><span style="min-width: 0"><span style="color: #7A8882">---</span></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">5</span><span style="min-width: 0"><span style="color: #5CC4A8; font-weight: 700"># Desain <span style="background: #433B1D; border-radius: 2px">indeks</span> Patinote</span></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">4</span><span style="min-width: 0"></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">3</span><span style="min-width: 0">Hari ini fokus ke skema SQLite untuk <span style="color: #D9A47A">[[Patinote]]</span>.</span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">2</span><span style="min-width: 0"><span style="color: #5CC4A8">-</span> <span style="background: #263F55"><span style="background: #D4C48E; color: #121614; border-radius: 2px">indeks</span> disimpan di <span style="color: #D4C48E">`~/.cache/patinote/`</span>, bukan di vault</span></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">1</span><span style="min-width: 0"><span style="background: #263F55"><span style="color: #5CC4A8">-</span> Mulai dengan FTS5, pindah ke <span style="color: #D9A47A">[[tantivy]]</span> kalau benchmark gagal</span></span></div><div style="display: flex; background: #18201D; border-radius: 3px"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #D6DEDA; font-weight: 700">9</span><span style="min-width: 0"><span style="background: #263F55"><span style="color: #5CC4A8">-</span> Rename memperbarui link</span><span style="background: #B39DDB; color: #121614">,</span> backlinks ikut berubah</span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">1</span><span style="min-width: 0"></span></div><div style="display: flex"><span style="width: 44px; flex-shrink: 0; text-align: right; padding-right: 16px; box-sizing: border-box; color: #7A8882">2</span><span style="min-width: 0">Satu hal yang masih terbuka: apakah <span style="background: #433B1D; border-radius: 2px">indeks</span> perlu menyimpan isi lengkap</span></div>
+  </div>
+</main>
+<footer style="flex-shrink: 0">
+<div style="height: 30px; display: flex; align-items: stretch; background: #161D1A; font-size: 13px; font-family: 'JetBrains Mono', monospace">
+  <span style="display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #121614; background: #B39DDB; font-weight: 700">VISUAL</span>
+  <span style="display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #D6DEDA; background: #1F2925">Proyek/Desain indeks Patinote.md</span>
+  <span style="display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #B5BEBA">3 lines</span>
+  <span style="margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #D4C48E">/indeks [2/3]</span>
+  <span style="display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #D6DEDA; background: #1F2925">9:25</span>
+</div>
+<div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-family: 'JetBrains Mono', monospace; color: #B39DDB">-- VISUAL --</div>
+</footer>
+</div>
+</body>
+</html>
