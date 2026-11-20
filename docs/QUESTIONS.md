@@ -93,3 +93,13 @@ Rekomendasi agent: A. Indeks hanyalah cache yang aman dibangun ulang, jadi detek
 
 Rekomendasi agent: A, sesuai `0001` bagian 7. Pengguna biasanya mengecualikan folder arsip atau template yang tetap ditautkan dari catatan lain.
 **Jawaban:** A, disetujui pemilik (20 November 2026).
+
+## Q-008 · Exit code 130 untuk `Ctrl+C` (langkah 1.7, 20 November 2026)
+
+**Konteks:** A-03 meminta exit code 130 saat dihentikan dengan `Ctrl+C`, dan A-03.5 meminta `Ctrl+C` di tengah `patinote index` keluar dengan 130 dengan indeks tetap utuh. Tanpa penangan sinyal, proses mati oleh SIGINT: shell melaporkannya sebagai 130, tetapi program lain yang menjalankan `patinote` (agent, skrip Python) melihat "dihentikan sinyal 2", bukan exit code 130. Indeks tetap utuh di kedua cara, karena setiap batch adalah satu transaksi. Memasang penangan sinyal sendiri butuh kode `unsafe` (`CLAUDE.md` bagian 9) atau dependensi baru.
+**Pilihan:**
+- A. Tambah dependensi `ctrlc` (MIT OR Apache-2.0, kecil, tanpa dependensi native). Penangannya menghentikan pengindeksan di batas batch, lalu keluar dengan exit code 130 sungguhan.
+- B. Tanpa penangan: SIGINT mematikan proses seperti biasa. Shell tetap melihat 130, dan indeks tetap utuh; program pemanggil melihat sinyal 2.
+
+Rekomendasi agent: A. Exit code 130 yang sungguhan sesuai dengan kontrak A-03 untuk agent dan skrip, dan pengindeksan berhenti dengan rapi di batas batch.
+**Jawaban:** A, disetujui pemilik (20 November 2026). Kunci konfigurasi vault default: `[vault] default`.

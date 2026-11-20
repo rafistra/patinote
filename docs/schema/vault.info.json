@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VaultInfoOutput",
+  "description": "`vault.info` (`patinote vault info`).",
+  "type": "object",
+  "properties": {
+    "attachments": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "canvases": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "excluded": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "index": {
+      "description": "Absolute path of the index database.",
+      "type": "string"
+    },
+    "links": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "notes": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "sync_conflicts": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "unresolved_links": {
+      "description": "Links to notes that do not exist.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "vault": {
+      "description": "Absolute, canonical vault path.",
+      "type": "string"
+    },
+    "vault_id": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "vault",
+    "vault_id",
+    "index",
+    "notes",
+    "attachments",
+    "canvases",
+    "excluded",
+    "links",
+    "unresolved_links",
+    "sync_conflicts",
+    "warnings"
+  ],
+  "$defs": {
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

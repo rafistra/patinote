@@ -1,0 +1,22 @@
+---
+source: crates/patinote-cli/tests/cli.rs
+expression: index
+---
+{
+  "added": 13,
+  "attachments": 1,
+  "canvases": 0,
+  "duration_ms": 0,
+  "excluded": 0,
+  "links_updated": 13,
+  "notes": 12,
+  "rebuilt": null,
+  "removed": 0,
+  "reprocessed": 13,
+  "sync_conflicts": 2,
+  "touched": 0,
+  "unchanged": 0,
+  "updated": 0,
+  "v": 1,
+  "warnings": []
+}

@@ -1,0 +1,18 @@
+---
+source: crates/patinote-cli/tests/cli.rs
+expression: info
+---
+{
+  "attachments": 1,
+  "canvases": 0,
+  "excluded": 0,
+  "index": "[index]",
+  "links": 15,
+  "notes": 12,
+  "sync_conflicts": 2,
+  "unresolved_links": 2,
+  "v": 1,
+  "vault": "[vault]",
+  "vault_id": "[vault_id]",
+  "warnings": []
+}

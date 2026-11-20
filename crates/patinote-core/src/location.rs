@@ -27,6 +27,11 @@ pub fn vault_cache_dir(cache_home: &Path, vault_id: &str) -> PathBuf {
     cache_home.join("patinote").join(vault_id)
 }
 
+/// `$XDG_CONFIG_HOME`, or `~/.config`.
+pub fn config_home() -> Option<PathBuf> {
+    xdg_home("XDG_CONFIG_HOME", ".config")
+}
+
 /// `$XDG_STATE_HOME`, or `~/.local/state`.
 pub fn state_home() -> Option<PathBuf> {
     xdg_home("XDG_STATE_HOME", ".local/state")
