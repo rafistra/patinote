@@ -6,7 +6,11 @@
 all-features = true
 
 [licenses]
-allow = ["MIT"]
+allow = [
+    "MIT",
+    # unicode-ident (via proc-macro2, used by clap_derive): permissive Unicode data license.
+    "Unicode-3.0",
+]
 confidence-threshold = 0.9
 
 [licenses.private]
