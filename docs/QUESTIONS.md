@@ -43,3 +43,21 @@ Rekomendasi agent: A. Bentuknya hampir seluruhnya mengikuti skema yang sudah dit
 
 Rekomendasi agent: A, karena cocok dengan perintah di `CLAUDE.md` dan tidak menambah crate.
 **Jawaban:** A, disetujui pemilik (20 November 2026).
+
+## Q-004 · Renderer default: target RAM dan latensi tidak bisa dipenuhi bersamaan (langkah 0.6, 20 November 2026)
+
+**Konteks:** Prototipe 0.6 diukur di laptop target (Iris Xe, Ubuntu 26.04.1, Wayland, layar 1920×1080 berskala 1,25, 48–60 Hz). Rinciannya di `docs/design/0002-editor-dan-renderer.md` bagian 4.
+
+| Renderer | RAM idle (PSS) | Buka sampai frame pertama | Mengetik | Menahan `j` / seleksi besar |
+| --- | --- | --- | --- | --- |
+| tiny-skia | 28 MB | 137–179 ms | 1 frame | 120–220 ms per frame |
+| wgpu (Vulkan) | 100–103 MB | 309–372 ms | 1 frame | 1 frame |
+
+tiny-skia gagal F-06.6 (menahan `j` < 16 ms): merasterisasi satu layar penuh di skala 1,25 saja sudah 30 ms. wgpu gagal target RAM < 100 MB dan buka < 300 ms (F-28.8), padahal belum ada indeks, panel, atau vault yang dimuat.
+**Pilihan:**
+- A. tiny-skia default. RAM dan waktu buka jauh di bawah target; mengetik lancar. Target F-06.6 dilonggarkan untuk gulir layar penuh di HiDPI, atau dikejar dengan optimasi di Fase 2 (menelusuri kenapa jendela 4× lebih lambat dari headless).
+- B. wgpu default. Semua gerakan mulus; target RAM dinaikkan (misalnya < 130 MB) dan target buka (misalnya < 400 ms).
+- C. Keduanya ikut dalam binary, dipilih lewat konfigurasi (`renderer = "tiny-skia" | "wgpu"`), dengan default A, sehingga pengguna yang lebih mementingkan gulir mulus bisa beralih.
+
+Rekomendasi agent: C dengan default tiny-skia. Target RAM dan waktu buka adalah alasan utama Patinote dibuat; yang tidak tercapai hanya gulir layar penuh, dan itu masih bisa dioptimasi. Iced memilih renderer saat start tanpa kode tambahan, dan wgpu tetap dibutuhkan untuk graf di Fase 7.
+**Jawaban:** (diisi pemilik)

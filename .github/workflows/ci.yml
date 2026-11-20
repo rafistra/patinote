@@ -72,3 +72,30 @@ jobs:
         run: scripts/tests/check-vault-data.test.sh
       - name: Check the repository for vault data
         run: scripts/check-vault-data.sh
+
+  editor-proto:
+    # Step 0.6 prototype (docs/design/0002): unit tests and headless screenshots with
+    # tiny-skia, item 8 of the display checklist in CLAUDE.md section 3.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: experiments/editor-proto
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: experiments/editor-proto
+      - run: cargo fmt -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --lib
+      - name: Headless screenshots
+        run: cargo test --test screenshot
+        env:
+          ICED_TEST_BACKEND: tiny-skia
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: editor-proto-snapshots
+          path: experiments/editor-proto/target/ui-snapshots/
