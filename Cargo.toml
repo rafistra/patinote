@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "tools/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,6 +9,11 @@ rust-version = "1.100"
 license = "MIT"
 repository = "https://github.com/rafistra/patinote"
 publish = false
+
+[workspace.dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.9", features = ["derive"] }
+tempfile = "3.27.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
