@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patinote mockup — Phase 2 — focus layout</title>
+<!-- Static export of the Patinote design canvas. Source of truth for Phase 2 UI together with docs/design/0003-ui-design-system.md. -->
+<link rel="stylesheet" href="fonts.css">
+<style>
+body{margin:0}
+</style>
+</head>
+<body>
+<div style="width: 100%; min-height: 860px; display: flex; flex-direction: column; background: #121614; color: #D6DEDA; font-family: 'JetBrains Mono', monospace; box-sizing: border-box">
+
+  <main style="flex: 1; display: flex; justify-content: center; padding: 96px 32px 48px">
+    <div style="width: 100%; max-width: 760px; font-size: 16px; line-height: 30px">
+      <div style="color: #7A8882">---</div>
+      <div style="color: #7A8882">tags: [proyek/patinote, rust]</div>
+      <div style="color: #7A8882">---</div>
+      <div style="color: #5CC4A8; font-weight: 700"># Desain indeks Patinote</div>
+      <div>&#160;</div>
+      <div style="white-space: pre-wrap">Hari ini fokus ke skema SQLite untuk <span style="color: #D9A47A">[[Patinote]]</span>. Keputusan dari <span style="color: #D9A47A">[[Rapat 19 Nov]]</span>:</div>
+      <div><span style="color: #5CC4A8">-</span> Indeks disimpan di <span style="color: #D4C48E">`~/.cache/patinote/`</span>, bukan di vault</div>
+      <div><span style="color: #5CC4A8">-</span> Mulai dengan FTS5, pindah ke <span style="color: #D9A47A">[[tantivy]]</span> kalau benchmark gagal</div>
+      <div>&#160;</div>
+      <div style="color: #5CC4A8; font-weight: 700">## Tabel inti</div>
+      <div><span style="color: #5CC4A8">- [ ]</span> Finalisasi tabel <span style="color: #D4C48E">`links`</span> dengan posisi byte</div>
+      <div style="color: #8D9A94"><span style="color: #5CC4A8">- [x]</span> Uji query backlinks di SQLite</div>
+      <div>&#160;</div>
+      <div>Satu hal yang masih terbuka: apakah indeks perlu menyimpan isi lengkap<span aria-label="cursor" style="display: inline-block; width: 2px; height: 20px; background: #E0A46E; vertical-align: -4px; margin-left: 1px"></span></div>
+    </div>
+  </main>
+
+  <footer style="flex-shrink: 0; height: 32px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 0 20px; font-size: 12px; color: #8D9A94">
+    <span>194 words</span>
+    <span style="color: #E0A46E; font-weight: 700">INSERT</span>
+  </footer>
+</div>
+</body>
+</html>

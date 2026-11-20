@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patinote mockup — F-08 — link autocomplete</title>
+<!-- Static export of the Patinote design canvas. Source of truth for Phase 2 UI together with docs/design/0003-ui-design-system.md. -->
+<link rel="stylesheet" href="fonts.css">
+<style>
+body{margin:0}
+</style>
+</head>
+<body>
+<div style="width: 100%; min-height: 860px; display: flex; flex-direction: column; background: #121614; color: #D6DEDA; font-family: Inter, system-ui, sans-serif; font-size: 14px; box-sizing: border-box">
+
+  <nav aria-label="Open buffers" style="height: 32px; display: flex; align-items: stretch; background: #0C0F0E; font-family: 'JetBrains Mono', monospace; font-size: 13px; flex-shrink: 0">
+    <span style="display: flex; align-items: center; padding: 0 14px; font-family: Inter, sans-serif; font-weight: 600; color: #E6EEEA">Patinote</span>
+    <span style="display: flex; align-items: center; padding: 0 14px; background: #1A211E; color: #E6EEEA; border-bottom: 2px solid #E0A46E">1 2026-11-19 <span style="color: #E0A46E; margin-left: 6px">●</span></span>
+    <span style="display: flex; align-items: center; padding: 0 14px; color: #8D9A94">2 Patinote</span>
+  </nav>
+
+  <main style="flex: 1; display: flex; justify-content: center; padding: 28px 32px">
+    <div style="width: 100%; max-width: 920px; font-family: 'JetBrains Mono', monospace; font-size: 15px; line-height: 26px">
+      <div style="display: flex"><span style="width: 44px; padding-right: 14px; box-sizing: border-box; text-align: right; color: #7A8882">3</span><span style="color: #5CC4A8; font-weight: 700"># 2026-11-19</span></div>
+      <div style="display: flex"><span style="width: 44px; padding-right: 14px; box-sizing: border-box; text-align: right; color: #7A8882">2</span><span></span></div>
+      <div style="display: flex"><span style="width: 44px; padding-right: 14px; box-sizing: border-box; text-align: right; color: #7A8882">1</span><span><span style="color: #5CC4A8">-</span> Cek ulang aturan pengecualian</span></div>
+      <div style="display: flex; position: relative; background: #18201D; border-radius: 3px">
+        <span style="width: 44px; padding-right: 14px; box-sizing: border-box; text-align: right; color: #E6EEEA; font-weight: 700">4</span>
+        <span><span style="color: #5CC4A8">-</span> Lanjut bahas di <span style="color: #D9A47A">[[desa</span><span aria-label="cursor" style="display: inline-block; width: 2px; height: 18px; background: #E0A46E; vertical-align: -3px"></span><span style="color: #D9A47A">]]</span> setelah makan siang</span>
+
+        <section role="listbox" aria-label="Link suggestions" style="position: absolute; top: 30px; left: 222px; width: 460px; background: #172019; border: 1px solid #2E3A35; border-radius: 8px; padding: 6px; font-family: Inter, sans-serif; font-size: 14px; line-height: 1.4; z-index: 2; box-sizing: border-box">
+          <div role="option" aria-selected="true" style="display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 5px; background: #22403A">
+            <span style="color: #EEF3F1"><b style="color: #5CC4A8">Desa</b>in indeks Patinote</span>
+            <span style="font-size: 12px; color: #9AA4A0">Proyek/</span>
+          </div>
+          <div role="option" aria-selected="false" style="display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 5px">
+            <span><b style="color: #5CC4A8">Desa</b>in antarmuka induk</span>
+            <span style="font-size: 12px; color: #9AA4A0">Proyek/Patinote/</span>
+          </div>
+          <div role="option" aria-selected="false" style="display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 5px">
+            <span><b style="color: #5CC4A8">Desa</b> wisata Kaltim <span style="color: #8D9A94">alias →</span> Catatan perjalanan</span>
+            <span style="font-size: 12px; color: #9AA4A0">Pribadi/</span>
+          </div>
+          <div style="display: flex; gap: 14px; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid #26302C; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #9AA4A0">
+            <span><b style="color: #D6DEDA">Enter/Tab</b> insert</span>
+            <span><b style="color: #D6DEDA">#</b> heading</span>
+            <span><b style="color: #D6DEDA">#^</b> block</span>
+            <span><b style="color: #D6DEDA">Esc</b> close</span>
+          </div>
+        </section>
+      </div>
+      <div style="display: flex"><span style="width: 44px; padding-right: 14px; box-sizing: border-box; text-align: right; color: #7A8882">1</span><span><span style="color: #5CC4A8">-</span> Baca dokumentasi Iced text_editor</span></div>
+    </div>
+  </main>
+
+  <footer style="flex-shrink: 0; font-family: 'JetBrains Mono', monospace">
+    <div style="height: 30px; display: flex; align-items: stretch; background: #161D1A; font-size: 13px">
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #E0A46E; color: #121614; font-weight: 700">INSERT</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #1F2925; color: #D6DEDA">Harian/2026-11-19.md [+]</span>
+      <span style="margin-left: auto; display: flex; align-items: center; padding: 0 12px; color: #9AA4A0">4:26</span>
+    </div>
+    <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: #9AA4A0">-- INSERT --</div>
+  </footer>
+</div>
+</body>
+</html>

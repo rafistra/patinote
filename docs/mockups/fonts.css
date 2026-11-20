@@ -1,0 +1,9 @@
+/* Same font files the app bundles. Open the mockups from inside the repo so these relative paths resolve. */
+@font-face { font-family: "Inter"; font-weight: 400; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/Inter-Regular.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 400; font-style: italic; src: url("../../crates/patinote-app/assets/fonts/Inter-Italic.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/Inter-Medium.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/Inter-SemiBold.ttf"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/Inter-Bold.ttf"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/JetBrainsMono-Regular.ttf"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 600; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/JetBrainsMono-SemiBold.ttf"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-style: normal; src: url("../../crates/patinote-app/assets/fonts/JetBrainsMono-Bold.ttf"); }

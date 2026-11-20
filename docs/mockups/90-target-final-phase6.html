@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patinote mockup — Target final look (around Phase 6) — NOT the Phase 2 spec</title>
+<!-- Static export of the Patinote design canvas. Source of truth for Phase 2 UI together with docs/design/0003-ui-design-system.md. -->
+<link rel="stylesheet" href="fonts.css">
+<style>
+body{margin:0}
+a{color:#D9A47A;text-decoration:none}a:hover{color:#EBC3A2}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+</style>
+</head>
+<body>
+<div style="width: 100%; min-height: 860px; display: flex; flex-direction: column; background: #121614; color: #D6DEDA; font-family: Inter, system-ui, sans-serif; font-size: 14px; box-sizing: border-box; position: relative">
+
+  <nav aria-label="Buffer terbuka" style="height: 32px; display: flex; align-items: stretch; background: #0C0F0E; font-family: 'JetBrains Mono', monospace; font-size: 13px; flex-shrink: 0; overflow-x: auto">
+    <span style="display: flex; align-items: center; gap: 8px; padding: 0 14px; font-family: Inter, sans-serif; font-weight: 600; color: #E6EEEA">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5CC4A8" stroke-width="2" aria-hidden="true"><path d="M4 20 L12 4 L20 20"/><path d="M7.5 13h9"/></svg>Patinote
+    </span>
+    <button style="padding: 0 14px; background: #1A211E; color: #E6EEEA; border-bottom: 2px solid #5CC4A8">1 Desain indeks Patinote <span style="color: #5CC4A8">●</span></button>
+    <button style="padding: 0 14px; color: #8D9A94">2 Patinote</button>
+    <button style="padding: 0 14px; color: #8D9A94">3 2026-11-19</button>
+  </nav>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+
+    
+
+    <main style="flex: 999 1 480px; min-width: 0; display: flex; justify-content: center; padding: 44px 48px; box-sizing: border-box">
+      <article style="width: 100%; max-width: 700px; font-size: 16px; line-height: 1.75">
+        <div style="font-size: 12px; color: #8D9A94; display: flex; gap: 14px; margin-bottom: 14px">
+          <span>Proyek / Desain indeks Patinote</span>
+          <span style="color: #5CC4A8">#proyek/patinote</span>
+          <span style="color: #5CC4A8">#rust</span>
+        </div>
+        <h1 style="margin: 0 0 22px; font-size: 32px; line-height: 1.25; font-weight: 700; color: #F1F4F3">Desain indeks Patinote</h1>
+        <p style="margin: 0 0 14px">Hari ini fokus ke skema SQLite untuk <a href="#">Patinote</a>. Keputusan dari <a href="#">Rapat 19 Nov</a>:</p>
+        <ul style="margin: 0 0 22px; padding-left: 22px">
+          <li>Indeks disimpan di <code style="font-family: 'JetBrains Mono', monospace; font-size: 14px; background: #1E2522; padding: 1px 6px; border-radius: 4px">~/.cache/patinote/</code>, bukan di vault</li>
+          <li>Mulai dengan FTS5, pindah ke <a href="#">tantivy</a> kalau benchmark gagal</li>
+        </ul>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 15px; background: #1A221F; border-radius: 4px; padding: 2px 8px; margin: 0 -8px 10px; display: flex; gap: 14px">
+          <span style="color: #8D9A94; min-width: 18px; text-align: right">10</span>
+          <span><span style="background: #5CC4A8; color: #121614">#</span><span style="color: #5CC4A8"># </span><span style="color: #F1F4F3; font-weight: 600">Tabel inti</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px">
+          <label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" style="width: 16px; height: 16px; accent-color: #5CC4A8"> Finalisasi tabel <code style="font-family: 'JetBrains Mono', monospace; font-size: 14px; background: #1E2522; padding: 1px 6px; border-radius: 4px">links</code> dengan posisi byte</label>
+          <label style="display: flex; align-items: center; gap: 10px; color: #8D9A94; text-decoration: line-through"><input type="checkbox" checked style="width: 16px; height: 16px; accent-color: #5CC4A8"> Uji query backlinks di SQLite</label>
+        </div>
+        <aside style="background: #192824; border-radius: 6px; padding: 14px 16px">
+          <div style="font-weight: 600; color: #8ADBC5">Indeks hanyalah cache</div>
+          <div style="margin-top: 2px; color: #C3CCC8">Aman dihapus kapan saja dan bisa dibangun ulang dari vault.</div>
+        </aside>
+
+        
+          <section aria-label="Backlinks" style="margin-top: 48px; padding-top: 20px; border-top: 1px solid #242C29">
+            <h2 style="margin: 0 0 12px; font-size: 12px; font-weight: 600; color: #8D9A94; letter-spacing: 0.8px; text-transform: uppercase">Disebut di 2 catatan</h2>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+              <a href="#" style="display: block; padding: 12px 14px; border-radius: 6px; background: #1A201E; color: #D6DEDA">
+                <div style="font-weight: 600; color: #E8EDEB">Patinote</div>
+                <div style="font-size: 13px; color: #9AA4A0; margin-top: 4px; line-height: 1.5">…rincian skema ada di catatan ini…</div>
+              </a>
+              <a href="#" style="display: block; padding: 12px 14px; border-radius: 6px; background: #1A201E; color: #D6DEDA">
+                <div style="font-weight: 600; color: #E8EDEB">2026-11-19</div>
+                <div style="font-size: 13px; color: #9AA4A0; margin-top: 4px; line-height: 1.5">Lanjut desain indeks setelah makan siang</div>
+              </a>
+            </div>
+          </section>
+        
+      </article>
+    </main>
+
+    
+  </div>
+
+  
+
+  <footer style="flex-shrink: 0; font-family: 'JetBrains Mono', monospace">
+    <div style="min-height: 30px; display: flex; align-items: stretch; flex-wrap: wrap; background: #161D1A; font-size: 13px">
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #5CC4A8; color: #121614; font-weight: 700">NORMAL</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #1F2925; color: #D6DEDA">Desain indeks Patinote [+]</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; color: #8D9A94">186 kata</span>
+      <span style="margin-left: auto; display: flex; align-items: stretch">
+        <button aria-pressed="false" style="min-height: 30px; padding: 0 12px; color: #B5BEBA; background: transparent; font-weight: 400">␣e explorer</button>
+        <button aria-pressed="false" style="min-height: 30px; padding: 0 12px; color: #B5BEBA; background: transparent; font-weight: 400">␣b backlinks</button>
+        <button aria-pressed="false" style="min-height: 30px; padding: 0 12px; color: #B5BEBA; background: transparent; font-weight: 400">␣ leader</button>
+      </span>
+      <span style="display: flex; align-items: center; padding: 0 12px; background: #1F2925; color: #D6DEDA">10:1</span>
+    </div>
+    <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: #8D9A94">Panel tersembunyi. Coba tombol ␣e, ␣b, atau ␣ di status line.</div>
+  </footer>
+</div>
+</body>
+</html>
