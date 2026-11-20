@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LinksOutput",
+  "description": "`note.links` (`patinote links`).",
+  "type": "object",
+  "properties": {
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LinkOut"
+      }
+    },
+    "note": {
+      "$ref": "#/$defs/NoteRef"
+    },
+    "total": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "note",
+    "total",
+    "links",
+    "warnings"
+  ],
+  "$defs": {
+    "LinkOut": {
+      "description": "A link in `note.read` and `note.links`.",
+      "type": "object",
+      "properties": {
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`wiki`, `embed`, `markdown` or `frontmatter`.",
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "path": {
+          "description": "Where it points, or `null` for a note that does not exist.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw": {
+          "description": "The exact text in the note.",
+          "type": "string"
+        },
+        "subpath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "As written, without subpath or display text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "kind",
+        "line",
+        "raw"
+      ]
+    },
+    "NoteRef": {
+      "description": "A note named in another result.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title"
+      ]
+    },
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

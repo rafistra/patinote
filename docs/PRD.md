@@ -382,12 +382,12 @@ Patinote membuka folder vault Obsidian apa adanya, tanpa mengubah atau menambah 
 
 - [ ] F-01.1 Vault Obsidian asli pengguna terbuka; jumlah catatan dan lampiran sama dengan yang terlihat di Obsidian.
 - [x] F-01.2 Hash semua file vault identik sebelum dan sesudah `patinote index`. `f01_2_indexing_does_not_change_the_vault`
-- [ ] F-01.3 File di `.obsidian/`, `.git/`, `.trash/`, dan folder tersembunyi lain tidak muncul di `patinote list`.
+- [x] F-01.3 File di `.obsidian/`, `.git/`, `.trash/`, dan folder tersembunyi lain tidak muncul di `patinote list`. `f01_3_hidden_folders_are_not_listed`
 - [x] F-01.4 File berisi teks Latin-1 tercatat dengan peringatan, tanpa crash. `f01_4_latin1_note_is_recorded_with_a_warning`
 - [x] F-01.5 File tanpa izin baca muncul di laporan error; file lain tetap terindeks. `f01_5_unreadable_file_is_reported_and_others_indexed`
 - [x] F-01.6 Vault kosong menghasilkan indeks kosong tanpa error. `f01_6_empty_vault_gives_an_empty_index`
 - [x] F-01.7 Symlink ke folder di luar vault tidak diikuti; symlink yang membentuk loop tidak membuat pemindaian macet. `f01_7_symlinks_are_not_followed_and_loops_do_not_hang`
-- [ ] F-01.8 Catatan 6 MB terdaftar tetapi tidak muncul di hasil pencarian isi.
+- [x] F-01.8 Catatan 6 MB terdaftar tetapi tidak muncul di hasil pencarian isi. `f01_8_a_6_mb_note_is_listed_but_not_found_by_search`
 - [x] F-01.9 `--vault` mengalahkan `PATINOTE_VAULT`, yang mengalahkan vault default di konfigurasi. `f01_9_vault_flag_beats_env_beats_config`
 
 ### F-02 · Parser catatan
@@ -956,11 +956,11 @@ Rapat/Rapat 19 Nov.md	12	Keputusan untuk [[Patinote]]: FTS5 dulu
 
 **Kriteria penerimaan**
 
-- [ ] A-01.1 Setiap perintah di tabel berjalan tanpa prompt dan tanpa menunggu input.
-- [ ] A-01.2 Setiap perintah punya `--help` dengan minimal satu contoh pemakaian.
-- [ ] A-01.3 Nama, alias, dan path untuk catatan yang sama memberi hasil yang sama.
-- [ ] A-01.4 Nama ambigu keluar dengan exit code 4 dan daftar kandidat.
-- [ ] A-01.5 `cut -f1` pada output tanpa `--json` menghasilkan daftar path yang valid.
+- [x] A-01.1 Setiap perintah di tabel berjalan tanpa prompt dan tanpa menunggu input. `a01_1_every_command_runs_without_input`
+- [x] A-01.2 Setiap perintah punya `--help` dengan minimal satu contoh pemakaian. `a01_2_every_command_has_help_with_an_example`
+- [x] A-01.3 Nama, alias, dan path untuk catatan yang sama memberi hasil yang sama. `a01_3_name_alias_and_path_give_the_same_result`
+- [x] A-01.4 Nama ambigu keluar dengan exit code 4 dan daftar kandidat. `a01_4_ambiguous_names_exit_4_with_candidates`
+- [x] A-01.5 `cut -f1` pada output tanpa `--json` menghasilkan daftar path yang valid. `a01_5_first_column_is_a_valid_path`
 - [ ] A-01.6 Di vault 10.000 catatan, `backlinks`, `links`, `resolve`, dan `read` selesai di bawah 100 ms, termasuk pengecekan cepat indeks.
 - [ ] A-01.7 Hasil `patinote backlinks X` sama persis dengan panel backlinks di GUI untuk catatan yang sama.
 
@@ -1018,11 +1018,11 @@ Kode error Gerbang 1: `vault_not_found`, `note_not_found`, `ambiguous_note`, `in
 
 **Kriteria penerimaan**
 
-- [ ] A-02.1 Untuk setiap perintah dan setiap kasus error, output `--json` valid untuk `jq` dan cocok dengan JSON Schema di `docs/schema/`.
-- [ ] A-02.2 Snapshot test setiap perintah gagal bila field berubah atau hilang tanpa kenaikan `v`.
+- [x] A-02.1 Untuk setiap perintah dan setiap kasus error, output `--json` valid untuk `jq` dan cocok dengan JSON Schema di `docs/schema/`. `a02_1_json_matches_the_schema_for_every_command_and_error`
+- [x] A-02.2 Snapshot test setiap perintah gagal bila field berubah atau hilang tanpa kenaikan `v`. `a02_2_snapshots_guard_every_output`
 - [x] A-02.3 Stdout `--json` tidak pernah berisi teks lain, termasuk saat pengindeksan lebih dari 1 detik. `a02_3_stdout_stays_json_while_progress_goes_to_stderr`
-- [ ] A-02.4 `search` dengan lebih dari 50 hasil mengembalikan 50 item, `"truncated": true`, dan `"total"` yang benar.
-- [ ] A-02.5 Setiap path dalam output bisa langsung dipakai sebagai `<catatan>` di perintah lain.
+- [x] A-02.4 `search` dengan lebih dari 50 hasil mengembalikan 50 item, `"truncated": true`, dan `"total"` yang benar. `a02_4_search_with_more_than_50_results_is_truncated`
+- [x] A-02.5 Setiap path dalam output bisa langsung dipakai sebagai `<catatan>` di perintah lain. `a02_5_every_path_in_output_works_as_a_note_argument`
 
 ### A-03 · Exit code
 
@@ -1047,9 +1047,9 @@ Skrip dan agent tahu apa yang terjadi hanya dari exit code.
 
 **Kriteria penerimaan**
 
-- [ ] A-03.1 Setiap baris tabel punya test yang memicu kondisinya dan memeriksa exit code serta kode error JSON.
-- [ ] A-03.2 `backlinks` untuk catatan tanpa backlink keluar dengan 0 dan daftar kosong.
-- [ ] A-03.3 `patinote list | head -1` keluar tanpa pesan "broken pipe".
+- [x] A-03.1 Setiap baris tabel punya test yang memicu kondisinya dan memeriksa exit code serta kode error JSON. `a03_1_each_exit_code_row`
+- [x] A-03.2 `backlinks` untuk catatan tanpa backlink keluar dengan 0 dan daftar kosong. `a03_2_no_backlinks_is_exit_0_and_an_empty_list`
+- [x] A-03.3 `patinote list | head -1` keluar tanpa pesan "broken pipe". `a03_3_list_into_head_ends_without_broken_pipe`
 - [x] A-03.4 Vault dengan satu frontmatter rusak: `patinote index` keluar dengan 0 dan satu peringatan; dengan `--strict` keluar dengan 1. `a03_4_warnings_exit_0_and_strict_exits_1`
 - [x] A-03.5 `Ctrl+C` di tengah `patinote index` keluar dengan 130 dan indeks tetap utuh. `a03_5_ctrl_c_during_index_exits_130_and_keeps_the_index_intact`
 

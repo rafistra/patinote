@@ -1,0 +1,29 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "tags": [
+    {
+      "display": "harian",
+      "notes": 1,
+      "tag": "harian",
+      "uses": 1
+    },
+    {
+      "display": "proyek/patinote",
+      "notes": 2,
+      "tag": "proyek/patinote",
+      "uses": 2
+    },
+    {
+      "display": "rust",
+      "notes": 1,
+      "tag": "rust",
+      "uses": 2
+    }
+  ],
+  "total": 3,
+  "v": 1,
+  "warnings": []
+}

@@ -1,0 +1,43 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "backlinks": [
+    {
+      "context": "Tiga mode tampilan: minimal, classic, focus. Lihat juga [[Patinote]].",
+      "kind": "wiki",
+      "line": 3,
+      "path": "Proyek/Patinote/Desain antarmuka induk.md",
+      "subpath": null
+    },
+    {
+      "context": "project: \"[[Patinote]]\"",
+      "kind": "frontmatter",
+      "line": 4,
+      "path": "Proyek/Desain indeks Patinote.md",
+      "subpath": null
+    },
+    {
+      "context": "Hari ini fokus ke skema SQLite untuk [[Patinote]]. Keputusan dari [[Rapat 19 Nov]] dan ide lanjutan di [[Ide Baru]]:",
+      "kind": "wiki",
+      "line": 8,
+      "path": "Proyek/Desain indeks Patinote.md",
+      "subpath": null
+    },
+    {
+      "context": "![[Patinote]]",
+      "kind": "embed",
+      "line": 27,
+      "path": "Proyek/Desain indeks Patinote.md",
+      "subpath": null
+    }
+  ],
+  "note": {
+    "path": "Proyek/Patinote.md",
+    "title": "Patinote"
+  },
+  "total": 4,
+  "v": 1,
+  "warnings": []
+}

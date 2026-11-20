@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BacklinksOutput",
+  "description": "`note.backlinks` (`patinote backlinks`).",
+  "type": "object",
+  "properties": {
+    "backlinks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Backlink"
+      }
+    },
+    "note": {
+      "$ref": "#/$defs/NoteRef"
+    },
+    "total": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "note",
+    "total",
+    "backlinks",
+    "warnings"
+  ],
+  "$defs": {
+    "Backlink": {
+      "description": "One link in `note.backlinks`.",
+      "type": "object",
+      "properties": {
+        "context": {
+          "description": "The line around the link.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`wiki`, `embed`, `markdown` or `frontmatter`.",
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "path": {
+          "description": "The note the link is in.",
+          "type": "string"
+        },
+        "subpath": {
+          "description": "The heading or `^block` linked to, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "kind",
+        "context"
+      ]
+    },
+    "NoteRef": {
+      "description": "A note named in another result.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title"
+      ]
+    },
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

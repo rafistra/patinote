@@ -1,107 +1,15 @@
 //! The `patinote` binary end to end. Every run gets its own HOME and XDG
 //! folders, so tests never touch the real cache, state or configuration.
 
+mod common;
+
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use common::{Env, hashes, json};
 use serde_json::Value;
-
-struct Env {
-    dir: tempfile::TempDir,
-}
-
-struct Run {
-    code: i32,
-    stdout: String,
-    stderr: String,
-}
-
-impl Env {
-    fn new() -> Self {
-        Self {
-            dir: tempfile::tempdir().unwrap(),
-        }
-    }
-    fn path(&self, rel: &str) -> PathBuf {
-        self.dir.path().join(rel)
-    }
-    fn cmd(&self, args: &[&str]) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_patinote"));
-        c.args(args)
-            .env_clear()
-            .env("HOME", self.path("home"))
-            .env("XDG_CACHE_HOME", self.path("cache"))
-            .env("XDG_STATE_HOME", self.path("state"))
-            .env("XDG_CONFIG_HOME", self.path("config"))
-            .stdin(Stdio::null());
-        c
-    }
-    fn run(&self, args: &[&str]) -> Run {
-        self.run_with(args, &[])
-    }
-    fn run_with(&self, args: &[&str], env: &[(&str, &str)]) -> Run {
-        let mut c = self.cmd(args);
-        for (k, v) in env {
-            c.env(k, v);
-        }
-        let out = c.output().unwrap();
-        Run {
-            code: out.status.code().unwrap_or(-1),
-            stdout: String::from_utf8(out.stdout).unwrap(),
-            stderr: String::from_utf8(out.stderr).unwrap(),
-        }
-    }
-    /// A copy of the fixture vault, so nothing can ever write to the fixture.
-    fn fixture(&self) -> PathBuf {
-        let dest = self.path("vault");
-        copy_dir(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/vault-mockup"),
-            &dest,
-        );
-        dest
-    }
-    fn write(&self, rel: &str, text: &str) {
-        let p = self.path(rel);
-        fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, text).unwrap();
-    }
-}
-
-fn copy_dir(from: &Path, to: &Path) {
-    fs::create_dir_all(to).unwrap();
-    for e in fs::read_dir(from).unwrap() {
-        let e = e.unwrap();
-        if e.file_type().unwrap().is_dir() {
-            copy_dir(&e.path(), &to.join(e.file_name()));
-        } else {
-            fs::copy(e.path(), to.join(e.file_name())).unwrap();
-        }
-    }
-}
-
-fn json(text: &str) -> Value {
-    serde_json::from_str(text).unwrap_or_else(|e| panic!("not one JSON document ({e}):\n{text}"))
-}
-
-fn hashes(root: &Path) -> Vec<(String, Vec<u8>)> {
-    let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for e in fs::read_dir(&d).unwrap() {
-            let p = e.unwrap().path();
-            if p.is_dir() {
-                stack.push(p);
-            } else {
-                out.push((p.to_string_lossy().into_owned(), fs::read(&p).unwrap()));
-            }
-        }
-    }
-    out.sort();
-    out
-}
 
 #[test]
 fn f01_2_indexing_does_not_change_the_vault() {
@@ -423,6 +331,16 @@ fn a01_2_every_command_has_help_with_an_example() {
         vec!["vault", "info", "--help"],
         vec!["cache", "clean", "--help"],
         vec!["completions", "--help"],
+        vec!["list", "--help"],
+        vec!["read", "--help"],
+        vec!["search", "--help"],
+        vec!["backlinks", "--help"],
+        vec!["links", "--help"],
+        vec!["tags", "--help"],
+        vec!["orphans", "--help"],
+        vec!["unresolved", "--help"],
+        vec!["resolve", "--help"],
+        vec!["conflicts", "--help"],
     ] {
         let r = env.run(&args);
         assert_eq!(r.code, 0, "{args:?}");

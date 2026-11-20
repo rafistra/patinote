@@ -1,0 +1,78 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "links": [
+    {
+      "display": null,
+      "kind": "frontmatter",
+      "line": 4,
+      "path": "Proyek/Patinote.md",
+      "raw": "[[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": "Proyek/Patinote.md",
+      "raw": "[[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": "Rapat/Rapat 19 Nov.md",
+      "raw": "[[Rapat 19 Nov]]",
+      "subpath": null,
+      "target": "Rapat 19 Nov"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": null,
+      "raw": "[[Ide Baru]]",
+      "subpath": null,
+      "target": "Ide Baru"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 10,
+      "path": null,
+      "raw": "[[tantivy]]",
+      "subpath": null,
+      "target": "tantivy"
+    },
+    {
+      "display": null,
+      "kind": "embed",
+      "line": 25,
+      "path": "Proyek/Lampiran/diagram-indeks.png",
+      "raw": "![[diagram-indeks.png]]",
+      "subpath": null,
+      "target": "diagram-indeks.png"
+    },
+    {
+      "display": null,
+      "kind": "embed",
+      "line": 27,
+      "path": "Proyek/Patinote.md",
+      "raw": "![[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    }
+  ],
+  "note": {
+    "path": "Proyek/Desain indeks Patinote.md",
+    "title": "Desain indeks Patinote"
+  },
+  "total": 7,
+  "v": 1,
+  "warnings": []
+}
