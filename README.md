@@ -42,6 +42,27 @@ cargo build --workspace
 cargo test --workspace
 ```
 
+## Contributing
+
+CI runs `cargo fmt`, `cargo clippy`, `cargo test`, `cargo deny` and a check
+that keeps private vault data out of this public repository. Enable the same
+checks before each commit:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The vault data check (`scripts/check-vault-data.sh`) only allows Markdown and
+other vault files under `docs/`, `fixtures/` and `tests/` folders, keeps
+`fixtures/vault-mockup/` identical to `fixtures/vault-mockup.sha256`, and
+rejects absolute home paths. If you change the fixture on purpose, stage it and
+run `scripts/check-vault-data.sh --update-manifest`.
+
+If you develop against your own vault, set `PATINOTE_REAL_VAULT` to its path.
+The pre-commit hook then also refuses commits that copy a file from that vault
+or mention one of its note names. It prints only repository paths and counts,
+never the names it matched. Never set this variable in CI.
+
 ## Documentation
 
 Planning documents in `docs/` are written in Indonesian.
