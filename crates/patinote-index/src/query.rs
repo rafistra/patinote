@@ -3,6 +3,9 @@
 
 use std::collections::HashMap;
 
+use patinote_core::Target;
+use patinote_core::names::{link_key, stem};
+use patinote_core::scan::FileKind;
 use rusqlite::{OptionalExtension, params};
 
 use crate::{IndexError, SqliteStore};
@@ -114,6 +117,71 @@ impl SqliteStore {
         for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))? {
             let (id, alias) = row?;
             out.entry(id).or_default().push(alias);
+        }
+        Ok(out)
+    }
+
+    /// Aliases and distinct tags of one note, ordered like [`Self::all_aliases`]
+    /// and [`Self::all_tags`], for commands about a single note.
+    pub fn aliases_and_tags(&self, id: i64) -> Result<(Vec<String>, Vec<String>), IndexError> {
+        let aliases = self
+            .conn
+            .prepare_cached("SELECT alias FROM aliases WHERE note_id = ?1 ORDER BY alias_lower")?
+            .query_map([id], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        let mut tags: Vec<String> = Vec::new();
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT tag FROM tags WHERE note_id = ?1 ORDER BY rowid")?;
+        for tag in stmt.query_map([id], |r| r.get::<_, String>(0))? {
+            let tag = tag?;
+            if !tags.contains(&tag) {
+                tags.push(tag);
+            }
+        }
+        Ok((aliases, tags))
+    }
+
+    /// The files a wikilink with this target could resolve to: those whose
+    /// name matches its last segment, and notes with a matching alias. A
+    /// [`patinote_core::Resolver`] built from them resolves the target
+    /// exactly as one built from every file, without loading the vault.
+    pub fn link_candidates(&self, target: &str) -> Result<Vec<Target>, IndexError> {
+        let key = link_key(target.trim_start_matches('/'));
+        let last = key.rsplit('/').next().unwrap_or(&key).to_owned();
+        // A note `a.b.md` has the name `a.b`; an attachment `a.png` is named
+        // `a.png` and stored with the stem `a`.
+        let last_stem = stem(&last).to_owned();
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, path, kind FROM notes
+             WHERE stem_lower IN (?1, ?2)
+                OR id IN (SELECT note_id FROM aliases WHERE alias_lower = ?3)",
+        )?;
+        let rows = stmt
+            .query_map(params![last, last_stem, key], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut out = Vec::with_capacity(rows.len());
+        for (id, path, kind) in rows {
+            let aliases = self
+                .conn
+                .prepare_cached("SELECT alias FROM aliases WHERE note_id = ?1")?
+                .query_map([id], |r| r.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?;
+            out.push(Target {
+                path,
+                kind: match kind.as_str() {
+                    "note" => FileKind::Note,
+                    "canvas" => FileKind::Canvas,
+                    _ => FileKind::Attachment,
+                },
+                aliases,
+            });
         }
         Ok(out)
     }

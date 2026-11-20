@@ -11,7 +11,6 @@ use patinote_core::commands::{
 };
 use patinote_core::model::LinkKind;
 use patinote_core::names::{fold, link_key, nfc, stem};
-use patinote_core::store::Store;
 use patinote_core::time::iso8601_utc;
 use patinote_core::{Resolver, ScanOptions, scan};
 use patinote_index::SqliteStore;
@@ -76,7 +75,7 @@ pub fn resolve_note(ctx: &Ctx<'_>, arg: &str) -> Result<NoteRow, Failure> {
         }
     }
     let target = bare_target(&arg);
-    let resolver = Resolver::new(ctx.store.targets().map_err(index_failure)?);
+    let resolver = Resolver::new(ctx.store.link_candidates(target).map_err(index_failure)?);
     let Some(found) = resolver.resolve("", LinkKind::Wiki, target) else {
         return Err(Failure::new(
             ErrorCode::NoteNotFound,
@@ -290,8 +289,9 @@ pub fn read(
         })
         .collect();
     let links = link_outs(ctx, row)?;
-    let aliases = ctx.store.all_aliases().map_err(index_failure)?;
-    let tags = ctx.store.all_tags().map_err(index_failure)?;
+    let (aliases, tags) = ctx.store.aliases_and_tags(row.id).map_err(index_failure)?;
+    let aliases = HashMap::from([(row.id, aliases)]);
+    let tags = HashMap::from([(row.id, tags)]);
     Ok(ReadOutput {
         v: 1,
         note: summary(row, &aliases, &tags),
@@ -528,7 +528,7 @@ pub fn unresolved(ctx: &Ctx<'_>) -> Result<UnresolvedOutput, Failure> {
 /// `null` (exit 0), because the question was answered.
 pub fn resolve(ctx: &Ctx<'_>, input: &str) -> Result<ResolveOutput, Failure> {
     let target = bare_target(input);
-    let resolver = Resolver::new(ctx.store.targets().map_err(index_failure)?);
+    let resolver = Resolver::new(ctx.store.link_candidates(target).map_err(index_failure)?);
     let found = resolver.resolve("", LinkKind::Wiki, target);
     Ok(ResolveOutput {
         v: 1,

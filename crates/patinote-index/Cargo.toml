@@ -27,5 +27,9 @@ harness = false
 name = "index"
 harness = false
 
+[[bench]]
+name = "targets"
+harness = false
+
 [lints]
 workspace = true

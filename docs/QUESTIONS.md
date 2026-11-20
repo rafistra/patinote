@@ -104,6 +104,27 @@ Rekomendasi agent: A, sesuai `0001` bagian 7. Pengguna biasanya mengecualikan fo
 Rekomendasi agent: A. Exit code 130 yang sungguhan sesuai dengan kontrak A-03 untuk agent dan skrip, dan pengindeksan berhenti dengan rapi di batas batch.
 **Jawaban:** A, disetujui pemilik (20 November 2026). Kunci konfigurasi vault default: `[vault] default`.
 
+## Q-009 · Pencarian kata yang sangat umum di 50.000 catatan sedikit di atas 50 ms (langkah 1.9, 20 November 2026)
+
+**Konteks:** Target performa PRD: pencarian full-text < 50 ms pada 50.000 catatan. Diukur dengan `cargo bench -p patinote-index --bench targets` di laptop pemilik, pada vault `vaultgen` 50.000 catatan, 50 hasil teratas beserta body untuk nomor barisnya (seperti `patinote search`):
+
+| Query | Catatan yang cocok | Median |
+| --- | --- | --- |
+| `kabut` | 28.727 (57%) | 52,0 ms |
+| `dermaga pantai` | 16.769 (34%) | 42,6 ms |
+| `"angin pilar"` (frasa) | 321 | 17,5 ms |
+
+Hampir seluruh waktu untuk `kabut` (47 ms dari 52 ms) dipakai FTS5 menghitung skor bm25 untuk setiap catatan yang cocok sebelum bisa memilih 50 teratas, sekitar 1,6 µs per catatan. Yang sudah dicoba dan tidak membantu: `snippet()` (biayanya 1 ms), cache SQLite 16 MB (masih 47 ms), dan `optimize` FTS5 (masih 47 ms). Kosakata `vaultgen` kecil, jadi satu kata muncul di separuh vault. Di vault asli, kata umum seperti "yang" atau "dan" juga cocok dengan sebagian besar catatan.
+**Pilihan:**
+- A. Target berlaku untuk query biasa; query yang cocok dengan lebih dari separuh vault boleh sedikit di atasnya (sekitar 50 ms di laptop target). Di aplikasi, pencarian berjalan di thread background dengan debounce, jadi UI tidak tertahan.
+- B. Bila hasil cocok melebihi batas (misalnya 10.000 catatan), urutkan menurut waktu ubah, bukan bm25, agar selalu di bawah 50 ms. Urutan hasil untuk query yang sangat umum jadi kurang relevan.
+- C. Daftar stopword bahasa Indonesia dan Inggris di tokenizer FTS. Kata seperti "dan" tidak bisa dicari sama sekali, dan indeks harus dibangun ulang.
+
+Benchmark target belum dijalankan di CI: runner GitHub lebih lambat dan tidak sama dengan laptop target, sehingga angkanya tidak bisa dibandingkan dengan target. CI hanya mengompilasinya (`cargo bench --workspace --no-run`). Pertanyaan tambahan: perlu runner khusus, atau cukup dijalankan di laptop pemilik sebelum rilis?
+
+Rekomendasi agent: A, dan benchmark dijalankan di laptop pemilik untuk setiap PR yang menyentuh jalur panas (`CLAUDE.md` bagian 5). Selisihnya kecil, hanya terjadi pada query yang cocok dengan separuh vault, dan B maupun C menurunkan kualitas hasil.
+**Jawaban:** _(belum dijawab)_
+
 ## Q-010 · `chrono` tidak dipelihara lagi, dan `rmcp` membutuhkannya (langkah 1.8, 20 November 2026)
 
 **Konteks:** `cargo deny` di CI gagal karena RUSTSEC-2026-0543: crate `chrono` dinyatakan tidak dipelihara lagi. Advisory ini informasional, bukan celah keamanan, dan tidak ada versi perbaikan. `chrono` adalah dependensi wajib `rmcp` 3.11 (server MCP, A-04), dipakai di 10 file sumbernya, sehingga tidak bisa dimatikan lewat fitur.

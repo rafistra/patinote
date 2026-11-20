@@ -961,7 +961,7 @@ Rapat/Rapat 19 Nov.md	12	Keputusan untuk [[Patinote]]: FTS5 dulu
 - [x] A-01.3 Nama, alias, dan path untuk catatan yang sama memberi hasil yang sama. `a01_3_name_alias_and_path_give_the_same_result`
 - [x] A-01.4 Nama ambigu keluar dengan exit code 4 dan daftar kandidat. `a01_4_ambiguous_names_exit_4_with_candidates`
 - [x] A-01.5 `cut -f1` pada output tanpa `--json` menghasilkan daftar path yang valid. `a01_5_first_column_is_a_valid_path`
-- [ ] A-01.6 Di vault 10.000 catatan, `backlinks`, `links`, `resolve`, dan `read` selesai di bawah 100 ms, termasuk pengecekan cepat indeks.
+- [x] A-01.6 Di vault 10.000 catatan, `backlinks`, `links`, `resolve`, dan `read` selesai di bawah 100 ms, termasuk pengecekan cepat indeks. `cargo bench -p patinote-cli --bench cli`
 - [ ] A-01.7 Hasil `patinote backlinks X` sama persis dengan panel backlinks di GUI untuk catatan yang sama.
 
 ### A-02 · Kontrak output `--json`
