@@ -37,6 +37,10 @@ pub enum IndexError {
     /// (F-03.7; the CLI exits with code 5).
     #[error("the index is locked by another process")]
     Locked,
+    /// SQLite reported damaged data while the index was in use. Callers
+    /// rebuild with [`SqliteStore::rebuild`]; [`update_index`] does it itself.
+    #[error("the index database is damaged")]
+    Corrupt,
     #[error("index database error: {0}")]
     Sqlite(rusqlite::Error),
     #[error("cannot use the index at {}: {source}", path.display())]
@@ -47,6 +51,7 @@ impl From<rusqlite::Error> for IndexError {
     fn from(e: rusqlite::Error) -> Self {
         match e.sqlite_error_code() {
             Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => Self::Locked,
+            Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase) => Self::Corrupt,
             _ => Self::Sqlite(e),
         }
     }
@@ -55,7 +60,8 @@ impl From<rusqlite::Error> for IndexError {
 /// Why an existing index was thrown away and created again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RebuildReason {
-    /// Not a database, or `PRAGMA integrity_check` failed (F-03.6).
+    /// Not a database, a damaged schema, or damaged data found while in use
+    /// (F-03.6, Q-006).
     Corrupt,
     /// Written by a newer Patinote with a higher schema version.
     NewerSchema,
@@ -89,6 +95,7 @@ pub fn index_path_for(vault_root: &Path, cache_home: &Path) -> io::Result<PathBu
 pub struct SqliteStore {
     conn: Connection,
     path: PathBuf,
+    options: OpenOptions,
     rebuilt: Option<RebuildReason>,
     created: bool,
 }
@@ -113,6 +120,7 @@ impl SqliteStore {
             Ok(conn) => Ok(Self {
                 conn,
                 path: path.to_path_buf(),
+                options: *options,
                 rebuilt: None,
                 created,
             }),
@@ -123,6 +131,7 @@ impl SqliteStore {
                     Ok(conn) => Ok(Self {
                         conn,
                         path: path.to_path_buf(),
+                        options: *options,
                         rebuilt: Some(reason),
                         created: true,
                     }),
@@ -155,21 +164,79 @@ impl SqliteStore {
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
+
+    /// Deletes the database and creates an empty one in its place, after
+    /// damaged data was found while in use. The index must then be filled again.
+    pub fn rebuild(&mut self) -> Result<(), IndexError> {
+        // Close the damaged file before deleting it.
+        self.conn = Connection::open_in_memory()?;
+        remove_database(&self.path)?;
+        self.conn = match try_open(&self.path, &self.options) {
+            Ok(conn) => conn,
+            Err(OpenFailure::Fatal(e)) => return Err(e),
+            Err(OpenFailure::Rebuild(_)) => {
+                return Err(IndexError::Io {
+                    path: self.path.clone(),
+                    source: io::Error::other("the new index could not be created"),
+                });
+            }
+        };
+        self.rebuilt = Some(RebuildReason::Corrupt);
+        self.created = true;
+        Ok(())
+    }
+
+    /// Runs the full `PRAGMA integrity_check`. It reads the whole database
+    /// (about 0.9 s for 10,000 notes), so the app runs it in the background now
+    /// and then instead of on every open (Q-006). Returns whether the index is
+    /// intact.
+    pub fn integrity_check(&self) -> Result<bool, IndexError> {
+        match self
+            .conn
+            .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+        {
+            Ok(s) => Ok(s == "ok"),
+            Err(e) => match IndexError::from(e) {
+                IndexError::Corrupt => Ok(false),
+                other => Err(other),
+            },
+        }
+    }
+}
+
+/// Brings the index up to date, rebuilding it once when SQLite reports
+/// damaged data along the way (F-03.6, Q-006). Check [`SqliteStore::rebuilt`]
+/// to know whether it happened.
+pub fn update_index(
+    store: &mut SqliteStore,
+    vault_root: &Path,
+    options: &patinote_core::IndexOptions,
+    progress: &mut dyn FnMut(patinote_core::Progress),
+) -> Result<patinote_core::IndexReport, patinote_core::index::IndexError<IndexError>> {
+    match patinote_core::index_vault(vault_root, store, options, progress) {
+        Err(patinote_core::index::IndexError::Store(IndexError::Corrupt)) => {
+            store
+                .rebuild()
+                .map_err(patinote_core::index::IndexError::Store)?;
+            patinote_core::index_vault(vault_root, store, options, progress)
+        }
+        other => other,
+    }
 }
 
 fn try_open(path: &Path, options: &OpenOptions) -> Result<Connection, OpenFailure> {
-    let fatal = |e: rusqlite::Error| OpenFailure::Fatal(e.into());
+    // Damage found at any step of opening means rebuild; other errors are fatal.
+    let fatal = |e: rusqlite::Error| match IndexError::from(e) {
+        IndexError::Corrupt => OpenFailure::Rebuild(RebuildReason::Corrupt),
+        other => OpenFailure::Fatal(other),
+    };
     let mut conn = Connection::open(path).map_err(fatal)?;
     conn.busy_timeout(options.busy_timeout).map_err(fatal)?;
 
     // The first real read tells whether this is a database at all.
-    let mode: String = match conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0)) {
-        Ok(mode) => mode,
-        Err(e) if e.sqlite_error_code() == Some(ErrorCode::NotADatabase) => {
-            return Err(OpenFailure::Rebuild(RebuildReason::Corrupt));
-        }
-        Err(e) => return Err(fatal(e)),
-    };
+    let mode: String = conn
+        .query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))
+        .map_err(fatal)?;
     debug_assert_eq!(mode.to_lowercase(), "wal");
     // Memory budget (PRD): a small page cache and no memory-mapped I/O.
     conn.execute_batch(
@@ -180,21 +247,14 @@ fn try_open(path: &Path, options: &OpenOptions) -> Result<Connection, OpenFailur
     )
     .map_err(fatal)?;
 
-    let check: rusqlite::Result<String> =
-        conn.query_row("PRAGMA integrity_check", [], |r| r.get(0));
-    match check {
-        Ok(ref s) if s == "ok" => {}
-        Ok(_) => return Err(OpenFailure::Rebuild(RebuildReason::Corrupt)),
-        Err(e)
-            if matches!(
-                e.sqlite_error_code(),
-                Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase)
-            ) =>
-        {
-            return Err(OpenFailure::Rebuild(RebuildReason::Corrupt));
-        }
-        Err(e) => return Err(fatal(e)),
-    }
+    // Cheap checks only (Q-006): reading the schema catches a damaged first
+    // page. Damage elsewhere surfaces as SQLITE_CORRUPT when a query reaches
+    // it, and `update_index` rebuilds then; a full integrity_check takes
+    // about 0.9 s on 10,000 notes, too slow for every open.
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map_err(fatal)?;
 
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))

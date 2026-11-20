@@ -263,7 +263,7 @@ fn f03_6_corrupt_database_is_rebuilt() {
 }
 
 #[test]
-fn f03_6_damaged_pages_are_detected() {
+fn f03_6_damaged_pages_are_found_in_use_not_on_open() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("index.db");
     {
@@ -280,15 +280,31 @@ fn f03_6_damaged_pages_are_detected() {
             .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
             .unwrap();
     }
-    // Overwrite the middle of the file, keeping the header intact.
+    // Damage the second half of the file: data pages, not the schema at the start.
     let mut bytes = fs::read(&path).unwrap();
-    let mid = bytes.len() / 2;
-    for b in &mut bytes[mid..mid + 8192] {
-        *b = 0xA5;
-    }
+    let half = bytes.len() / 2;
+    bytes[half..].fill(0xA5);
     fs::write(&path, bytes).unwrap();
+
+    // Opening stays cheap and does not read the data pages (Q-006)...
     let s = open(&path);
-    assert_eq!(s.rebuilt(), Some(RebuildReason::Corrupt));
+    assert_eq!(s.rebuilt(), None);
+    // ...the full check finds the damage, and so do queries that reach it.
+    assert!(!s.integrity_check().unwrap());
+    let found = ["notes", "links", "tags", "headings", "notes_fts"]
+        .iter()
+        .any(|t| {
+            let r: rusqlite::Result<i64> = s.connection().query_row(
+                &format!("SELECT count(*) FROM (SELECT * FROM {t})"),
+                [],
+                |r| r.get(0),
+            );
+            r.is_err_and(|e| matches!(IndexError::from(e), IndexError::Corrupt))
+        });
+    assert!(
+        found,
+        "a full scan of the data tables reports SQLITE_CORRUPT"
+    );
 }
 
 #[test]

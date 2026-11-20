@@ -61,6 +61,7 @@ Catatan:
 - `vault-id` = 16 karakter heksadesimal pertama dari blake3 path vault kanonik, sehingga banyak vault tidak saling bertabrakan.
 - Pragma saat koneksi dibuka: `journal_mode=WAL` (UI bisa membaca saat watcher menulis), `synchronous=NORMAL`, `foreign_keys=ON`.
 - Versi skema di `PRAGMA user_version`. Kalau versi DB lebih baru dari aplikasi, atau migrasi gagal, **hapus dan bangun ulang**. Indeks hanyalah cache, jadi ini selalu aman.
+- Pemeriksaan kerusakan (Q-006): saat dibuka hanya pemeriksaan murah (file benar database SQLite dan skemanya terbaca), karena `PRAGMA integrity_check` butuh sekitar 0,9 detik untuk 10.000 catatan. Kerusakan di halaman data muncul sebagai `SQLITE_CORRUPT` saat query menyentuhnya; `update_index` lalu membangun ulang dan mengindeks sekali lagi. Aplikasi menjalankan `integrity_check` lengkap di background sesekali.
 
 ## 3. Deteksi perubahan (indeks inkremental)
 

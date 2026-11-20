@@ -82,4 +82,4 @@ Rekomendasi agent: A. Skema tetap satu file selama belum ada pengguna, dan `0001
 - C. Tetap `integrity_check` saat dibuka, dan target A-01.6 serta F-28.8 dilonggarkan.
 
 Rekomendasi agent: A. Indeks hanyalah cache yang aman dibangun ulang, jadi deteksi saat dipakai sudah cukup aman, dan target kecepatan adalah alasan utama Patinote dibuat. Teks F-03 di PRD perlu disesuaikan oleh pemilik bila A dipilih.
-**Jawaban:** (diisi pemilik)
+**Jawaban:** A, disetujui pemilik (20 November 2026). Teks F-03 di PRD disesuaikan oleh pemilik.

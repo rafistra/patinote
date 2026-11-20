@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use patinote_core::store::Store;
 use patinote_core::{IndexOptions, Progress, index_vault};
-use patinote_index::{OpenOptions, RebuildReason, SqliteStore, index_path_for};
+use patinote_index::{OpenOptions, RebuildReason, SqliteStore, index_path_for, update_index};
 
 fn vault(dir: &Path, notes: usize) -> PathBuf {
     let root = dir.join("vault");
@@ -85,17 +85,31 @@ fn f03_6_corrupt_index_is_rebuilt_with_full_content() {
     {
         let mut s = SqliteStore::open(&db, &OpenOptions::default()).unwrap();
         index_vault(&root, &mut s, &IndexOptions::default(), &mut |_| {}).unwrap();
+        s.connection()
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .unwrap();
     }
     let mut bytes = fs::read(&db).unwrap();
-    let mid = bytes.len() / 2;
-    bytes[mid..mid + 4096].fill(0x5A);
+    bytes[4096..].fill(0x5A);
     fs::write(&db, bytes).unwrap();
 
     let mut s = SqliteStore::open(&db, &OpenOptions::default()).unwrap();
+    let r = update_index(&mut s, &root, &IndexOptions::default(), &mut |_| {}).unwrap();
     assert_eq!(s.rebuilt(), Some(RebuildReason::Corrupt));
-    let r = index_vault(&root, &mut s, &IndexOptions::default(), &mut |_| {}).unwrap();
     assert_eq!(r.added, r.notes + r.attachments);
     assert_eq!(count(&s, "SELECT count(*) FROM blocks"), 100);
+    assert!(s.integrity_check().unwrap());
+}
+
+#[test]
+fn update_index_without_damage_does_not_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = vault(dir.path(), 50);
+    let mut s = SqliteStore::open(&dir.path().join("index.db"), &OpenOptions::default()).unwrap();
+    update_index(&mut s, &root, &IndexOptions::default(), &mut |_| {}).unwrap();
+    let r = update_index(&mut s, &root, &IndexOptions::default(), &mut |_| {}).unwrap();
+    assert_eq!(s.rebuilt(), None);
+    assert_eq!(r.unchanged, r.notes + r.attachments);
 }
 
 #[test]
