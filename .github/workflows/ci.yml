@@ -49,6 +49,8 @@ jobs:
       - name: Check the parser golden corpus is up to date
         run: python3 scripts/golden-corpus.py --check
       - run: cargo test --workspace
+      - name: Build benchmarks
+        run: cargo bench --workspace --no-run
 
   deny:
     runs-on: ubuntu-24.04

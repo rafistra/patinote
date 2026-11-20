@@ -12,12 +12,12 @@ patinote/
 ├── crates/
 │   ├── patinote-core/         # model, parser, resolusi link, operasi vault, registri perintah
 │   ├── patinote-index/        # SQLite + FTS5, migrasi, query
-│   │   └── migrations/0001_init.sql
+│   │   ├── migrations/0001_init.sql
+│   │   └── benches/           # criterion (Q-003)
 │   ├── patinote-cli/          # binary `patinote`: CLI + `patinote mcp`
 │   └── patinote-app/          # binary `patinote-app`: UI Iced
 ├── tools/
 │   └── vaultgen/              # generator vault uji 1k / 10k / 50k (Fase 0)
-├── benches/                   # criterion
 └── docs/
     ├── ROADMAP.md
     └── design/
