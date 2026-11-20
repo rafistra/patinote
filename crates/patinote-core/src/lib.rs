@@ -13,6 +13,7 @@ pub mod resolve;
 pub mod scan;
 pub mod store;
 pub mod watch;
+pub mod write;
 
 pub use index::{IndexOptions, IndexReport, Progress, index_vault};
 pub use model::{
