@@ -9,9 +9,12 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ignore.workspace = true
 pulldown-cmark.workspace = true
 serde.workspace = true
 serde_norway.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -21,6 +24,10 @@ vaultgen.workspace = true
 
 [[bench]]
 name = "parse"
+harness = false
+
+[[bench]]
+name = "scan"
 harness = false
 
 [lints]

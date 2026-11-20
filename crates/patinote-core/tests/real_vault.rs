@@ -1,40 +1,22 @@
-//! Parses the owner's real vault (PRD F-02.2). Runs only on the owner's laptop:
+//! Scans and parses the owner's real vault (PRD F-01.1, F-02.2). Runs only on
+//! the owner's laptop:
 //!
 //! ```bash
-//! PATINOTE_REAL_VAULT=~/Vault cargo test -p patinote-core --test real_vault -- --ignored --nocapture
+//! PATINOTE_REAL_VAULT=~/Vault cargo test -p patinote-core --test real_vault -- --ignored --nocapture --test-threads 1
 //! ```
 //!
 //! It prints counts only, never note names or content (CLAUDE.md, section 7).
 //! Panic messages are silenced because they can quote note text.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use patinote_core::{LinkKind, parse};
+use patinote_core::{FileKind, LinkKind, NoteContent, ScanOptions, load_note, parse, scan};
 
-fn markdown_files(root: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
-        if path.is_dir() {
-            markdown_files(&path, out);
-        } else if name.ends_with(".md") && !name.contains(".sync-conflict-") {
-            out.push(path);
-        }
-    }
-}
-
-#[test]
-#[ignore = "needs PATINOTE_REAL_VAULT; run only on the owner's laptop"]
-fn f02_2_real_vault_parses_without_error() {
+/// The vault from `PATINOTE_REAL_VAULT`, or `None` when it is not set.
+fn vault_root() -> Option<PathBuf> {
     let Ok(raw) = std::env::var("PATINOTE_REAL_VAULT") else {
         eprintln!("PATINOTE_REAL_VAULT is not set; nothing to do");
-        return;
+        return None;
     };
     let root = match raw.strip_prefix("~/") {
         Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
@@ -46,20 +28,49 @@ fn f02_2_real_vault_parses_without_error() {
         root.is_dir(),
         "PATINOTE_REAL_VAULT is not a folder (use an absolute path or ~/…)"
     );
-    let mut files = Vec::new();
-    markdown_files(&root, &mut files);
+    Some(root)
+}
+
+#[test]
+#[ignore = "needs PATINOTE_REAL_VAULT; run only on the owner's laptop"]
+fn f01_1_real_vault_counts() {
+    let Some(root) = vault_root() else { return };
+    let s = scan(&root, &ScanOptions::default()).expect("scan");
+    let count = |k| s.files.iter().filter(|f| f.kind == k).count();
+    eprintln!("notes:          {}", count(FileKind::Note));
+    eprintln!("attachments:    {}", count(FileKind::Attachment));
+    eprintln!("canvases:       {}", count(FileKind::Canvas));
+    eprintln!("sync conflicts: {}", s.conflicts.len());
+    eprintln!("scan issues:    {}", s.issues.len());
+    eprintln!("Compare notes and attachments with Obsidian, then tick F-01.1.");
+}
+
+#[test]
+#[ignore = "needs PATINOTE_REAL_VAULT; run only on the owner's laptop"]
+fn f02_2_real_vault_parses_without_error() {
+    let Some(root) = vault_root() else { return };
+    let s = scan(&root, &ScanOptions::default()).expect("scan");
 
     std::panic::set_hook(Box::new(|_| {}));
-    let (mut notes, mut not_utf8, mut panics, mut warnings) = (0, 0, 0, 0);
+    let (mut notes, mut not_utf8, mut too_large, mut unreadable, mut panics, mut warnings) =
+        (0, 0, 0, 0, 0, 0);
     let mut kinds = [0usize; 4];
     let (mut tags, mut headings, mut blocks, mut properties) = (0, 0, 0, 0);
-    for path in &files {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        let Ok(text) = String::from_utf8(bytes) else {
-            not_utf8 += 1;
-            continue;
+    for file in s.files.iter().filter(|f| f.kind == FileKind::Note) {
+        let text = match load_note(&root.join(&file.path)) {
+            Ok(NoteContent::Text(t)) => t,
+            Ok(NoteContent::NotUtf8) => {
+                not_utf8 += 1;
+                continue;
+            }
+            Ok(NoteContent::TooLarge { .. }) => {
+                too_large += 1;
+                continue;
+            }
+            Err(_) => {
+                unreadable += 1;
+                continue;
+            }
         };
         notes += 1;
         match std::panic::catch_unwind(|| parse(&text)) {
@@ -85,6 +96,8 @@ fn f02_2_real_vault_parses_without_error() {
 
     eprintln!("notes parsed:      {notes}");
     eprintln!("not UTF-8:         {not_utf8}");
+    eprintln!("over 5 MB:         {too_large}");
+    eprintln!("unreadable:        {unreadable}");
     eprintln!("panics:            {panics}");
     eprintln!("warnings:          {warnings}");
     eprintln!(

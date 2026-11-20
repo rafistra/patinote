@@ -6,9 +6,14 @@
 
 pub mod model;
 pub mod parser;
+pub mod scan;
 
 pub use model::{
     Block, Heading, Link, LinkKind, ParsedNote, Property, PropertyValue, Tag, TagSource, Warning,
     WarningCode,
 };
 pub use parser::parse;
+pub use scan::{
+    FileKind, MAX_PARSE_BYTES, NoteContent, Scan, ScanError, ScanIssue, ScanIssueKind, ScanOptions,
+    ScannedFile, SyncConflict, load_note, scan,
+};

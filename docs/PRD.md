@@ -386,7 +386,7 @@ Patinote membuka folder vault Obsidian apa adanya, tanpa mengubah atau menambah 
 - [ ] F-01.4 File berisi teks Latin-1 tercatat dengan peringatan, tanpa crash.
 - [ ] F-01.5 File tanpa izin baca muncul di laporan error; file lain tetap terindeks.
 - [ ] F-01.6 Vault kosong menghasilkan indeks kosong tanpa error.
-- [ ] F-01.7 Symlink ke folder di luar vault tidak diikuti; symlink yang membentuk loop tidak membuat pemindaian macet.
+- [x] F-01.7 Symlink ke folder di luar vault tidak diikuti; symlink yang membentuk loop tidak membuat pemindaian macet. `f01_7_symlinks_are_not_followed_and_loops_do_not_hang`
 - [ ] F-01.8 Catatan 6 MB terdaftar tetapi tidak muncul di hasil pencarian isi.
 - [ ] F-01.9 `--vault` mengalahkan `PATINOTE_VAULT`, yang mengalahkan vault default di konfigurasi.
 
