@@ -1,0 +1,61 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "frontmatter",
+      "raw": "[[Patinote]]",
+      "target": "Patinote",
+      "subpath": null,
+      "display": null,
+      "line": 2,
+      "byte_start": 13,
+      "byte_end": 25
+    },
+    {
+      "kind": "frontmatter",
+      "raw": "[[Alfa]]",
+      "target": "Alfa",
+      "subpath": null,
+      "display": null,
+      "line": 4,
+      "byte_start": 41,
+      "byte_end": 49
+    },
+    {
+      "kind": "frontmatter",
+      "raw": "[[Beta|b]]",
+      "target": "Beta",
+      "subpath": null,
+      "display": "b",
+      "line": 5,
+      "byte_start": 56,
+      "byte_end": 66
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [
+    {
+      "key": "proyek",
+      "idx": 0,
+      "type": "text",
+      "value": "[[Patinote]]"
+    },
+    {
+      "key": "terkait",
+      "idx": 0,
+      "type": "text",
+      "value": "[[Alfa]]"
+    },
+    {
+      "key": "terkait",
+      "idx": 1,
+      "type": "text",
+      "value": "[[Beta|b]]"
+    }
+  ],
+  "warnings": []
+}

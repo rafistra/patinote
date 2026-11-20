@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "title": "Judul dari properti",
+  "aliases": [],
+  "links": [],
+  "tags": [],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Judul H1",
+      "line": 4,
+      "byte_start": 35
+    }
+  ],
+  "blocks": [],
+  "properties": [
+    {
+      "key": "title",
+      "idx": 0,
+      "type": "text",
+      "value": "Judul dari properti"
+    }
+  ],
+  "warnings": []
+}

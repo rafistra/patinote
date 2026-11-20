@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [
+    "Second Brain",
+    "Otak Kedua"
+  ],
+  "links": [],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [
+    {
+      "key": "aliases",
+      "idx": 0,
+      "type": "text",
+      "value": "Second Brain"
+    },
+    {
+      "key": "aliases",
+      "idx": 1,
+      "type": "text",
+      "value": "Otak Kedua"
+    }
+  ],
+  "warnings": []
+}

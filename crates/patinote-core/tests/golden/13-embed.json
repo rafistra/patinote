@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "embed",
+      "raw": "![[Catatan]]",
+      "target": "Catatan",
+      "subpath": null,
+      "display": null,
+      "line": 1,
+      "byte_start": 0,
+      "byte_end": 12
+    },
+    {
+      "kind": "embed",
+      "raw": "![[foto.png|300]]",
+      "target": "foto.png",
+      "subpath": null,
+      "display": "300",
+      "line": 3,
+      "byte_start": 21,
+      "byte_end": 38
+    },
+    {
+      "kind": "embed",
+      "raw": "![[Catatan#Bagian]]",
+      "target": "Catatan",
+      "subpath": "Bagian",
+      "display": null,
+      "line": 3,
+      "byte_start": 50,
+      "byte_end": 69
+    },
+    {
+      "kind": "embed",
+      "raw": "![[laporan.pdf]]",
+      "target": "laporan.pdf",
+      "subpath": null,
+      "display": null,
+      "line": 3,
+      "byte_start": 82,
+      "byte_end": 98
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

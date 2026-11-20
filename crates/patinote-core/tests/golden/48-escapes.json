@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Ya]]",
+      "target": "Ya",
+      "subpath": null,
+      "display": null,
+      "line": 1,
+      "byte_start": 38,
+      "byte_end": 44
+    }
+  ],
+  "tags": [
+    {
+      "tag": "ya",
+      "display": "ya",
+      "source": "inline",
+      "line": 1
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

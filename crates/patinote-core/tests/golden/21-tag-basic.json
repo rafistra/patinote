@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [],
+  "tags": [
+    {
+      "tag": "rust",
+      "display": "rust",
+      "source": "inline",
+      "line": 1
+    },
+    {
+      "tag": "ide",
+      "display": "ide",
+      "source": "inline",
+      "line": 2
+    },
+    {
+      "tag": "catatan",
+      "display": "catatan",
+      "source": "inline",
+      "line": 3
+    },
+    {
+      "tag": "lagi",
+      "display": "lagi",
+      "source": "inline",
+      "line": 3
+    },
+    {
+      "tag": "titik",
+      "display": "titik",
+      "source": "inline",
+      "line": 3
+    }
+  ],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

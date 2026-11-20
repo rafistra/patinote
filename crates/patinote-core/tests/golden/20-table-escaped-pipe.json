@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan\\|teks]]",
+      "target": "Catatan",
+      "subpath": null,
+      "display": "teks",
+      "line": 3,
+      "byte_start": 41,
+      "byte_end": 58
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Alfa]]",
+      "target": "Alfa",
+      "subpath": null,
+      "display": null,
+      "line": 4,
+      "byte_start": 78,
+      "byte_end": 86
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

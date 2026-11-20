@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan#^abc123]]",
+      "target": "Catatan",
+      "subpath": "^abc123",
+      "display": null,
+      "line": 1,
+      "byte_start": 11,
+      "byte_end": 30
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan#^blok-1|kutipan]]",
+      "target": "Catatan",
+      "subpath": "^blok-1",
+      "display": "kutipan",
+      "line": 1,
+      "byte_start": 35,
+      "byte_end": 62
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

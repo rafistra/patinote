@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "embed",
+      "raw": "![diagram](Lampiran/diagram%20indeks.png)",
+      "target": "Lampiran/diagram indeks.png",
+      "subpath": null,
+      "display": "diagram",
+      "line": 1,
+      "byte_start": 0,
+      "byte_end": 41
+    },
+    {
+      "kind": "embed",
+      "raw": "![](foto.png)",
+      "target": "foto.png",
+      "subpath": null,
+      "display": null,
+      "line": 1,
+      "byte_start": 46,
+      "byte_end": 59
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

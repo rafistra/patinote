@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "title": null,
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan|teks]]",
+      "target": "Catatan",
+      "subpath": null,
+      "display": "teks",
+      "line": 1,
+      "byte_start": 13,
+      "byte_end": 29
+    },
+    {
+      "kind": "wiki",
+      "raw": "[[Proyek Alfa|proyek kita yang besar]]",
+      "target": "Proyek Alfa",
+      "subpath": null,
+      "display": "proyek kita yang besar",
+      "line": 1,
+      "byte_start": 34,
+      "byte_end": 72
+    }
+  ],
+  "tags": [],
+  "headings": [],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

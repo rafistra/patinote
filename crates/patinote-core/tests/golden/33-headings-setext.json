@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "title": "Judul setext",
+  "aliases": [],
+  "links": [],
+  "tags": [],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Judul setext",
+      "line": 1,
+      "byte_start": 0
+    },
+    {
+      "level": 2,
+      "text": "Sub judul",
+      "line": 4,
+      "byte_start": 27
+    }
+  ],
+  "blocks": [],
+  "properties": [],
+  "warnings": []
+}

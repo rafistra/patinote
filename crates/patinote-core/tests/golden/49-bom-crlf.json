@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "title": "Judul",
+  "aliases": [],
+  "links": [
+    {
+      "kind": "wiki",
+      "raw": "[[Catatan]]",
+      "target": "Catatan",
+      "subpath": null,
+      "display": null,
+      "line": 5,
+      "byte_start": 38,
+      "byte_end": 49
+    }
+  ],
+  "tags": [
+    {
+      "tag": "a",
+      "display": "a",
+      "source": "frontmatter",
+      "line": null
+    },
+    {
+      "tag": "tag",
+      "display": "tag",
+      "source": "inline",
+      "line": 5
+    }
+  ],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Judul",
+      "line": 4,
+      "byte_start": 24
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "blok",
+      "line": 5
+    }
+  ],
+  "properties": [
+    {
+      "key": "tags",
+      "idx": 0,
+      "type": "text",
+      "value": "a"
+    }
+  ],
+  "warnings": []
+}
