@@ -83,6 +83,11 @@ pub const COMMANDS: &[CommandInfo] = &[
         summary: "Syncthing conflict copies",
     },
     CommandInfo {
+        name: "agents.init",
+        cli: "agents init",
+        summary: "Write AGENTS.md with instructions for AI agents",
+    },
+    CommandInfo {
         name: "cache.clean",
         cli: "cache clean",
         summary: "Remove indexes of vaults that no longer exist",
@@ -105,6 +110,8 @@ pub enum ErrorCode {
     IndexLocked,
     IoError,
     NotUtf8,
+    /// The file to create already exists (`agents init`, A-05.4).
+    AlreadyExists,
 }
 
 impl ErrorCode {
@@ -114,7 +121,7 @@ impl ErrorCode {
             Self::IoError | Self::NotUtf8 => exit::ERROR,
             Self::InvalidArgument => exit::INVALID_ARGUMENT,
             Self::VaultNotFound | Self::NoteNotFound => exit::NOT_FOUND,
-            Self::AmbiguousNote => exit::CONFLICT,
+            Self::AmbiguousNote | Self::AlreadyExists => exit::CONFLICT,
             Self::IndexLocked => exit::LOCKED,
         }
     }
@@ -442,6 +449,17 @@ pub struct ConflictsOutput {
     pub warnings: Vec<OutputWarning>,
 }
 
+/// `agents.init` (`patinote agents init`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct AgentsInitOutput {
+    pub v: u32,
+    /// Files created or updated.
+    pub written: Vec<String>,
+    /// Files that already had the right content.
+    pub unchanged: Vec<String>,
+    pub warnings: Vec<OutputWarning>,
+}
+
 /// An error, written to stderr with `--json`; stdout stays empty (A-02).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct ErrorOutput {
@@ -479,6 +497,7 @@ pub fn schemas() -> Vec<(&'static str, schemars::Schema)> {
         ),
         ("link.resolve.json", schemars::schema_for!(ResolveOutput)),
         ("conflict.list.json", schemars::schema_for!(ConflictsOutput)),
+        ("agents.init.json", schemars::schema_for!(AgentsInitOutput)),
         ("cache.clean.json", schemars::schema_for!(CacheCleanOutput)),
         ("error.json", schemars::schema_for!(ErrorOutput)),
     ]

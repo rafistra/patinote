@@ -103,3 +103,14 @@ Rekomendasi agent: A, sesuai `0001` bagian 7. Pengguna biasanya mengecualikan fo
 
 Rekomendasi agent: A. Exit code 130 yang sungguhan sesuai dengan kontrak A-03 untuk agent dan skrip, dan pengindeksan berhenti dengan rapi di batas batch.
 **Jawaban:** A, disetujui pemilik (20 November 2026). Kunci konfigurasi vault default: `[vault] default`.
+
+## Q-010 · `chrono` tidak dipelihara lagi, dan `rmcp` membutuhkannya (langkah 1.8, 20 November 2026)
+
+**Konteks:** `cargo deny` di CI gagal karena RUSTSEC-2026-0543: crate `chrono` dinyatakan tidak dipelihara lagi. Advisory ini informasional, bukan celah keamanan, dan tidak ada versi perbaikan. `chrono` adalah dependensi wajib `rmcp` 3.11 (server MCP, A-04), dipakai di 10 file sumbernya, sehingga tidak bisa dimatikan lewat fitur.
+**Pilihan:**
+- A. Abaikan advisory itu saja di `deny.toml` dengan alasan tertulis. Pemeriksaan advisory lain tetap berjalan. Ditinjau ulang saat `rmcp` berhenti memakai `chrono`.
+- B. Tulis server MCP sendiri tanpa `rmcp` (JSON-RPC lewat stdio). `rmcp`, `tokio`, dan `chrono` hilang, tetapi perubahan protokol MCP harus diikuti sendiri.
+- C. Kunci `cargo-deny` di CI ke 0.22, yang tidak menandai advisory ini untuk dependensi transitif.
+
+Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (20 November 2026).

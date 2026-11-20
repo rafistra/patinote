@@ -1,10 +1,12 @@
 //! The `patinote` binary: command-line interface (and `patinote mcp` in
 //! step 1.8). It never depends on Iced, wgpu or any graphics crate.
 
+mod agents;
 mod app;
 mod cli;
 mod commands;
 mod context;
+mod mcp;
 mod output;
 
 fn main() -> std::process::ExitCode {

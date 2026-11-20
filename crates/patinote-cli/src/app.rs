@@ -7,15 +7,15 @@ use std::time::Instant;
 
 use clap::{CommandFactory, Parser};
 use patinote_core::commands::{
-    BacklinksOutput, CacheCleanOutput, ConflictsOutput, ErrorBody, ErrorCode, IndexOutput,
-    LinksOutput, ListOutput, OrphansOutput, OutputWarning, ReadOutput, ResolveOutput, SearchOutput,
-    TagsOutput, UnresolvedOutput, VaultInfoOutput, exit,
+    AgentsInitOutput, BacklinksOutput, CacheCleanOutput, ConflictsOutput, ErrorBody, ErrorCode,
+    IndexOutput, LinksOutput, ListOutput, OrphansOutput, OutputWarning, ReadOutput, ResolveOutput,
+    SearchOutput, TagsOutput, UnresolvedOutput, VaultInfoOutput, exit,
 };
 use patinote_core::location;
 use patinote_index::cache_clean;
 use serde::Serialize;
 
-use crate::cli::{CacheCommand, Cli, Command, Global, VaultCommand};
+use crate::cli::{AgentsCommand, CacheCommand, Cli, Command, Global, VaultCommand};
 use crate::commands::{self, Ctx, ListArgs};
 use crate::context::{
     self, index_failure, io_failure, open_store, rebuilt_label, refresh, select_vault,
@@ -132,7 +132,7 @@ fn run(cli: &Cli) -> Result<usize, Failure> {
         }
         Command::Cache(CacheCommand::Clean) => cache_clean_cmd(g),
         Command::Index { rebuild } => index_cmd(g, *rebuild),
-        Command::Vault(VaultCommand::Info) => vault_info_cmd(g),
+        Command::Vault(VaultCommand::Info) => with_vault(g, commands::vault_info),
         Command::List {
             tag,
             folder,
@@ -172,6 +172,15 @@ fn run(cli: &Cli) -> Result<usize, Failure> {
         Command::Unresolved => with_vault(g, commands::unresolved),
         Command::Resolve { name } => with_vault(g, |ctx| commands::resolve(ctx, name)),
         Command::Conflicts => with_vault(g, commands::conflicts),
+        Command::Agents(AgentsCommand::Init { update, agents }) => {
+            with_vault(g, |ctx| crate::agents::init(ctx, *update, agents))
+        }
+        Command::Mcp => {
+            let vault = select_vault(g.vault.as_ref())?;
+            let store = open_store(&vault, false)?;
+            crate::mcp::serve(vault, store)?;
+            Ok(0)
+        }
     }
 }
 
@@ -271,6 +280,28 @@ printable!(ResolveOutput, |o| match &o.path {
         String::new()
     }
 });
+printable!(VaultInfoOutput, |o| lines(
+    [
+        ("vault", o.vault.clone()),
+        ("vault_id", o.vault_id.clone()),
+        ("index", o.index.clone()),
+        ("notes", o.notes.to_string()),
+        ("attachments", o.attachments.to_string()),
+        ("canvases", o.canvases.to_string()),
+        ("excluded", o.excluded.to_string()),
+        ("links", o.links.to_string()),
+        ("unresolved_links", o.unresolved_links.to_string()),
+        ("sync_conflicts", o.sync_conflicts.to_string()),
+    ]
+    .into_iter()
+    .map(|(k, v)| format!("{k}\t{v}"))
+));
+printable!(AgentsInitOutput, |o| lines(
+    o.written
+        .iter()
+        .map(|p| format!("{p}\twritten"))
+        .chain(o.unchanged.iter().map(|p| format!("{p}\tunchanged")))
+));
 printable!(ConflictsOutput, |o| lines(
     o.conflicts
         .iter()
@@ -315,56 +346,6 @@ fn index_cmd(g: &Global, rebuild: bool) -> Result<usize, Failure> {
             out.removed,
             out.duration_ms as f64 / 1000.0
         ))?;
-        output::warnings_text(&out.warnings, g.quiet);
-    }
-    Ok(out.warnings.len())
-}
-
-fn vault_info_cmd(g: &Global) -> Result<usize, Failure> {
-    let mut vault = select_vault(g.vault.as_ref())?;
-    let mut store = open_store(&vault, false)?;
-    let report = if g.no_refresh {
-        None
-    } else {
-        Some(refresh(&mut vault, &mut store, g.quiet, &INTERRUPTED)?)
-    };
-    let counts = store.counts().map_err(index_failure)?;
-    let sync_conflicts = match &report {
-        Some(r) => r.sync_conflicts,
-        None => {
-            patinote_core::scan(&vault.root, &Default::default()).map_or(0, |s| s.conflicts.len())
-        }
-    };
-    let out = VaultInfoOutput {
-        v: 1,
-        vault: vault.root.to_string_lossy().into_owned(),
-        vault_id: vault.id.clone(),
-        index: vault.index_path.to_string_lossy().into_owned(),
-        notes: counts.notes,
-        attachments: counts.attachments,
-        canvases: counts.canvases,
-        excluded: counts.excluded,
-        links: counts.links,
-        unresolved_links: counts.unresolved_links,
-        sync_conflicts,
-        warnings: context::with_stored_warnings(&vault, &store)?,
-    };
-    if g.json {
-        output::json(&out)?;
-    } else {
-        let rows = [
-            ("vault", out.vault.clone()),
-            ("vault_id", out.vault_id.clone()),
-            ("index", out.index.clone()),
-            ("notes", out.notes.to_string()),
-            ("attachments", out.attachments.to_string()),
-            ("canvases", out.canvases.to_string()),
-            ("excluded", out.excluded.to_string()),
-            ("links", out.links.to_string()),
-            ("unresolved_links", out.unresolved_links.to_string()),
-            ("sync_conflicts", out.sync_conflicts.to_string()),
-        ];
-        output::stdout(&lines(rows.iter().map(|(k, v)| format!("{k}\t{v}"))))?;
         output::warnings_text(&out.warnings, g.quiet);
     }
     Ok(out.warnings.len())
