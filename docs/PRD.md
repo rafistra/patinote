@@ -383,9 +383,9 @@ Patinote membuka folder vault Obsidian apa adanya, tanpa mengubah atau menambah 
 - [ ] F-01.1 Vault Obsidian asli pengguna terbuka; jumlah catatan dan lampiran sama dengan yang terlihat di Obsidian.
 - [ ] F-01.2 Hash semua file vault identik sebelum dan sesudah `patinote index`.
 - [ ] F-01.3 File di `.obsidian/`, `.git/`, `.trash/`, dan folder tersembunyi lain tidak muncul di `patinote list`.
-- [ ] F-01.4 File berisi teks Latin-1 tercatat dengan peringatan, tanpa crash.
-- [ ] F-01.5 File tanpa izin baca muncul di laporan error; file lain tetap terindeks.
-- [ ] F-01.6 Vault kosong menghasilkan indeks kosong tanpa error.
+- [x] F-01.4 File berisi teks Latin-1 tercatat dengan peringatan, tanpa crash. `f01_4_latin1_note_is_recorded_with_a_warning`
+- [x] F-01.5 File tanpa izin baca muncul di laporan error; file lain tetap terindeks. `f01_5_unreadable_file_is_reported_and_others_indexed`
+- [x] F-01.6 Vault kosong menghasilkan indeks kosong tanpa error. `f01_6_empty_vault_gives_an_empty_index`
 - [x] F-01.7 Symlink ke folder di luar vault tidak diikuti; symlink yang membentuk loop tidak membuat pemindaian macet. `f01_7_symlinks_are_not_followed_and_loops_do_not_hang`
 - [ ] F-01.8 Catatan 6 MB terdaftar tetapi tidak muncul di hasil pencarian isi.
 - [ ] F-01.9 `--vault` mengalahkan `PATINOTE_VAULT`, yang mengalahkan vault default di konfigurasi.
@@ -477,11 +477,11 @@ Indeks selalu sesuai isi vault, cepat dibangun, aman dihapus, dan tidak rusak wa
 **Kriteria penerimaan**
 
 - [ ] F-03.1 Indeks ulang penuh vault uji 10.000 catatan selesai di bawah 10 detik.
-- [ ] F-03.2 Mengubah 1 catatan lalu `patinote index` hanya memproses ulang 1 file.
-- [ ] F-03.3 File yang hanya di-`touch` tidak di-parse ulang.
-- [ ] F-03.4 `kill -9` di tengah pengindeksan tidak merusak indeks; perintah berikutnya berjalan normal.
+- [x] F-03.2 Mengubah 1 catatan lalu `patinote index` hanya memproses ulang 1 file. `f03_2_changing_one_note_reprocesses_one_file`
+- [x] F-03.3 File yang hanya di-`touch` tidak di-parse ulang. `f03_3_touched_file_is_not_parsed_again`
+- [x] F-03.4 `kill -9` di tengah pengindeksan tidak merusak indeks; perintah berikutnya berjalan normal. `f03_4_kill_during_index_keeps_db_intact`
 - [ ] F-03.5 Menghapus `~/.cache/patinote/` lalu menjalankan perintah apa pun membangun indeks baru tanpa error.
-- [ ] F-03.6 Database yang sengaja dirusak dideteksi dan dibangun ulang otomatis.
+- [x] F-03.6 Database yang sengaja dirusak dideteksi dan dibangun ulang otomatis. `f03_6_corrupt_index_is_rebuilt_with_full_content`
 - [ ] F-03.7 Saat aplikasi menulis indeks, CLI tetap bisa membaca; penulisan CLI yang terkunci lebih dari 5 detik keluar dengan exit code 5.
 - [ ] F-03.8 Pengecekan cepat di vault 10.000 catatan tanpa perubahan selesai di bawah 200 ms.
 - [ ] F-03.9 `patinote cache clean` menghapus indeks vault yang foldernya sudah tidak ada, dan tidak menyentuh indeks vault lain.

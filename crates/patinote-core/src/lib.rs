@@ -4,6 +4,7 @@
 //! This crate must not depend on SQLite, Iced or any UI crate. Storage is
 //! reached through the `Store` trait, implemented by `patinote-index`.
 
+pub mod index;
 pub mod location;
 pub mod model;
 pub mod names;
@@ -11,6 +12,7 @@ pub mod parser;
 pub mod scan;
 pub mod store;
 
+pub use index::{IndexOptions, IndexReport, Progress, index_vault};
 pub use model::{
     Block, Heading, Link, LinkKind, ParsedNote, Property, PropertyValue, Tag, TagSource, Warning,
     WarningCode,

@@ -23,5 +23,9 @@ vaultgen.workspace = true
 name = "baseline"
 harness = false
 
+[[bench]]
+name = "index"
+harness = false
+
 [lints]
 workspace = true
