@@ -212,7 +212,7 @@ pub fn scan(root: &Path, options: &ScanOptions) -> Result<Scan, ScanError> {
 }
 
 /// Relative path with `/` separators in NFC, or `None` if the name is not UTF-8.
-fn relative(path: &Path, root: &Path) -> Option<String> {
+pub(crate) fn relative(path: &Path, root: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
     let parts: Option<Vec<&str>> = rel.components().map(|c| c.as_os_str().to_str()).collect();
     Some(parts?.join("/").nfc().collect())

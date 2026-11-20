@@ -515,9 +515,9 @@ Perubahan file dari luar Patinote (Neovim, Syncthing, `git checkout`) tercermin 
 
 - [ ] F-04.1 Catatan yang disimpan dengan `:w` di Neovim tercermin di indeks dan UI di bawah 1 detik.
 - [ ] F-04.2 Catatan baru dari `echo "..." > baru.md` muncul di quick switcher di bawah 1 detik.
-- [ ] F-04.3 Catatan yang dihapus dari terminal hilang dari indeks; link ke sana menjadi link ke catatan yang belum ada.
-- [ ] F-04.4 Folder berisi 50 catatan yang dipindah dari terminal tercermin seluruhnya dalam satu batch.
-- [ ] F-04.5 `git checkout` yang mengubah 100 file diproses dalam satu transaksi tanpa error.
+- [x] F-04.3 Catatan yang dihapus dari terminal hilang dari indeks; link ke sana menjadi link ke catatan yang belum ada. `f04_3_deleted_note_leaves_the_index_and_its_links_dangle`
+- [x] F-04.4 Folder berisi 50 catatan yang dipindah dari terminal tercermin seluruhnya dalam satu batch. `f04_4_moved_folder_of_50_notes_is_one_change`
+- [x] F-04.5 `git checkout` yang mengubah 100 file diproses dalam satu transaksi tanpa error. `f04_5_checkout_of_100_files_is_one_change_and_one_transaction`
 - [ ] F-04.6 Menyimpan dari Patinote tidak memicu parse ulang kedua.
 - [ ] F-04.7 Dengan `max_user_watches` diturunkan sampai watcher gagal, muncul peringatan dan perubahan tetap terdeteksi dalam 30 detik.
 
