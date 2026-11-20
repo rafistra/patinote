@@ -21,6 +21,13 @@ allow = [
 ]
 confidence-threshold = 0.9
 
+[advisories]
+ignore = [
+    # chrono is unmaintained (informational, no vulnerability, no fix). rmcp
+    # (MCP server, A-04) requires it; remove this when rmcp drops chrono. Q-010.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained chrono, required by rmcp; Q-010" },
+]
+
 [licenses.private]
 # Workspace crates are not published; their own license is in LICENSE.
 ignore = true

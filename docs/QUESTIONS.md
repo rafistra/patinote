@@ -124,3 +124,14 @@ Benchmark target belum dijalankan di CI: runner GitHub lebih lambat dan tidak sa
 
 Rekomendasi agent: A, dan benchmark dijalankan di laptop pemilik untuk setiap PR yang menyentuh jalur panas (`CLAUDE.md` bagian 5). Selisihnya kecil, hanya terjadi pada query yang cocok dengan separuh vault, dan B maupun C menurunkan kualitas hasil.
 **Jawaban:** _(belum dijawab)_
+
+## Q-010 · `chrono` tidak dipelihara lagi, dan `rmcp` membutuhkannya (langkah 1.8, 20 November 2026)
+
+**Konteks:** `cargo deny` di CI gagal karena RUSTSEC-2026-0543: crate `chrono` dinyatakan tidak dipelihara lagi. Advisory ini informasional, bukan celah keamanan, dan tidak ada versi perbaikan. `chrono` adalah dependensi wajib `rmcp` 3.11 (server MCP, A-04), dipakai di 10 file sumbernya, sehingga tidak bisa dimatikan lewat fitur.
+**Pilihan:**
+- A. Abaikan advisory itu saja di `deny.toml` dengan alasan tertulis. Pemeriksaan advisory lain tetap berjalan. Ditinjau ulang saat `rmcp` berhenti memakai `chrono`.
+- B. Tulis server MCP sendiri tanpa `rmcp` (JSON-RPC lewat stdio). `rmcp`, `tokio`, dan `chrono` hilang, tetapi perubahan protokol MCP harus diikuti sendiri.
+- C. Kunci `cargo-deny` di CI ke 0.22, yang tidak menandai advisory ini untuk dependensi transitif.
+
+Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (20 November 2026).
