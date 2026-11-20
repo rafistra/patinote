@@ -21,6 +21,10 @@ pub struct ParsedNote {
     /// One row per frontmatter value, in key order.
     pub properties: Vec<Property>,
     pub warnings: Vec<Warning>,
+    /// The frontmatter as JSON, for `notes.frontmatter`; `None` when absent or
+    /// invalid. Not part of the golden corpus.
+    #[serde(skip)]
+    pub frontmatter_json: Option<String>,
 }
 
 /// How a link is written.

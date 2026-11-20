@@ -12,6 +12,8 @@ allow = [
     "Apache-2.0",
     # unicode-ident (via proc-macro2, used by clap_derive): permissive Unicode data license.
     "Unicode-3.0",
+    # foldhash (via hashbrown, used by rusqlite); Iced also needs it (design 0002).
+    "Zlib",
 ]
 confidence-threshold = 0.9
 

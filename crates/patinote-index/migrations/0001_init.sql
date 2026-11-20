@@ -114,6 +114,16 @@ CREATE TABLE properties (
 CREATE INDEX properties_key_text ON properties (key_lower, value_text);
 CREATE INDEX properties_key_num  ON properties (key_lower, value_num);
 
+-- Peringatan per file yang tidak menghentikan pengindeksan (Q-005): file bukan UTF-8,
+-- catatan di atas 5 MB, file yang tidak bisa dibaca, frontmatter rusak.
+CREATE TABLE warnings (
+    note_id INTEGER NOT NULL REFERENCES notes (id) ON DELETE CASCADE,
+    code    TEXT    NOT NULL CHECK (code IN ('not_utf8', 'too_large', 'unreadable', 'frontmatter_invalid')),
+    line    INTEGER                        -- NULL bila tidak terkait baris tertentu
+) STRICT;
+
+CREATE INDEX warnings_note ON warnings (note_id);
+
 -- Pencarian full-text. rowid = notes.id. Menyimpan salinan isi agar snippet() dan
 -- highlight() bekerja tanpa membaca file. remove_diacritics 2 menyamakan 'é' dan 'e'.
 CREATE VIRTUAL TABLE notes_fts USING fts5 (
