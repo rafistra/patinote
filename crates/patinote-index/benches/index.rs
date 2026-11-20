@@ -1,7 +1,7 @@
 //! Index targets on a 10,000-note `vaultgen` vault (PRD F-03):
 //! - `full_10k`: full index from nothing (F-03.1, under 10 s);
 //! - `quick_check_10k`: run on an unchanged vault (F-03.8, under 200 ms);
-//! - `open_10k`: open an existing index, including `integrity_check`.
+//! - `open_10k`: open an existing index (cheap checks only, Q-006).
 //!
 //! Run with `cargo bench -p patinote-index --bench index`.
 
