@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# CI runners set CI=true, which makes check D refuse to run. These tests only use a
+# synthetic fake vault, so they clear it; the "refuses to run in CI" case sets it again.
+unset CI
+
 script="$(cd "$(dirname "$0")/.." && pwd)/check-vault-data.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
