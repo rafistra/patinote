@@ -8,6 +8,8 @@ all-features = true
 [licenses]
 allow = [
     "MIT",
+    # ryu (via serde_yaml_ng) is Apache-2.0 OR BSL-1.0; Iced also needs it (design 0002).
+    "Apache-2.0",
     # unicode-ident (via proc-macro2, used by clap_derive): permissive Unicode data license.
     "Unicode-3.0",
 ]

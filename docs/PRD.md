@@ -439,11 +439,11 @@ Sintaks yang hanya untuk tampilan (`==highlight==`, callout, footnote) cukup tid
 
 **Kriteria penerimaan**
 
-- [ ] F-02.1 Korpus uji emas sekitar 40 file `.md`, masing-masing dengan `.json` hasil parse yang diharapkan; setiap baris tabel wikilink dan setiap aturan tag punya minimal satu kasus positif dan satu kasus negatif. Semua lolos.
+- [x] F-02.1 Korpus uji emas sekitar 40 file `.md`, masing-masing dengan `.json` hasil parse yang diharapkan; setiap baris tabel wikilink dan setiap aturan tag punya minimal satu kasus positif dan satu kasus negatif. Semua lolos. `f02_1_golden_corpus`
 - [ ] F-02.2 Semua catatan di vault asli pengguna ter-parse tanpa error.
 - [ ] F-02.3 Jumlah link keluar per catatan sama dengan yang dilaporkan Obsidian; setiap selisih dijelaskan dan dicatat.
-- [ ] F-02.4 Link di dalam blok kode, kode inline, rumus, dan komentar `%%` tidak terhitung.
-- [ ] F-02.5 Catatan dengan frontmatter rusak tetap terindeks dengan peringatan.
+- [x] F-02.4 Link di dalam blok kode, kode inline, rumus, dan komentar `%%` tidak terhitung. `f02_4_links_in_code_math_comments_are_ignored`
+- [x] F-02.5 Catatan dengan frontmatter rusak tetap terindeks dengan peringatan. `f02_5_broken_frontmatter_indexed_with_warning`
 - [ ] F-02.6 Parse vault uji 10.000 catatan muat di target indeks ulang penuh di bawah 10 detik.
 
 ### F-03 · Indeks SQLite inkremental
