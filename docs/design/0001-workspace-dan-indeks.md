@@ -45,7 +45,7 @@ Keuntungannya:
 
 | Crate | Isi | Dependensi utama |
 | --- | --- | --- |
-| `patinote-core` | Tipe (`NotePath`, `ParsedNote`, `Link`, `Tag`), parser Markdown + wikilink + tag + frontmatter, resolver link ala Obsidian, scanner vault, file watcher, operasi tulis (create/append/rename dengan `--dry-run`), registri perintah, trait `Store` | `pulldown-cmark`, `serde`, `serde_yaml_ng`, `ignore`, `notify`, `blake3`, `unicode-normalization`, `thiserror` |
+| `patinote-core` | Tipe (`NotePath`, `ParsedNote`, `Link`, `Tag`), parser Markdown + wikilink + tag + frontmatter, resolver link ala Obsidian, scanner vault, file watcher, operasi tulis (create/append/rename dengan `--dry-run`), registri perintah, trait `Store` | `pulldown-cmark`, `serde`, `serde_norway`, `ignore`, `notify`, `blake3`, `unicode-normalization`, `thiserror` |
 | `patinote-index` | `SqliteStore`, migrasi, query backlinks/tag/orphan/properti, pencarian FTS5 | `rusqlite` (fitur `bundled`), `rusqlite_migration` |
 | `patinote-cli` | Parsing argumen, output teks dan `--json`, exit code, server MCP | `clap`, `serde_json`, `rmcp`, `anyhow` |
 | `patinote-app` | UI Iced; satu-satunya crate yang menyentuh Iced | `iced` (versi dikunci) |
@@ -53,6 +53,7 @@ Keuntungannya:
 Catatan:
 - `rusqlite` dengan fitur `bundled` agar versi SQLite (dan FTS5) sama di semua mesin, tidak bergantung pada `libsqlite3` sistem Ubuntu.
 - `serde_yaml` sudah tidak dirawat; pakai penerusnya (`serde_yaml_ng` atau `serde_norway`). Pastikan dulu lisensinya lolos `cargo-deny`.
+- Dipilih `serde_norway` (langkah 1.1): `serde_yaml_ng` bergantung pada `unsafe-libyaml` yang ditandai tidak dirawat (RUSTSEC-2024-0449) dan ditolak `cargo deny`, sedangkan `serde_norway` memakai fork yang masih dirawat (`unsafe-libyaml-norway`). Lisensinya MIT OR Apache-2.0.
 
 ## 2. Lokasi dan siklus hidup indeks
 
