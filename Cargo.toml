@@ -17,11 +17,15 @@ clap = { version = "4.6.9", features = ["derive"] }
 clap_complete = "4.6.12"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 ctrlc = "3.5.3"
+# Locked after step 0.6 (docs/design/0002). Both renderers ship; tiny-skia is the default (Q-004).
+iced = { version = "=0.14.0", default-features = false, features = ["advanced", "crisp", "thread-pool", "tiny-skia", "wgpu", "wayland", "x11", "svg"] }
+iced_runtime = "=0.14.0"
 ignore = "0.4.34"
 insta = { version = "1.49.0", features = ["json"] }
 notify = { version = "8.2.2", default-features = false }
 patinote-core = { path = "crates/patinote-core" }
 patinote-index = { path = "crates/patinote-index" }
+png = "0.17.16"
 pulldown-cmark = { version = "0.13.6", default-features = false }
 rmcp = { version = "3.11.0", features = ["server", "macros", "transport-io"] }
 rusqlite = { version = "0.41", features = ["bundled"] }

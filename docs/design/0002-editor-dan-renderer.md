@@ -1,6 +1,6 @@
 # 0002 — Editor dan renderer
 
-- Status: **usulan** (20 November 2026). Renderer default menunggu jawaban Q-004 di `docs/QUESTIONS.md`.
+- Status: **diterima** (20 November 2026). Renderer: Q-004 pilihan C. Font sistem: Q-011 pilihan A.
 - Terkait PRD: F-05, F-06, F-28; Bagian I "Anggaran memori" butir 1 dan 3, dan tabel Performa
 - Terkait: `CLAUDE.md` bagian 3 (langkah 0.6 dan daftar uji tampilan), `0003` bagian 10
 - Prototipe: `experiments/editor-proto/` (dibuang setelah langkah 2.3; tidak ikut workspace utama)
@@ -12,9 +12,9 @@
 | Versi Iced | **0.14.0**, dikunci dengan `=0.14.0` saat masuk ke `patinote-app` |
 | Widget editor | **Widget sendiri** di atas `iced::advanced`. `text_editor` bawaan hanya memenuhi butir 1 dan 7 |
 | Daftar uji tampilan | Kedelapan butir bisa dipenuhi; cadangan di `0003` bagian 10 **tidak** diperlukan |
-| Renderer default | Belum diputuskan: tiny-skia memenuhi target RAM dan waktu buka tetapi tidak mulus saat menggulir satu layar penuh; wgpu kebalikannya (Q-004) |
+| Renderer default | **tiny-skia**, dengan wgpu ikut dalam binary dan bisa dipilih lewat konfigurasi (Q-004 pilihan C). tiny-skia memenuhi target RAM dan waktu buka; gulir layar penuh dioptimasi di Fase 2 |
 | Screenshot headless | Bisa di CI dengan tiny-skia, tetapi lewat harness sendiri, karena `iced_test` 0.14 selalu memotret di skala 2,0 |
-| Font sistem | Iced 0.14 selalu memindai font sistem; bisa dibatasi dengan `FONTCONFIG_FILE` (bagian 5.1) |
+| Font sistem | Iced 0.14 selalu memindai font sistem; `patinote-app` menjalankan ulang dirinya dengan `FONTCONFIG_FILE` yang hanya menyebut folder kosong (bagian 5.1, Q-011) |
 
 ## 2. Lingkungan uji
 
@@ -108,7 +108,7 @@ Saat Iced masuk ke `patinote-app`, `deny.toml` perlu mengizinkan Apache-2.0, Zli
 - Logika Vim tetap modul murni tanpa tipe Iced (`vim.rs` di prototipe), lalu diganti modul lengkap F-06 yang diuji terhadap `nvim --headless`.
 - Yang belum dicoba di prototipe dan harus diselesaikan di langkah 2.3: input method (IME), posisi berbasis grapheme (prototipe memakai indeks karakter), gulir yang memperhitungkan tinggi baris terbungkus, baris yang sangat panjang, klik mouse ke posisi teks (`hit_test`), undo/redo, dan aksesibilitas.
 
-## 7. Keputusan yang menunggu
+## 7. Keputusan
 
-- **Q-004:** renderer default. Rekomendasi agent: keduanya ikut dalam binary dengan default tiny-skia, dan optimasi gulir layar penuh dikejar di Fase 2.
-- **Font sistem** (bagian 5.1): diputuskan di langkah 2.1.
+- **Q-004:** kedua renderer ikut dalam binary, default tiny-skia. Pilihan konfigurasi `renderer = "tiny-skia" | "wgpu"` dibuat bersama konfigurasi aplikasi di langkah 2.2. Optimasi gulir layar penuh dikejar di Fase 2.
+- **Q-011, font sistem:** saat start, `patinote-app` menulis `$XDG_CACHE_HOME/patinote/fontconfig/fonts.conf` yang hanya menyebut folder kosong `empty/` di sebelahnya, lalu menjalankan ulang dirinya sekali (`exec`) dengan `FONTCONFIG_FILE` menunjuk file itu dan `PATINOTE_FONTS_RESTRICTED=1`. File harus menyebut satu folder: bila tidak ada `<dir>`, `fontdb` kembali memindai `/usr/share/fonts`. Program luar yang dibuka aplikasi dijalankan lewat `fonts::external_command`, yang mengembalikan `FONTCONFIG_FILE` milik pengguna. Hasil di laptop pemilik: 9 face (8 font Patinote dan font ikon Iced), dibanding 379 tanpa pembatasan. Huruf di luar Inter dan JetBrains Mono (CJK, emoji) tampil sebagai kotak sampai font cadangan ditambahkan.
