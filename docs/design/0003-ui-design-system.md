@@ -173,6 +173,7 @@ Font dibawa bersama aplikasi (lisensi SIL OFL, kompatibel MIT untuk distribusi):
 | `type.read.h1` | Inter | 32 px / 1,25 | 700 | Heading 1 di mode baca |
 | `type.read.h2` | Inter | 24 px / 1,3 | 700 | Heading 2 di mode baca |
 | `type.dialog.title` | Inter | 17 px | 600 | Judul dialog |
+| `type.title` | Inter | 22 px / 1,3 | 700 | Judul halaman: kartu layar awal, nama vault di layar tanpa catatan terbuka |
 
 Semua ukuran adalah piksel logis pada skala 100% dan ikut skala HiDPI dari GNOME. `Ctrl+=`, `Ctrl+-`, dan `Ctrl+0` mengubah semua ukuran huruf secara proporsional (langkah 10%, batas 70–200%).
 
@@ -205,6 +206,9 @@ Semua ukuran adalah piksel logis pada skala 100% dan ikut skala HiDPI dari GNOME
 | `size.control.h` | 36–40 px | Tombol dan kolom input |
 | `size.list.row` | 34–40 px | Baris di explorer, switcher, autocomplete |
 | `size.icon` | 18 px | Ikon garis di banner (`crates/patinote-app/assets/icons/`) |
+| `size.logo` / `size.logo.large` | 16 px / 28 px | Tanda Patinote di bufferline / di kartu layar awal |
+| `size.shortcut.key.w` | 64 px | Kolom tombol di daftar pintasan layar tanpa catatan terbuka |
+| `size.recent.time.w` | 84 px | Kolom waktu di daftar catatan terakhir |
 
 Jarak dalam yang sering dipakai: area editor 28 px atas dan 32 px samping; panel 16 px; overlay 14–16 px; dialog 22–24 px.
 
@@ -262,6 +266,19 @@ Ditemukan di langkah 2.1 (mockup 17). Aplikasi memakai nilai dokumen ini:
 | Jarak huruf `type.label` | 0,8 px | Belum diterapkan: Iced 0.14 tidak bisa mengatur jarak huruf |
 | Teks keterangan di bawah contoh | 12,5 px / 1,5 | `type.ui.small` (13 px / 1,5) |
 | Latar lembar komponen | `#0E1210` | `bg.chrome`. Hanya lembar, bukan bagian aplikasi |
+
+Ditemukan di langkah 2.2 (mockup 01, 10, 11):
+
+| Elemen | Mockup | Dipakai aplikasi |
+| --- | --- | --- |
+| Judul kartu "Vault not found" | 20 px | `type.title` (22 px), sama dengan kartu sambutan |
+| Teks paragraf kartu layar awal | 14 px / 1,6 | `type.ui` (14 px / 1,4) |
+| Jarak dalam kartu layar awal | 28 px | `PAD_DIALOG` (24 px); 28 px tidak ada di skala jarak |
+| Teks tombol utama di kartu layar awal | `#0F1412` | `text.on-accent` |
+| Warna "Patinote" di bufferline | `#E6EEEA` | `text.strong` |
+| Folder dan waktu di daftar catatan terakhir | 12 px | `type.ui.small` (13 px) |
+| Petunjuk `j/k move · Enter open` | 12 px | `type.mono.ui` (13 px) |
+| Jarak atas layar awal dan layar tanpa catatan terbuka | 96 px / 72 px | 96 px (2 × 48) / 72 px (48 + 24) dari skala jarak |
 
 
 ## 10. Cadangan bila editor tidak mendukung

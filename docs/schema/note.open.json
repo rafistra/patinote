@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenOutput",
+  "description": "`note.open` (`patinote open`).",
+  "type": "object",
+  "properties": {
+    "note": {
+      "description": "The note that was opened.",
+      "$ref": "#/$defs/NoteRef"
+    },
+    "started": {
+      "description": "`true` when the app was not running and has been started; `false`\nwhen a running app received the request.",
+      "type": "boolean"
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "note",
+    "started",
+    "warnings"
+  ],
+  "$defs": {
+    "NoteRef": {
+      "description": "A note named in another result.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title"
+      ]
+    },
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

@@ -1,0 +1,236 @@
+//! The app shell without a window (step 2.2): screens, opening notes, the
+//! command line, remembered state and the single-instance socket. Tasks are
+//! run to completion and their messages fed back into `App::update`, as the
+//! Iced runtime would.
+
+mod common;
+
+use std::path::{Path, PathBuf};
+
+use common::{Env, command, press, send};
+use iced::Size;
+use iced::keyboard::{self, Key, Location, Modifiers, key};
+use patinote_app::app::{App, Message, Screen};
+use patinote_app::theme::styles::Level;
+use patinote_core::config::{Config, Layout};
+
+fn workspace(app: &App) -> &patinote_app::app::Workspace {
+    match app.screen() {
+        Screen::Vault(w) => w,
+        _ => panic!("no vault is open"),
+    }
+}
+
+fn open_paths(app: &App) -> Vec<String> {
+    workspace(app)
+        .buffers()
+        .iter()
+        .map(|b| b.path.clone())
+        .collect()
+}
+
+#[test]
+fn f01_first_run_shows_the_welcome_screen() {
+    let env = Env::new();
+    let app = env.start(env.launch(None, Config::default()));
+    assert!(matches!(app.screen(), Screen::Welcome));
+    assert_eq!(app.title(), "Patinote");
+}
+
+#[test]
+fn f01_a_missing_vault_shows_vault_not_found_and_try_again_opens_it() {
+    let env = Env::new();
+    let gone = env.path("Vault");
+    let mut app = env.start(env.launch(Some(gone.clone()), Config::default()));
+    assert!(matches!(app.screen(), Screen::Missing(p) if *p == gone));
+    // Nothing was created where the vault was.
+    assert!(!gone.exists());
+    env.vault();
+    press(&mut app, "r");
+    assert!(matches!(app.screen(), Screen::Vault(_)));
+}
+
+#[test]
+fn f01_2_opening_the_vault_does_not_change_it() {
+    let env = Env::new();
+    let vault = env.vault();
+    let before = snapshot(&vault);
+    let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(patinote_core::ipc::Request::Open {
+            path: "Proyek/Patinote.md".into(),
+        }),
+    );
+    command(&mut app, "q");
+    assert_eq!(snapshot(&vault), before);
+    // Index and state live outside the vault.
+    assert!(env.path("cache/patinote").is_dir());
+    assert!(env.path("state/patinote/app.json").is_file());
+}
+
+/// Every file under `dir` with its bytes.
+fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let e = e.unwrap();
+            if e.file_type().unwrap().is_dir() {
+                stack.push(e.path());
+            } else {
+                out.push((e.path(), std::fs::read(e.path()).unwrap()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn f28_2_first_open_is_minimal_with_no_note_open() {
+    let env = Env::new();
+    let app = env.start(env.launch(Some(env.vault()), Config::default()));
+    let w = workspace(&app);
+    assert_eq!(w.layout(), Layout::Minimal);
+    assert!(w.buffers().is_empty());
+    assert_eq!(app.message(), None);
+}
+
+#[test]
+fn f28_12_layout_classic_in_the_config_applies_to_a_new_install() {
+    let env = Env::new();
+    let config = Config {
+        layout: Some(Layout::Classic),
+        ..Config::default()
+    };
+    let app = env.start(env.launch(Some(env.vault()), config));
+    assert_eq!(workspace(&app).layout(), Layout::Classic);
+}
+
+#[test]
+fn e_opens_a_note_by_name_alias_or_path_and_reports_the_rest() {
+    let env = Env::new();
+    let mut app = env.start(env.launch(Some(env.vault()), Config::default()));
+    command(&mut app, "e second brain");
+    command(&mut app, "e Harian/2026-11-19.md");
+    command(&mut app, "e Patinote");
+    assert_eq!(
+        open_paths(&app),
+        ["Proyek/Patinote.md", "Harian/2026-11-19.md"],
+        "opening an open note switches to it"
+    );
+    assert_eq!(workspace(&app).active(), Some(0));
+    assert_eq!(app.title(), "Patinote — Patinote");
+
+    command(&mut app, "e Rapat");
+    assert_eq!(
+        app.message(),
+        Some((Level::Warning, "2 notes are named \"Rapat\""))
+    );
+    command(&mut app, "e Nothing here");
+    assert_eq!(
+        app.message(),
+        Some((Level::Error, "No note named \"Nothing here\""))
+    );
+    command(&mut app, "frobnicate");
+    assert_eq!(
+        app.message(),
+        Some((Level::Error, "Not an editor command: frobnicate"))
+    );
+}
+
+#[test]
+fn buffers_switch_and_close_from_the_command_line() {
+    let env = Env::new();
+    let mut app = env.start(env.launch(Some(env.vault()), Config::default()));
+    for name in ["Patinote", "Ide cepat", "Daftar bacaan"] {
+        command(&mut app, &format!("e {name}"));
+    }
+    assert_eq!(workspace(&app).active(), Some(2));
+    command(&mut app, "bn");
+    assert_eq!(workspace(&app).active(), Some(0));
+    command(&mut app, "bp");
+    assert_eq!(workspace(&app).active(), Some(2));
+    command(&mut app, "b 2");
+    assert_eq!(workspace(&app).active(), Some(1));
+    command(&mut app, "bd");
+    assert_eq!(
+        open_paths(&app),
+        ["Proyek/Patinote.md", "Referensi/Daftar bacaan.md"]
+    );
+}
+
+#[test]
+fn escape_closes_the_command_line() {
+    let env = Env::new();
+    let mut app = env.start(env.launch(Some(env.vault()), Config::default()));
+    press(&mut app, ":");
+    assert!(app.typing_command());
+    // The input captures Escape, so the app sees it as a captured key.
+    let esc = Key::Named(key::Named::Escape);
+    send(
+        &mut app,
+        Message::Key(
+            keyboard::Event::KeyPressed {
+                key: esc.clone(),
+                modified_key: esc,
+                physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
+                location: Location::Standard,
+                modifiers: Modifiers::default(),
+                text: None,
+                repeat: false,
+            },
+            true,
+        ),
+    );
+    assert!(!app.typing_command());
+}
+
+#[test]
+fn recent_notes_and_window_size_are_remembered() {
+    let env = Env::new();
+    let vault = env.vault();
+    let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    command(&mut app, "e Patinote");
+    command(&mut app, "e Ide cepat");
+    send(&mut app, Message::Resized(Size::new(1200.0, 700.0)));
+    command(&mut app, "q");
+
+    // Next start: no vault given, the last one opens with the start screen
+    // listing recent notes, newest first; j and Enter open the second.
+    let mut app = env.start(env.launch(None, Config::default()));
+    assert!(workspace(&app).buffers().is_empty());
+    press(&mut app, "j");
+    press(&mut app, "Enter");
+    assert_eq!(open_paths(&app), ["Proyek/Patinote.md"]);
+    assert_eq!(
+        patinote_app::app::window_size(&env.path("state")),
+        Size::new(1200.0, 700.0)
+    );
+}
+
+#[test]
+fn the_socket_hands_requests_to_the_running_app() {
+    let env = Env::new();
+    let vault = env.vault();
+    let runtime = env.path("run");
+    let mut launch = env.launch(Some(vault.clone()), Config::default());
+    launch.runtime_dir = Some(runtime.clone());
+    // The socket listener never ends, so only run the opening tasks that do.
+    let (mut app, _task) = App::new(launch);
+    assert!(matches!(app.screen(), Screen::Vault(_)));
+    let id = patinote_core::location::vault_id(&vault).unwrap();
+    let socket = patinote_core::ipc::socket_path(&runtime, &id);
+    assert!(socket.exists());
+    // A second instance for the same vault cannot bind.
+    assert!(matches!(
+        patinote_core::ipc::Server::bind(&socket),
+        Err(patinote_core::ipc::BindError::AlreadyRunning)
+    ));
+    let task = app.update(Message::CmdInput("q".into()));
+    drop(task);
+    let quit = app.update(Message::CmdSubmit);
+    drop(quit);
+    assert!(!socket.exists(), "quitting removes the socket");
+}

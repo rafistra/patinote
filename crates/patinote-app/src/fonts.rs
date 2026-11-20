@@ -67,8 +67,13 @@ pub fn write_fontconfig(cache: &Path) -> std::io::Result<PathBuf> {
 /// Runs the app again with system fonts hidden, unless this process is that
 /// run already. Returns only when no restart happened; the error says why
 /// the app goes on with system fonts.
+///
+/// The restart also sets `ICED_BACKEND` to `backend` (Q-004: tiny-skia by
+/// default), unless the user set it: with both renderers built in, Iced
+/// picks wgpu first otherwise, and setting the variable in-process would
+/// need `unsafe`.
 #[cfg(unix)]
-pub fn restart_without_system_fonts() -> Result<(), String> {
+pub fn restart_without_system_fonts(backend: &str) -> Result<(), String> {
     use std::os::unix::process::CommandExt;
 
     if std::env::var_os(RESTARTED).is_some() {
@@ -82,6 +87,9 @@ pub fn restart_without_system_fonts() -> Result<(), String> {
     cmd.args(std::env::args_os().skip(1))
         .env(RESTARTED, "1")
         .env("FONTCONFIG_FILE", file);
+    if std::env::var_os("ICED_BACKEND").is_none() {
+        cmd.env("ICED_BACKEND", backend);
+    }
     if let Some(original) = std::env::var_os("FONTCONFIG_FILE") {
         cmd.env(ORIGINAL, original);
     }
@@ -91,7 +99,7 @@ pub fn restart_without_system_fonts() -> Result<(), String> {
 
 /// Other platforms keep system fonts.
 #[cfg(not(unix))]
-pub fn restart_without_system_fonts() -> Result<(), String> {
+pub fn restart_without_system_fonts(_backend: &str) -> Result<(), String> {
     Ok(())
 }
 
@@ -99,7 +107,7 @@ pub fn restart_without_system_fonts() -> Result<(), String> {
 /// with the user's fontconfig back in place.
 pub fn external_command(program: impl Into<OsString>) -> Command {
     let mut cmd = Command::new(program.into());
-    cmd.env_remove(RESTARTED);
+    cmd.env_remove(RESTARTED).env_remove("ICED_BACKEND");
     match std::env::var_os(ORIGINAL) {
         Some(original) => {
             cmd.env("FONTCONFIG_FILE", original).env_remove(ORIGINAL);

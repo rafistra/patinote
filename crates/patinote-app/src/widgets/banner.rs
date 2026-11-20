@@ -15,15 +15,19 @@ pub enum Icon {
     Error,
     Lock,
     Info,
+    /// The Patinote mark.
+    Logo,
 }
 
 impl Icon {
-    fn bytes(self) -> &'static [u8] {
+    /// The SVG file.
+    pub fn bytes(self) -> &'static [u8] {
         match self {
             Self::Warning => include_bytes!("../../assets/icons/warning.svg"),
             Self::Error => include_bytes!("../../assets/icons/error.svg"),
             Self::Lock => include_bytes!("../../assets/icons/lock.svg"),
             Self::Info => include_bytes!("../../assets/icons/info.svg"),
+            Self::Logo => include_bytes!("../../assets/icons/logo.svg"),
         }
     }
 }

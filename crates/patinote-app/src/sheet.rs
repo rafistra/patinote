@@ -103,6 +103,7 @@ impl Sheet {
             modified,
             notes: notes.iter().map(|n| (*n).to_owned()).collect(),
             indicator: Some(indicator),
+            ..StatusLine::default()
         };
         let status = vec![
             (

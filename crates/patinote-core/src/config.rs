@@ -2,8 +2,9 @@
 //! (PRD "Gerbang 2: dampak arsitektur", point 3).
 //!
 //! Unknown keys give warnings, not errors, so an older Patinote can read a
-//! newer file. Step 1.7 reads only `[vault] default`; the other sections are
-//! accepted and read by later steps.
+//! newer file. Read so far: `[vault] default` (step 1.7), and `layout` and
+//! `renderer` for the desktop app (step 2.2); the other sections are accepted
+//! and read by later steps.
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +12,69 @@ use std::path::{Path, PathBuf};
 pub const CONFIG_VERSION: i64 = 1;
 
 /// Sections known to this version, including those read in later steps.
-const SECTIONS: &[&str] = &["editor", "layout", "notes", "vault", "keys", "theme"];
+const SECTIONS: &[&str] = &["editor", "notes", "vault", "keys", "theme"];
+
+/// How the app arranges its parts (F-28).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Layout {
+    /// No panels: bufferline, editor, status line, command line.
+    #[default]
+    Minimal,
+    /// Explorer and side panel open, buffers as tabs.
+    Classic,
+    /// Only the text column.
+    Focus,
+}
+
+impl Layout {
+    /// Every layout, in the order `<leader>l` cycles through them.
+    pub const ALL: [Layout; 3] = [Layout::Minimal, Layout::Classic, Layout::Focus];
+
+    /// The name used in the configuration and in `:layout`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Classic => "classic",
+            Self::Focus => "focus",
+        }
+    }
+
+    /// Parses a layout name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.name() == name)
+    }
+
+    /// The layout after this one.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Minimal => Self::Classic,
+            Self::Classic => Self::Focus,
+            Self::Focus => Self::Minimal,
+        }
+    }
+}
+
+/// Which renderer the app draws with (docs/design/0002, Q-004).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Renderer {
+    /// CPU rendering: less memory, faster start. The default.
+    #[default]
+    TinySkia,
+    /// GPU rendering: smoother full-screen scrolling, about 70 MB more memory.
+    Wgpu,
+}
+
+impl Renderer {
+    /// The name in the configuration, which is also what Iced's
+    /// `ICED_BACKEND` accepts.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::TinySkia => "tiny-skia",
+            Self::Wgpu => "wgpu",
+        }
+    }
+}
 
 /// What the global configuration says.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -19,6 +82,11 @@ pub struct Config {
     /// `[vault] default`: the vault used when neither `--vault` nor
     /// `PATINOTE_VAULT` is given (F-01). `~/` is expanded.
     pub vault_default: Option<PathBuf>,
+    /// `layout = "minimal" | "classic" | "focus"`: the layout of a new
+    /// install (F-28). The last layout used is remembered in the state.
+    pub layout: Option<Layout>,
+    /// `renderer = "tiny-skia" | "wgpu"`.
+    pub renderer: Option<Renderer>,
     /// Unknown keys and other problems that did not stop reading.
     pub warnings: Vec<String>,
 }
@@ -99,6 +167,19 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     }
                 }
             }
+            "layout" => match value.as_str().and_then(Layout::from_name) {
+                Some(l) => config.layout = Some(l),
+                None => config
+                    .warnings
+                    .push("layout must be \"minimal\", \"classic\" or \"focus\"".into()),
+            },
+            "renderer" => match value.as_str() {
+                Some("tiny-skia") => config.renderer = Some(Renderer::TinySkia),
+                Some("wgpu") => config.renderer = Some(Renderer::Wgpu),
+                _ => config
+                    .warnings
+                    .push("renderer must be \"tiny-skia\" or \"wgpu\"".into()),
+            },
             s if SECTIONS.contains(&s) => {}
             other => config
                 .warnings
@@ -124,5 +205,17 @@ mod tests {
         assert_eq!(c.warnings.len(), 1);
         assert!(parse("[vault\n").is_err());
         assert_eq!(parse("").unwrap(), Config::default());
+    }
+
+    #[test]
+    fn reads_the_layout_and_renderer() {
+        let c = parse("layout = \"classic\"\nrenderer = \"wgpu\"\n").unwrap();
+        assert_eq!(c.layout, Some(Layout::Classic));
+        assert_eq!(c.renderer, Some(Renderer::Wgpu));
+        assert!(c.warnings.is_empty());
+        let c = parse("layout = \"tiled\"\nrenderer = 3\n").unwrap();
+        assert_eq!((c.layout, c.renderer), (None, None));
+        assert_eq!(c.warnings.len(), 2);
+        assert_eq!(Layout::Focus.next(), Layout::Minimal);
     }
 }

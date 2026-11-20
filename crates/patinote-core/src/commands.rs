@@ -83,6 +83,11 @@ pub const COMMANDS: &[CommandInfo] = &[
         summary: "Syncthing conflict copies",
     },
     CommandInfo {
+        name: "note.open",
+        cli: "open",
+        summary: "Open a note in the desktop app",
+    },
+    CommandInfo {
         name: "agents.init",
         cli: "agents init",
         summary: "Write AGENTS.md with instructions for AI agents",
@@ -429,6 +434,18 @@ pub struct ResolveOutput {
     pub warnings: Vec<OutputWarning>,
 }
 
+/// `note.open` (`patinote open`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct OpenOutput {
+    pub v: u32,
+    /// The note that was opened.
+    pub note: NoteRef,
+    /// `true` when the app was not running and has been started; `false`
+    /// when a running app received the request.
+    pub started: bool,
+    pub warnings: Vec<OutputWarning>,
+}
+
 /// One Syncthing conflict copy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct ConflictOut {
@@ -497,6 +514,7 @@ pub fn schemas() -> Vec<(&'static str, schemars::Schema)> {
         ),
         ("link.resolve.json", schemars::schema_for!(ResolveOutput)),
         ("conflict.list.json", schemars::schema_for!(ConflictsOutput)),
+        ("note.open.json", schemars::schema_for!(OpenOutput)),
         ("agents.init.json", schemars::schema_for!(AgentsInitOutput)),
         ("cache.clean.json", schemars::schema_for!(CacheCleanOutput)),
         ("error.json", schemars::schema_for!(ErrorOutput)),

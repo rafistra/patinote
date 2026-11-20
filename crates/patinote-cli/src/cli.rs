@@ -141,6 +141,14 @@ pub enum Command {
         /// A name, alias, path or [[link]]
         name: String,
     },
+    /// Open a note in the desktop app, starting it if needed
+    #[command(
+        after_help = "Examples:\n  patinote open \"Desain indeks Patinote\"\n  patinote --vault ~/Vault open Harian/2026-11-19.md"
+    )]
+    Open {
+        /// Name, alias or path
+        note: String,
+    },
     /// Instructions for AI agents working in the vault
     #[command(subcommand)]
     Agents(AgentsCommand),
