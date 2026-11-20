@@ -25,8 +25,7 @@ pub const SCHEMA_VERSION: usize = 1;
 /// File name of the index inside a vault's cache folder.
 pub const INDEX_FILE: &str = "index.db";
 
-/// `meta` key holding the canonical vault path, used by [`cache_clean`].
-pub const META_VAULT_PATH: &str = "vault_path";
+pub use patinote_core::index::META_VAULT_PATH;
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
     LazyLock::new(|| Migrations::new(vec![M::up(include_str!("../migrations/0001_init.sql"))]));
@@ -77,6 +76,13 @@ impl Default for OpenOptions {
             busy_timeout: Duration::from_secs(5),
         }
     }
+}
+
+/// Where the index of the vault at `vault_root` lives:
+/// `<cache home>/patinote/<vault-id>/index.db`.
+pub fn index_path_for(vault_root: &Path, cache_home: &Path) -> io::Result<PathBuf> {
+    let id = patinote_core::location::vault_id(vault_root)?;
+    Ok(patinote_core::location::vault_cache_dir(cache_home, &id).join(INDEX_FILE))
 }
 
 /// The SQLite implementation of [`Store`].

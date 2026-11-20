@@ -72,3 +72,14 @@ Rekomendasi agent: C dengan default tiny-skia. Target RAM dan waktu buka adalah 
 
 Rekomendasi agent: A. Skema tetap satu file selama belum ada pengguna, dan `0001` bagian 4 cukup ditambah satu baris tabel. Kodenya: `not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`.
 **Jawaban:** A, disetujui pemilik (20 November 2026). Langkah 1.3 dikerjakan dalam dua PR (1.3a penyimpanan, 1.3b pengindeks).
+
+## Q-006 · `integrity_check` setiap indeks dibuka terlalu lambat (langkah 1.3, 20 November 2026)
+
+**Konteks:** F-03 (Keamanan data) meminta indeks dibangun ulang bila gagal `PRAGMA integrity_check` saat dibuka. Diukur di laptop target dengan indeks vault 10.000 catatan (35 MB): `integrity_check` 861 ms, `quick_check` 555 ms, membuka tanpa pemeriksaan 0,9 ms. Biaya ini ditanggung setiap pemanggilan CLI dan setiap kali aplikasi dibuka, sehingga A-01.6 (`backlinks`, `read`, dan lainnya < 100 ms) dan F-28.8 (buka aplikasi < 300 ms) tidak mungkin tercapai.
+**Pilihan:**
+- A. Saat dibuka hanya pemeriksaan murah: file benar database SQLite dan versi skemanya cocok. Kerusakan di halaman data dideteksi lewat error `SQLITE_CORRUPT` yang dikembalikan SQLite saat query menyentuh halaman rusak; error itu memicu bangun ulang otomatis. Aplikasi menjalankan `integrity_check` lengkap di thread background sesekali (misalnya sekali sehari saat idle). F-03.6 tetap terpenuhi: database yang dirusak tetap dideteksi dan dibangun ulang.
+- B. `quick_check` saat dibuka. Lebih cepat (555 ms), tetapi tetap melanggar kedua target.
+- C. Tetap `integrity_check` saat dibuka, dan target A-01.6 serta F-28.8 dilonggarkan.
+
+Rekomendasi agent: A. Indeks hanyalah cache yang aman dibangun ulang, jadi deteksi saat dipakai sudah cukup aman, dan target kecepatan adalah alasan utama Patinote dibuat. Teks F-03 di PRD perlu disesuaikan oleh pemilik bila A dipilih.
+**Jawaban:** (diisi pemilik)
