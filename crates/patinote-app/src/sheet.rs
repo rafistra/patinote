@@ -157,9 +157,13 @@ impl Sheet {
         let section = |title: &str| label(title).color(TEXT_SUBTLE);
         let note = |text: &'static str| typed(text, TYPE_UI_SMALL).color(TEXT_MUTED);
 
+        // Column spacing is 8 px. The mockup puts 18 px under a column title
+        // (8 + 2 + 8) and 28 px before every later sample (8 + 12 + 8).
+        let gap = |i: usize| Space::new().height(if i == 0 { SPACE_2 } else { SPACE_12 });
+
         let mut left = column![section("Banners · appear under the bufferline")].spacing(SPACE_8);
-        for (title, banner, caption) in &self.banners {
-            left = left.push(Space::new().height(SPACE_12));
+        for (i, (title, banner, caption)) in self.banners.iter().enumerate() {
+            left = left.push(gap(i));
             left = left.push(section(title));
             left = left.push(framed(banner.view()));
             if let Some(c) = caption {
@@ -168,8 +172,8 @@ impl Sheet {
         }
 
         let mut right = column![section("Status line and command line")].spacing(SPACE_8);
-        for (title, line) in &self.status {
-            right = right.push(Space::new().height(SPACE_12));
+        for (i, (title, line)) in self.status.iter().enumerate() {
+            right = right.push(gap(i));
             right = right.push(section(title));
             right = right.push(framed(line.view()));
         }

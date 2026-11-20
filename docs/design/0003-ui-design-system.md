@@ -260,6 +260,7 @@ Ditemukan di langkah 2.1 (mockup 17). Aplikasi memakai nilai dokumen ini:
 | Kalimat pertama banner | tebal 700 | 600, batas `type.ui` |
 | Tinggi baris teks banner | 1,5 | 1,4 (`type.ui`) |
 | Jarak huruf `type.label` | 0,8 px | Belum diterapkan: Iced 0.14 tidak bisa mengatur jarak huruf |
+| Teks keterangan di bawah contoh | 12,5 px / 1,5 | `type.ui.small` (13 px / 1,5) |
 | Latar lembar komponen | `#0E1210` | `bg.chrome`. Hanya lembar, bukan bagian aplikasi |
 
 

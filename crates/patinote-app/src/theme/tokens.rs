@@ -162,7 +162,8 @@ pub const TYPE_UI: Type = ty(FONT_UI, 14.0, 14.0 * 1.4);
 /// `type.ui.small`: 13 px / 1.5.
 pub const TYPE_UI_SMALL: Type = ty(FONT_UI, 13.0, 13.0 * 1.5);
 /// `type.label`: 11 px, uppercase, letter spacing 0.8 px, weight 600.
-pub const TYPE_LABEL: Type = ty(FONT_UI_SEMIBOLD, 11.0, 11.0 * 1.4);
+/// The line height is the mockups' `normal` for Inter (about 1.2).
+pub const TYPE_LABEL: Type = ty(FONT_UI_SEMIBOLD, 11.0, 11.0 * 1.2);
 /// Letter spacing of `type.label`.
 pub const TYPE_LABEL_TRACKING: f32 = 0.8;
 /// `type.read.body`: 16 px / 1.7.
