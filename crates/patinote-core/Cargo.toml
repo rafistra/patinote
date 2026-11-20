@@ -11,7 +11,7 @@ publish.workspace = true
 [dependencies]
 pulldown-cmark.workspace = true
 serde.workspace = true
-serde_yaml_ng.workspace = true
+serde_norway.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

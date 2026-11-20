@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use serde_yaml_ng::Value;
+use serde_norway::Value;
 
 use super::{LineIndex, split_wikilink};
 use crate::model::{
@@ -63,7 +63,7 @@ pub(super) fn read(text: &str, fm: &Frontmatter, lines: &LineIndex, note: &mut P
     if yaml.trim().is_empty() {
         return;
     }
-    let map = match serde_yaml_ng::from_str::<Value>(yaml) {
+    let map = match serde_norway::from_str::<Value>(yaml) {
         Ok(Value::Mapping(map)) => map,
         Ok(Value::Null) => return,
         Ok(_) | Err(_) => {
