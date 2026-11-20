@@ -1,0 +1,16 @@
+[package]
+name = "patinote-app"
+description = "The Patinote desktop app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "patinote-app"
+path = "src/main.rs"
+
+[lints]
+workspace = true
