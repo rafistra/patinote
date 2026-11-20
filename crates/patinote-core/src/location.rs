@@ -27,6 +27,17 @@ pub fn vault_cache_dir(cache_home: &Path, vault_id: &str) -> PathBuf {
     cache_home.join("patinote").join(vault_id)
 }
 
+/// `$XDG_STATE_HOME`, or `~/.local/state`.
+pub fn state_home() -> Option<PathBuf> {
+    xdg_home("XDG_STATE_HOME", ".local/state")
+}
+
+/// The state folder of one vault: `<state home>/patinote/<vault-id>/`
+/// (open buffers, cursor positions, the write journal).
+pub fn vault_state_dir(state_home: &Path, vault_id: &str) -> PathBuf {
+    state_home.join("patinote").join(vault_id)
+}
+
 fn xdg_home(var: &str, fallback: &str) -> Option<PathBuf> {
     match std::env::var_os(var).map(PathBuf::from) {
         Some(p) if p.is_absolute() => Some(p),

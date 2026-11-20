@@ -218,3 +218,17 @@ Ditunda: membaca "Excluded files" (`userIgnoreFilters`) dari `.obsidian/app.json
 | Pengecualian indeks | Bagian 7 |
 | Mode Vim | Modul `vim` di `patinote-app` ditulis sebagai logika murni tanpa Iced, sehingga setiap perintah bisa dites otomatis |
 | Bahasa | Teks UI, pesan CLI, dan dokumentasi publik dalam bahasa Inggris |
+
+## 9. Jalur tulis (langkah 1.6)
+
+Kebutuhannya di PRD, bagian "Gerbang 2: dampak arsitektur" poin 1. Keputusan pelaksanaannya:
+
+- Modul `patinote_core::write` adalah satu-satunya kode yang menulis ke vault. Operasinya: `Write` (buat atau ganti), `Move` (pindah atau ganti nama, boleh sekaligus dengan isi baru agar rename bisa memperbarui link di catatan itu sendiri), dan `Trash`. Setiap path hanya boleh muncul di satu operasi per transaksi.
+- Harapan per operasi: `Absent`, `Hash` (blake3 isi file), atau `Tree` (hash semua file di folder, untuk pindah dan hapus folder).
+- Path harus relatif, tidak keluar dari vault, dan tidak berisi bagian tersembunyi. Satu-satunya pengecualian adalah `.patinote/` untuk file pengaturan. `.trash/` hanya diisi lewat `Trash`; `.obsidian/` dan `.git/` tidak pernah ditulis.
+- Hapus memindahkan ke `.trash/<path relatif>`. Bila nama itu sudah ada, waktu penghapusan (UTC) disisipkan sebelum ekstensi: `Rapat 20261120-101530.md`, lalu `-2`, `-3` bila masih bentrok.
+- Penulisan atomik: file sementara tersembunyi di folder yang sama, `fsync`, `rename`, `fsync` folder. Izin file lama dipertahankan. Byte ditulis apa adanya; akhir baris, BOM, dan newline akhir urusan editor.
+- Jurnal ditulis sebelum vault disentuh: `<state>/patinote/<vault-id>/journal/<id>/manifest.json` (status `pending`, `committed`, atau `rolled_back`, pelaku, operasi, folder yang dibuat) dan `before-N` berisi isi lama. Undo memeriksa keadaan setiap path, jadi aman dijalankan pada transaksi yang baru setengah jalan dan aman diulang. `recover()` membatalkan entri yang masih `pending` setelah crash.
+- Satu proses menulis ke satu vault pada satu waktu: `commit` dan `recover` memegang kunci file `journal/.lock` (`File::lock`).
+- Retensi mengikuti PRD (7 hari, minimal 100 entri, batas keras 100 MB); entri `pending` tidak pernah dihapus. Gagal memangkas jurnal tidak membatalkan penulisan yang sudah terjadi.
+
