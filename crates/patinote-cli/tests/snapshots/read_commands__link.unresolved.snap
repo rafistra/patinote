@@ -1,0 +1,31 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "targets": [
+    {
+      "count": 1,
+      "sources": [
+        {
+          "line": 8,
+          "path": "Proyek/Desain indeks Patinote.md"
+        }
+      ],
+      "target": "Ide Baru"
+    },
+    {
+      "count": 1,
+      "sources": [
+        {
+          "line": 10,
+          "path": "Proyek/Desain indeks Patinote.md"
+        }
+      ],
+      "target": "tantivy"
+    }
+  ],
+  "total": 2,
+  "v": 1,
+  "warnings": []
+}

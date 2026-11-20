@@ -6,6 +6,7 @@
 //! again, which is always safe.
 
 mod epoch;
+pub mod query;
 
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;

@@ -1,0 +1,131 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "notes": [
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Arsip/2025/Rapat.md",
+      "size": 51,
+      "tags": [],
+      "title": "Rapat"
+    },
+    {
+      "aliases": [
+        "Design index"
+      ],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Arsip/Skema indeks lama.md",
+      "size": 110,
+      "tags": [],
+      "title": "Skema indeks lama"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Harian/2026-11-18.md",
+      "size": 41,
+      "tags": [],
+      "title": "2026-11-18"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Harian/2026-11-19.md",
+      "size": 223,
+      "tags": [
+        "harian"
+      ],
+      "title": "2026-11-19"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Inbox/Ide cepat.md",
+      "size": 49,
+      "tags": [],
+      "title": "Ide cepat"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Proyek/Desain indeks Patinote.md",
+      "size": 974,
+      "tags": [
+        "proyek/patinote",
+        "rust"
+      ],
+      "title": "Desain indeks Patinote"
+    },
+    {
+      "aliases": [
+        "Second Brain"
+      ],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Proyek/Patinote.md",
+      "size": 201,
+      "tags": [
+        "proyek/patinote"
+      ],
+      "title": "Patinote"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Proyek/Patinote/Desain antarmuka induk.md",
+      "size": 96,
+      "tags": [],
+      "title": "Desain antarmuka induk"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Proyek/Rapat.md",
+      "size": 50,
+      "tags": [],
+      "title": "Rapat"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Rapat/Rapat 19 Nov.md",
+      "size": 115,
+      "tags": [],
+      "title": "Rapat 19 Nov"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Referensi/Daftar bacaan.md",
+      "size": 63,
+      "tags": [],
+      "title": "Daftar bacaan"
+    },
+    {
+      "aliases": [],
+      "kind": "note",
+      "modified": "[redacted]",
+      "path": "Referensi/Daftar sumber indeks.md",
+      "size": 58,
+      "tags": [],
+      "title": "Daftar sumber indeks"
+    }
+  ],
+  "total": 12,
+  "truncated": false,
+  "v": 1,
+  "warnings": []
+}

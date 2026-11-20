@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadOutput",
+  "description": "`note.read` (`patinote read`).",
+  "type": "object",
+  "properties": {
+    "content": {
+      "description": "The requested lines, joined with `\\n`.",
+      "type": "string"
+    },
+    "frontmatter": {
+      "description": "The frontmatter as JSON, or `null`."
+    },
+    "headings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HeadingOut"
+      }
+    },
+    "lines": {
+      "$ref": "#/$defs/LineRange"
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LinkOut"
+      }
+    },
+    "note": {
+      "$ref": "#/$defs/NoteSummary"
+    },
+    "truncated": {
+      "description": "Whether `content` was cut at the size limit (MCP reads 100 KB at a time).",
+      "type": "boolean"
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "note",
+    "content",
+    "lines",
+    "truncated",
+    "headings",
+    "links",
+    "warnings"
+  ],
+  "$defs": {
+    "HeadingOut": {
+      "description": "A heading in `note.read`.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "text",
+        "line"
+      ]
+    },
+    "LineRange": {
+      "description": "Lines returned by `note.read`, 1-based and inclusive.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total": {
+          "description": "Lines in the whole note.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "total"
+      ]
+    },
+    "LinkOut": {
+      "description": "A link in `note.read` and `note.links`.",
+      "type": "object",
+      "properties": {
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`wiki`, `embed`, `markdown` or `frontmatter`.",
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "path": {
+          "description": "Where it points, or `null` for a note that does not exist.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw": {
+          "description": "The exact text in the note.",
+          "type": "string"
+        },
+        "subpath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "As written, without subpath or display text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "kind",
+        "line",
+        "raw"
+      ]
+    },
+    "NoteSummary": {
+      "description": "A note as every command shows it (A-02).",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "description": "`note`, `attachment` or `canvas`.",
+          "type": "string"
+        },
+        "modified": {
+          "description": "Modification time, ISO 8601 in UTC.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Relative to the vault root, `/` separators; usable as `<note>` in any command.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Size in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tags": {
+          "description": "Lowercase, without `#`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title",
+        "kind",
+        "aliases",
+        "tags",
+        "modified",
+        "size"
+      ]
+    },
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

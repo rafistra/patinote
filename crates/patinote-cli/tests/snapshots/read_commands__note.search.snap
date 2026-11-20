@@ -1,0 +1,55 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "query": "indeks",
+  "results": [
+    {
+      "line": 1,
+      "path": "Referensi/Daftar sumber indeks.md",
+      "snippet": "# Daftar sumber [indeks]\n\nLampiran: ![[diagram-[indeks].png]]\n",
+      "title": "Daftar sumber indeks"
+    },
+    {
+      "line": 4,
+      "path": "Arsip/Skema indeks lama.md",
+      "snippet": "---\naliases: [Design index]\n---\n# Skema [indeks] lama\n\nVersi pertama skema, sebelum [[Desain [indeks]…",
+      "title": "Skema indeks lama"
+    },
+    {
+      "line": 4,
+      "path": "Proyek/Rapat.md",
+      "snippet": "# Rapat\n\n## Keputusan\n- Mulai dari [indeks] SQLite.\n",
+      "title": "Rapat"
+    },
+    {
+      "line": 6,
+      "path": "Proyek/Desain indeks Patinote.md",
+      "snippet": "…draft\nproject: \"[[Patinote]]\"\n---\n# Desain [indeks] Patinote\n\nHari ini fokus ke skema SQLite…",
+      "title": "Desain indeks Patinote"
+    },
+    {
+      "line": 3,
+      "path": "Rapat/Rapat 19 Nov.md",
+      "snippet": "# Rapat 19 Nov\n\n- [Indeks] di ~/.cache/patinote/\n- Mulai dengan FTS5; tantivy bila…",
+      "title": "Rapat 19 Nov"
+    },
+    {
+      "line": 7,
+      "path": "Proyek/Patinote.md",
+      "snippet": "…Rincian skema ada di [[Desain [indeks] Patinote]].\n\nTampilan dibahas di [[Desain antarmuka…",
+      "title": "Patinote"
+    },
+    {
+      "line": 6,
+      "path": "Harian/2026-11-19.md",
+      "snippet": "---\ntags: [harian]\n---\n# 2026-11-19\n\n- Lanjut [[Desain [indeks] Patinote#Tabel inti]] setelah…",
+      "title": "2026-11-19"
+    }
+  ],
+  "total": 7,
+  "truncated": false,
+  "v": 1,
+  "warnings": []
+}

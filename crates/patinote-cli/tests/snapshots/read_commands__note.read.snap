@@ -1,0 +1,112 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "content": "---\ntags: [proyek/patinote, rust]\nstatus: draft\nproject: \"[[Patinote]]\"\n---\n# Desain indeks Patinote\n\nHari ini fokus ke skema SQLite untuk [[Patinote]]. Keputusan dari [[Rapat 19 Nov]] dan ide lanjutan di [[Ide Baru]]:\n- Indeks disimpan di `~/.cache/patinote/`, bukan di vault\n- Mulai dengan FTS5, pindah ke [[tantivy]] kalau benchmark gagal\n\n## Tabel inti\n- [ ] Finalisasi tabel `links` dengan posisi byte\n- [x] Uji query backlinks di SQLite\n\n| Tabel | Isi |\n| --- | --- |\n| `notes` | Satu baris per file |\n| `links` | Semua link keluar beserta posisi byte |\n\n```sql\nSELECT src_id FROM links WHERE dst_id = ?;\n```\n\n![[diagram-indeks.png]]\n\n![[Patinote]]\n\n> [!note] Indeks hanyalah cache\n> Aman dihapus kapan saja dan bisa dibangun ulang dari vault.\n\nKompleksitas pencarian: $O(\\log n)$ per query.\n\n> Kutipan biasa: indeks harus bisa dibangun ulang tanpa kehilangan apa pun.\n\n---\n\nTeks **tebal**, *miring*, tag #rust, dan [dokumentasi SQLite](https://sqlite.org/fts5.html).",
+  "frontmatter": {
+    "project": "[[Patinote]]",
+    "status": "draft",
+    "tags": [
+      "proyek/patinote",
+      "rust"
+    ]
+  },
+  "headings": [
+    {
+      "level": 1,
+      "line": 6,
+      "text": "Desain indeks Patinote"
+    },
+    {
+      "level": 2,
+      "line": 12,
+      "text": "Tabel inti"
+    }
+  ],
+  "lines": {
+    "end": 38,
+    "start": 1,
+    "total": 38
+  },
+  "links": [
+    {
+      "display": null,
+      "kind": "frontmatter",
+      "line": 4,
+      "path": "Proyek/Patinote.md",
+      "raw": "[[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": "Proyek/Patinote.md",
+      "raw": "[[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": "Rapat/Rapat 19 Nov.md",
+      "raw": "[[Rapat 19 Nov]]",
+      "subpath": null,
+      "target": "Rapat 19 Nov"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 8,
+      "path": null,
+      "raw": "[[Ide Baru]]",
+      "subpath": null,
+      "target": "Ide Baru"
+    },
+    {
+      "display": null,
+      "kind": "wiki",
+      "line": 10,
+      "path": null,
+      "raw": "[[tantivy]]",
+      "subpath": null,
+      "target": "tantivy"
+    },
+    {
+      "display": null,
+      "kind": "embed",
+      "line": 25,
+      "path": "Proyek/Lampiran/diagram-indeks.png",
+      "raw": "![[diagram-indeks.png]]",
+      "subpath": null,
+      "target": "diagram-indeks.png"
+    },
+    {
+      "display": null,
+      "kind": "embed",
+      "line": 27,
+      "path": "Proyek/Patinote.md",
+      "raw": "![[Patinote]]",
+      "subpath": null,
+      "target": "Patinote"
+    }
+  ],
+  "note": {
+    "aliases": [],
+    "kind": "note",
+    "modified": "[redacted]",
+    "path": "Proyek/Desain indeks Patinote.md",
+    "size": 974,
+    "tags": [
+      "proyek/patinote",
+      "rust"
+    ],
+    "title": "Desain indeks Patinote"
+  },
+  "truncated": false,
+  "v": 1,
+  "warnings": []
+}

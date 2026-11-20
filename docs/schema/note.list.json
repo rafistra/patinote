@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListOutput",
+  "description": "`note.list` (`patinote list`).",
+  "type": "object",
+  "properties": {
+    "notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NoteSummary"
+      }
+    },
+    "total": {
+      "description": "Matches before `--limit`.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "v": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputWarning"
+      }
+    }
+  },
+  "required": [
+    "v",
+    "total",
+    "truncated",
+    "notes",
+    "warnings"
+  ],
+  "$defs": {
+    "NoteSummary": {
+      "description": "A note as every command shows it (A-02).",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "description": "`note`, `attachment` or `canvas`.",
+          "type": "string"
+        },
+        "modified": {
+          "description": "Modification time, ISO 8601 in UTC.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Relative to the vault root, `/` separators; usable as `<note>` in any command.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Size in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tags": {
+          "description": "Lowercase, without `#`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "title",
+        "kind",
+        "aliases",
+        "tags",
+        "modified",
+        "size"
+      ]
+    },
+    "OutputWarning": {
+      "description": "A problem that did not stop the command. Shown on stderr in text mode,\nin `\"warnings\"` with `--json`; with `--strict` it makes the exit code 1.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`,\n`symlink_loop`, `invalid_name`, `invalid_ignore_file`, `config`, `index_rebuilt`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when the warning has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Vault-relative path, when the warning is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

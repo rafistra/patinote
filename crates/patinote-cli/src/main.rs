@@ -3,6 +3,8 @@
 
 mod app;
 mod cli;
+mod commands;
+mod context;
 mod output;
 
 fn main() -> std::process::ExitCode {

@@ -20,7 +20,7 @@ pub struct CommandInfo {
     pub summary: &'static str,
 }
 
-/// Every command, in `--help` order. Step 1.7b adds the read commands.
+/// Every command, in `--help` order.
 pub const COMMANDS: &[CommandInfo] = &[
     CommandInfo {
         name: "index.update",
@@ -31,6 +31,56 @@ pub const COMMANDS: &[CommandInfo] = &[
         name: "vault.info",
         cli: "vault info",
         summary: "Vault and index location, counts, warnings",
+    },
+    CommandInfo {
+        name: "note.list",
+        cli: "list",
+        summary: "List notes, filtered by tag, folder or kind",
+    },
+    CommandInfo {
+        name: "note.read",
+        cli: "read",
+        summary: "Read a note, with its frontmatter, tags, headings and links",
+    },
+    CommandInfo {
+        name: "note.search",
+        cli: "search",
+        summary: "Search note text for words and phrases",
+    },
+    CommandInfo {
+        name: "note.backlinks",
+        cli: "backlinks",
+        summary: "Links to a note, with the sentence around each",
+    },
+    CommandInfo {
+        name: "note.links",
+        cli: "links",
+        summary: "Links in a note, including to notes that do not exist",
+    },
+    CommandInfo {
+        name: "tag.list",
+        cli: "tags",
+        summary: "Tags with how often they are used, nested tags included",
+    },
+    CommandInfo {
+        name: "note.orphans",
+        cli: "orphans",
+        summary: "Notes with no links in or out",
+    },
+    CommandInfo {
+        name: "link.unresolved",
+        cli: "unresolved",
+        summary: "Links to notes that do not exist, by target name",
+    },
+    CommandInfo {
+        name: "link.resolve",
+        cli: "resolve",
+        summary: "Which note a name or link points to",
+    },
+    CommandInfo {
+        name: "conflict.list",
+        cli: "conflicts",
+        summary: "Syncthing conflict copies",
     },
     CommandInfo {
         name: "cache.clean",
@@ -162,6 +212,236 @@ pub struct CacheCleanOutput {
     pub warnings: Vec<OutputWarning>,
 }
 
+/// A note as every command shows it (A-02).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct NoteSummary {
+    /// Relative to the vault root, `/` separators; usable as `<note>` in any command.
+    pub path: String,
+    pub title: String,
+    /// `note`, `attachment` or `canvas`.
+    pub kind: String,
+    pub aliases: Vec<String>,
+    /// Lowercase, without `#`.
+    pub tags: Vec<String>,
+    /// Modification time, ISO 8601 in UTC.
+    pub modified: String,
+    /// Size in bytes.
+    pub size: u64,
+}
+
+/// A note named in another result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct NoteRef {
+    pub path: String,
+    pub title: String,
+}
+
+/// `note.list` (`patinote list`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ListOutput {
+    pub v: u32,
+    /// Matches before `--limit`.
+    pub total: usize,
+    pub truncated: bool,
+    pub notes: Vec<NoteSummary>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// Lines returned by `note.read`, 1-based and inclusive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct LineRange {
+    pub start: usize,
+    pub end: usize,
+    /// Lines in the whole note.
+    pub total: usize,
+}
+
+/// A heading in `note.read`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct HeadingOut {
+    pub level: u8,
+    pub text: String,
+    pub line: usize,
+}
+
+/// A link in `note.read` and `note.links`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct LinkOut {
+    /// As written, without subpath or display text.
+    pub target: String,
+    /// Where it points, or `null` for a note that does not exist.
+    pub path: Option<String>,
+    /// `wiki`, `embed`, `markdown` or `frontmatter`.
+    pub kind: String,
+    pub subpath: Option<String>,
+    pub display: Option<String>,
+    pub line: usize,
+    /// The exact text in the note.
+    pub raw: String,
+}
+
+/// `note.read` (`patinote read`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ReadOutput {
+    pub v: u32,
+    pub note: NoteSummary,
+    /// The requested lines, joined with `\n`.
+    pub content: String,
+    pub lines: LineRange,
+    /// Whether `content` was cut at the size limit (MCP reads 100 KB at a time).
+    pub truncated: bool,
+    /// The frontmatter as JSON, or `null`.
+    pub frontmatter: Option<serde_json::Value>,
+    pub headings: Vec<HeadingOut>,
+    pub links: Vec<LinkOut>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// One `note.search` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct SearchResult {
+    pub path: String,
+    pub title: String,
+    /// First line with a match.
+    pub line: usize,
+    /// Text around the match, matches in `[` `]`.
+    pub snippet: String,
+}
+
+/// `note.search` (`patinote search`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct SearchOutput {
+    pub v: u32,
+    pub query: String,
+    pub total: usize,
+    pub truncated: bool,
+    pub results: Vec<SearchResult>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// One link in `note.backlinks`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct Backlink {
+    /// The note the link is in.
+    pub path: String,
+    pub line: usize,
+    /// `wiki`, `embed`, `markdown` or `frontmatter`.
+    pub kind: String,
+    /// The heading or `^block` linked to, if any.
+    pub subpath: Option<String>,
+    /// The line around the link.
+    pub context: String,
+}
+
+/// `note.backlinks` (`patinote backlinks`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct BacklinksOutput {
+    pub v: u32,
+    pub note: NoteRef,
+    pub total: usize,
+    pub backlinks: Vec<Backlink>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// `note.links` (`patinote links`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct LinksOutput {
+    pub v: u32,
+    pub note: NoteRef,
+    pub total: usize,
+    pub links: Vec<LinkOut>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// One tag in `tag.list`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct TagOut {
+    /// Lowercase, without `#`; nested tags keep their `/`.
+    pub tag: String,
+    /// The most common spelling.
+    pub display: String,
+    pub uses: usize,
+    pub notes: usize,
+}
+
+/// `tag.list` (`patinote tags`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct TagsOutput {
+    pub v: u32,
+    pub total: usize,
+    pub tags: Vec<TagOut>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// `note.orphans` (`patinote orphans`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct OrphansOutput {
+    pub v: u32,
+    pub total: usize,
+    pub notes: Vec<NoteRef>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// Where a link is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct SourceLine {
+    pub path: String,
+    pub line: usize,
+}
+
+/// One missing note in `link.unresolved`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct UnresolvedTarget {
+    /// The name as first written.
+    pub target: String,
+    pub count: usize,
+    pub sources: Vec<SourceLine>,
+}
+
+/// `link.unresolved` (`patinote unresolved`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct UnresolvedOutput {
+    pub v: u32,
+    /// Distinct missing notes.
+    pub total: usize,
+    pub targets: Vec<UnresolvedTarget>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// `link.resolve` (`patinote resolve`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ResolveOutput {
+    pub v: u32,
+    /// The name or link as given.
+    pub input: String,
+    /// The chosen note, or `null` when nothing matches.
+    pub path: Option<String>,
+    pub ambiguous: bool,
+    /// Every match, the chosen one first.
+    pub candidates: Vec<String>,
+    pub warnings: Vec<OutputWarning>,
+}
+
+/// One Syncthing conflict copy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ConflictOut {
+    /// The copy.
+    pub path: String,
+    /// The note it conflicts with.
+    pub original: String,
+    pub modified: String,
+    pub size: u64,
+}
+
+/// `conflict.list` (`patinote conflicts`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ConflictsOutput {
+    pub v: u32,
+    pub total: usize,
+    pub conflicts: Vec<ConflictOut>,
+    pub warnings: Vec<OutputWarning>,
+}
+
 /// An error, written to stderr with `--json`; stdout stays empty (A-02).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct ErrorOutput {
@@ -183,6 +463,22 @@ pub fn schemas() -> Vec<(&'static str, schemars::Schema)> {
     vec![
         ("index.update.json", schemars::schema_for!(IndexOutput)),
         ("vault.info.json", schemars::schema_for!(VaultInfoOutput)),
+        ("note.list.json", schemars::schema_for!(ListOutput)),
+        ("note.read.json", schemars::schema_for!(ReadOutput)),
+        ("note.search.json", schemars::schema_for!(SearchOutput)),
+        (
+            "note.backlinks.json",
+            schemars::schema_for!(BacklinksOutput),
+        ),
+        ("note.links.json", schemars::schema_for!(LinksOutput)),
+        ("tag.list.json", schemars::schema_for!(TagsOutput)),
+        ("note.orphans.json", schemars::schema_for!(OrphansOutput)),
+        (
+            "link.unresolved.json",
+            schemars::schema_for!(UnresolvedOutput),
+        ),
+        ("link.resolve.json", schemars::schema_for!(ResolveOutput)),
+        ("conflict.list.json", schemars::schema_for!(ConflictsOutput)),
         ("cache.clean.json", schemars::schema_for!(CacheCleanOutput)),
         ("error.json", schemars::schema_for!(ErrorOutput)),
     ]

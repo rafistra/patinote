@@ -1,0 +1,23 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "notes": [
+    {
+      "path": "Arsip/2025/Rapat.md",
+      "title": "Rapat"
+    },
+    {
+      "path": "Inbox/Ide cepat.md",
+      "title": "Ide cepat"
+    },
+    {
+      "path": "Referensi/Daftar bacaan.md",
+      "title": "Daftar bacaan"
+    }
+  ],
+  "total": 3,
+  "v": 1,
+  "warnings": []
+}

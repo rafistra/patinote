@@ -1,0 +1,15 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "ambiguous": true,
+  "candidates": [
+    "Proyek/Rapat.md",
+    "Arsip/2025/Rapat.md"
+  ],
+  "input": "Rapat",
+  "path": "Proyek/Rapat.md",
+  "v": 1,
+  "warnings": []
+}

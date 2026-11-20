@@ -14,6 +14,7 @@ pub mod parser;
 pub mod resolve;
 pub mod scan;
 pub mod store;
+pub mod time;
 pub mod watch;
 pub mod write;
 

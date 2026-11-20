@@ -9,6 +9,11 @@ pub fn fold(s: &str) -> String {
     s.nfc().collect::<String>().to_lowercase()
 }
 
+/// NFC form, as paths are stored (F-01).
+pub fn nfc(s: &str) -> String {
+    s.nfc().collect()
+}
+
 /// The key a link target is matched with: folded, without a `.md` extension.
 pub fn link_key(target: &str) -> String {
     let folded = fold(target);

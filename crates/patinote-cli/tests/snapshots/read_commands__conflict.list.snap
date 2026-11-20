@@ -1,0 +1,23 @@
+---
+source: crates/patinote-cli/tests/read_commands.rs
+expression: doc
+---
+{
+  "conflicts": [
+    {
+      "modified": "[redacted]",
+      "original": "Harian/2026-11-18.md",
+      "path": "Harian/2026-11-18.sync-conflict-20261118-220512-QRSTUVW.md",
+      "size": 66
+    },
+    {
+      "modified": "[redacted]",
+      "original": "Rapat/Rapat 19 Nov.md",
+      "path": "Rapat/Rapat 19 Nov.sync-conflict-20261119-162104-ABCDEFG.md",
+      "size": 129
+    }
+  ],
+  "total": 2,
+  "v": 1,
+  "warnings": []
+}
