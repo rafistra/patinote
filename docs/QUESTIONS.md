@@ -61,3 +61,14 @@ tiny-skia gagal F-06.6 (menahan `j` < 16 ms): merasterisasi satu layar penuh di 
 
 Rekomendasi agent: C dengan default tiny-skia. Target RAM dan waktu buka adalah alasan utama Patinote dibuat; yang tidak tercapai hanya gulir layar penuh, dan itu masih bisa dioptimasi. Iced memilih renderer saat start tanpa kode tambahan, dan wgpu tetap dibutuhkan untuk graf di Fase 7.
 **Jawaban:** (diisi pemilik)
+
+## Q-005 · Tempat menyimpan peringatan per file di indeks (langkah 1.3, 20 November 2026)
+
+**Konteks:** Beberapa kriteria butuh peringatan per file yang tersimpan: F-01.4 (file Latin-1 "tercatat dengan peringatan"), F-01.5 (file tanpa izin baca "muncul di laporan error"), F-02.5 (frontmatter rusak "terindeks dengan peringatan"), catatan di atas 5 MB, dan A-01 `patinote vault info` ("peringatan"). Skema `0001_init.sql` tidak punya tempat untuk itu.
+**Pilihan:**
+- A. Tambah tabel `warnings (note_id → notes.id ON DELETE CASCADE, code TEXT, line INTEGER NULL)` langsung di `0001_init.sql`. Migrasi ini belum pernah dipakai di mesin mana pun, jadi mengubahnya tidak merusak apa pun.
+- B. Tabel yang sama lewat migrasi baru `0002_warnings.sql`.
+- C. Tidak disimpan: peringatan hanya ada di laporan `patinote index` saat itu, sehingga `vault info` dan perintah berikutnya tidak bisa menampilkannya.
+
+Rekomendasi agent: A. Skema tetap satu file selama belum ada pengguna, dan `0001` bagian 4 cukup ditambah satu baris tabel. Kodenya: `not_utf8`, `too_large`, `unreadable`, `frontmatter_invalid`.
+**Jawaban:** A, disetujui pemilik (20 November 2026). Langkah 1.3 dikerjakan dalam dua PR (1.3a penyimpanan, 1.3b pengindeks).

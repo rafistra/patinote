@@ -87,6 +87,7 @@ File lengkap: `crates/patinote-index/migrations/0001_init.sql`. Ringkasan:
 | `headings` | Outline dan target `[[catatan#bagian]]` | `slug` untuk mencocokkan subpath |
 | `blocks` | Target `[[catatan#^id]]` | |
 | `properties` | Properti frontmatter, satu baris per nilai | Daftar dipecah per item (`idx`) supaya query Dataview (Fase 4) memakai indeks biasa. Frontmatter mentah tetap disimpan sebagai JSON di `notes.frontmatter` |
+| `warnings` | Peringatan per file: bukan UTF-8, di atas 5 MB, tidak bisa dibaca, frontmatter rusak | Ditambahkan lewat Q-005. Baris ikut terhapus bersama catatannya |
 | `notes_fts` | Pencarian full-text (FTS5) | `rowid = notes.id`. Menyimpan salinan isi supaya `snippet()` dan `highlight()` bekerja tanpa membaca file |
 
 Semua tabel memakai `STRICT` supaya kesalahan tipe ketahuan sejak awal.

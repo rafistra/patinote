@@ -74,6 +74,8 @@ pub(super) fn read(text: &str, fm: &Frontmatter, lines: &LineIndex, note: &mut P
         }
     };
 
+    note.frontmatter_json = serde_json::to_string(&map).ok();
+
     let mut cursor = fm.yaml.start;
     for (key, value) in &map {
         let Some(key) = key_string(key) else { continue };
