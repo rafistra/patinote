@@ -1,6 +1,6 @@
 # 0004 — Korpus uji emas parser
 
-- Status: **usulan** (20 November 2026), menunggu persetujuan pemilik
+- Status: **diterima** (20 November 2026)
 - Terkait PRD: F-02 (kriteria F-02.1)
 - Terkait: `0001` bagian 4 (skema indeks), `docs/QUESTIONS.md` Q-002
 
