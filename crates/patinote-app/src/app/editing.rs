@@ -418,6 +418,7 @@ impl App {
                         backlinks: None,
                         id,
                         used: 0,
+                        read: None,
                     });
                     w.active = Some(w.buffers.len() - 1);
                 }
@@ -621,6 +622,16 @@ impl App {
         };
         line.path = b.path.clone();
         if let Some(doc) = &b.doc {
+            if b.read.is_some() {
+                // Reading mode (mockup 07): its keys, and the word count.
+                line.mode = Mode::Read;
+                line.notes = vec![
+                    "Tab next link · Enter follow · ␣r edit".into(),
+                    word_count(&doc.buffer.text()),
+                ];
+                line.indicator = None;
+                return line;
+            }
             line.mode = match doc.vim.mode() {
                 _ if doc.external.is_some() || self.comparing.is_some() => Mode::Conflict,
                 _ if doc.read_only.is_some() => Mode::Read,

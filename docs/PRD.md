@@ -840,12 +840,12 @@ Membaca catatan yang sudah dirender, nyaman di mata, dan tetap bisa dinavigasi d
 
 **Kriteria penerimaan**
 
-- [ ] F-27.1 Catatan contoh (`fixtures/vault-mockup/Proyek/Desain indeks Patinote.md`) yang berisi semua elemen di tabel dirender sesuai kolom Tampilan (dicek dengan screenshot pembanding).
-- [ ] F-27.2 Berpindah ke mode baca di catatan 1.000 baris selesai di bawah 100 ms.
-- [ ] F-27.3 Mencentang checkbox mengubah `- [ ]` menjadi `- [x]` di file; bagian lain file tidak berubah.
+- [x] F-27.1 Catatan contoh (`fixtures/vault-mockup/Proyek/Desain indeks Patinote.md`) yang berisi semua elemen di tabel dirender sesuai kolom Tampilan (dicek dengan screenshot pembanding). `f27_1_the_sample_note_has_every_kind_of_block`, snapshot `mockup_07_reading_mode` (pembanding di PR)
+- [x] F-27.2 Berpindah ke mode baca di catatan 1.000 baris selesai di bawah 100 ms. `cargo bench -p patinote-app --bench reading` (1.000 baris: 3,4 ms render dan view)
+- [x] F-27.3 Mencentang checkbox mengubah `- [ ]` menjadi `- [x]` di file; bagian lain file tidak berubah. `f27_3_toggling_a_task_changes_only_its_box`, `f27_3_a_checkbox_changes_only_its_box_in_the_file`
 - [ ] F-27.4 Gambar 4000×3000 piksel tampil selebar kolom; kenaikan RAM tidak melebihi ukuran bitmap pada ukuran tampil (lebar × tinggi × 4 byte) ditambah 10%.
-- [ ] F-27.5 `Tab` lalu `Enter` membuka catatan tujuan link.
-- [ ] F-27.6 Kembali ke mode edit menempatkan layar di bagian yang sedang dibaca.
+- [x] F-27.5 `Tab` lalu `Enter` membuka catatan tujuan link. `f27_5_tab_then_enter_opens_the_link`
+- [x] F-27.6 Kembali ke mode edit menempatkan layar di bagian yang sedang dibaca. `f27_6_back_to_editing_puts_the_cursor_where_reading_was`
 
 ### F-28 · Tata letak dan panel
 

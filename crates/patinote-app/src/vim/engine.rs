@@ -427,6 +427,20 @@ impl Vim {
         buf.revision() != rev
     }
 
+    /// Replaces source line `line` with `text` as one undoable change, the
+    /// cursor staying where it is (reading mode's checkboxes, F-27.3).
+    /// Returns whether the text changed.
+    pub fn replace_line(&mut self, buf: &mut Buffer, line: usize, text: &str) -> bool {
+        if line >= buf.line_count() || buf.line(line) == text {
+            return false;
+        }
+        let cursor = buf.cursor();
+        buf.splice_lines(line..line + 1, vec![text.to_owned()]);
+        buf.end_step();
+        buf.set_cursor_raw(cursor);
+        true
+    }
+
     pub fn undo(&mut self, buf: &mut Buffer) -> bool {
         self.sync(buf);
         self.leave_to_normal(buf);

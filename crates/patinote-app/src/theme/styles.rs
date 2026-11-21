@@ -1,7 +1,7 @@
 //! Iced widget styles, built only from [`super::tokens`] (0003 section 1).
 //! Widgets call these functions and never build a style themselves.
 
-use iced::widget::{button, container, svg, text_input};
+use iced::widget::{button, checkbox, container, svg, text_input};
 use iced::{Background, Border, Color, Shadow, Theme};
 
 use super::tokens::*;
@@ -237,6 +237,58 @@ pub fn legend(bg: Color, marker: Color) -> impl Fn(&Theme) -> container::Style {
     move |_| container::Style {
         border: border(marker, SIZE_BORDER, RADIUS_CURSORLINE),
         ..filled(bg, TEXT_PRIMARY)
+    }
+}
+
+/// The properties box at the top of reading mode (mockup 07).
+pub fn properties_box(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(BORDER_DEFAULT, SIZE_BORDER, RADIUS_POPUP),
+        ..filled(BG_PANEL, TEXT_PRIMARY)
+    }
+}
+
+/// A tag label in reading mode: `accent.soft` on `bg.selected` (0003 3.6).
+pub fn tag_label(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(Color::TRANSPARENT, 0.0, RADIUS_FULL),
+        ..filled(READ_TAG_BG, READ_TAG_TEXT)
+    }
+}
+
+/// A quote or callout in reading mode: a line at the left.
+pub fn quote(_: &Theme) -> container::Style {
+    container::Style {
+        border: Border {
+            color: BORDER_STRONG,
+            width: SIZE_FOCUS_OUTLINE,
+            radius: RADIUS_CURSORLINE.into(),
+        },
+        ..filled(BG_APP, TEXT_PRIMARY)
+    }
+}
+
+/// The line under a table's header (`border.control`).
+pub fn rule_control(_: &Theme) -> container::Style {
+    filled(BORDER_CONTROL, TEXT_PRIMARY)
+}
+
+/// A task checkbox in reading mode: `accent` when checked.
+pub fn task_box(_: &Theme, status: checkbox::Status) -> checkbox::Style {
+    let checked = match status {
+        checkbox::Status::Active { is_checked }
+        | checkbox::Status::Hovered { is_checked }
+        | checkbox::Status::Disabled { is_checked } => is_checked,
+    };
+    checkbox::Style {
+        background: Background::Color(if checked { ACCENT } else { TEXT_STRONG }),
+        icon_color: TEXT_ON_ACCENT,
+        border: border(
+            if checked { ACCENT } else { BORDER_CONTROL },
+            SIZE_BORDER,
+            RADIUS_CURSORLINE,
+        ),
+        text_color: None,
     }
 }
 

@@ -9,6 +9,7 @@ pub mod explorer;
 pub mod fonts;
 pub mod links;
 pub mod mode;
+pub mod reading;
 pub mod screens;
 pub mod session;
 pub mod sheet;

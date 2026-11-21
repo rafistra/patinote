@@ -212,6 +212,7 @@ Semua ukuran adalah piksel logis pada skala 100% dan ikut skala HiDPI dari GNOME
 | `size.recent.time.w` | 84 px | Kolom waktu di daftar catatan terakhir |
 | `size.cursor.insert.w` | 2 px | Kursor garis di mode insert |
 | `size.editor.cell.w` | 9 px | Lebar satu sel JetBrains Mono 15 px; kursor blok di baris kosong |
+| `size.property.key.w` | 110 px | Kolom nama properti di kotak properti mode baca (mockup 07) |
 | `size.tree.indent` | 18 px | Indentasi tiap tingkat folder di explorer (mockup 02) |
 | `size.control.h.small` | 30 px | Kolom input nama di dalam explorer (mockup 14) |
 | `size.wave.step` / `size.wave.offset` | 2 px / 4 px | Garis bawah bergelombang link ambigu: langkah zigzag, dan jaraknya dari dasar teks |

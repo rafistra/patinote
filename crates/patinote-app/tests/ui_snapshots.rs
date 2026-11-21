@@ -670,3 +670,32 @@ fn mockups_08_15_16_external_changes_and_conflicts() {
     frame.save(&out_dir().join("16-sync-conflict-diff.png"));
     assert!(frame.count(BANNER_WARNING_BG) >= 40_000, "warning banner");
 }
+
+/// Mockup 07: reading mode, with the second link selected by `Tab`.
+#[test]
+fn mockup_07_reading_mode() {
+    use iced::keyboard::{Key, Modifiers, key};
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    command(&mut app, "e Desain indeks Patinote");
+    common::leader(&mut app, "r");
+    for _ in 0..2 {
+        common::press_with(
+            &mut app,
+            Key::Named(key::Named::Tab),
+            Modifiers::default(),
+            None,
+            false,
+        );
+    }
+    let big = Size::new(SIZE_WINDOW.0, 1180.0);
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), big, scale);
+        frame.save(&out_dir().join(file_name("07-reading-mode", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(MODE_READ) >= area(1_000.0), "READ badge");
+        assert!(frame.count(READ_TAG_BG) >= area(500.0), "tag labels");
+        assert!(frame.count_near(READ_LINK, 20) >= area(100.0), "links");
+    }
+}

@@ -9,6 +9,8 @@ pub use external::Choice;
 mod files;
 mod linking;
 mod panels;
+mod reading;
+pub use reading::decoded_size;
 mod renaming;
 mod switching;
 
@@ -117,6 +119,10 @@ pub struct App {
     /// The Syncthing conflict list, with its selected row (F-11).
     conflict_list: Option<usize>,
     watch: bool,
+    /// The reading mode properties box is open (F-27).
+    properties_open: bool,
+    /// The window's scale factor, for decoding images at the size they show.
+    scale: f32,
 }
 
 /// The screen shown.
@@ -181,6 +187,8 @@ pub struct Buffer {
     pub id: u64,
     /// When it was last made active, for closing the oldest (F-09.7).
     pub used: u64,
+    /// Reading mode, when on (F-27).
+    pub read: Option<reading::ReadState>,
 }
 
 /// What the command line is doing.
@@ -277,6 +285,16 @@ pub enum Message {
     OpenConflict(usize),
     /// A conflict's original and copy, compared.
     SyncLoaded(String, String, crate::diff::Sides),
+    /// Reading mode (F-27): a link clicked or entered, a checkbox, the
+    /// properties box, scrolling, links found missing, and images decoded.
+    ReadLink(usize),
+    ToggleTask(usize),
+    ToggleProperties,
+    ReadScrolled(f32),
+    ReadingLinks(String, HashSet<String>, Vec<(String, Option<PathBuf>)>),
+    Picture(String, String, Option<iced::widget::image::Handle>),
+    /// The window's scale factor.
+    Scale(f32),
     /// The watch limit banner's buttons.
     DismissLimit,
     CopyCommand,
@@ -328,6 +346,8 @@ impl App {
             comparing: None,
             conflict_list: None,
             watch: launch.watch,
+            properties_open: true,
+            scale: 1.0,
         };
         let vault = launch
             .vault
@@ -345,7 +365,10 @@ impl App {
             }
             None => Task::none(),
         };
-        (app, task)
+        let scale = window::latest()
+            .and_then(window::scale_factor)
+            .map(Message::Scale);
+        (app, Task::batch([task, scale]))
     }
 
     /// The screen shown, for tests.
@@ -453,6 +476,7 @@ impl App {
                 backlinks: None,
                 id: id as u64,
                 used: 0,
+                read: None,
             });
         }
         let active = state
@@ -544,6 +568,7 @@ impl App {
             backlinks: None,
             id,
             used,
+            read: None,
         });
         w.active = Some(w.buffers.len() - 1);
         self.enforce_buffer_limit();
@@ -905,6 +930,27 @@ impl App {
                 self.sync_loaded(original, copy, sides);
                 Task::none()
             }
+            Message::ReadLink(i) => self.reading_link(i),
+            Message::ToggleTask(line) => self.toggle_task(line),
+            Message::ToggleProperties => {
+                self.properties_open = !self.properties_open;
+                Task::none()
+            }
+            Message::ReadScrolled(y) => {
+                self.read_scrolled(y);
+                Task::none()
+            }
+            Message::ReadingLinks(path, missing, pictures) => {
+                self.reading_links(path, missing, pictures)
+            }
+            Message::Picture(path, target, handle) => {
+                self.picture(path, target, handle);
+                Task::none()
+            }
+            Message::Scale(s) => {
+                self.scale = s;
+                Task::none()
+            }
             Message::DismissLimit => {
                 if let Some(w) = self.workspace_mut() {
                     w.watch_limit = None;
@@ -1056,6 +1102,7 @@ impl App {
                 Some("b") => self.toggle_panel(true),
                 Some("e") => self.toggle_explorer(),
                 Some("c") => self.open_conflicts(),
+                Some("r") if self.active_document().is_some() => self.toggle_reading(),
                 Some("n") => self.open_new_note_dialog(),
                 Some("o") => self.toggle_panel(false),
                 Some("x") if self.active_document().is_some() => self.close_or_quit(false),
@@ -1085,6 +1132,14 @@ impl App {
         {
             self.leader = true;
             return Task::none();
+        }
+        // Reading mode has its own keys (F-27).
+        if self.read_state().is_some() {
+            if key == Key::Named(Named::Space) && !modifiers.control() {
+                self.leader = true;
+                return Task::none();
+            }
+            return self.reading_key(&key, text.as_deref(), modifiers);
         }
         // An open note gets every key: Vim decides what it means.
         if self.active_document().is_some() {
@@ -1186,6 +1241,9 @@ impl App {
             ),
             Screen::Vault(w) => match (self.comparison(), w.active_buffer()) {
                 (Some(c), _) => c,
+                (None, Some(b)) if b.read.is_some() => {
+                    self.reading_view().unwrap_or_else(|| self.editor_view(b))
+                }
                 (None, Some(b)) => self.editor_view(b),
                 (None, None) => w.start().view(Message::OpenRecent),
             },

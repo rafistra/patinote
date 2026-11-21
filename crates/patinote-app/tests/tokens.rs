@@ -184,15 +184,10 @@ fn widget_code_has_no_color_or_size_literals() {
             let text = std::fs::read_to_string(&path).unwrap();
             for (i, line) in text.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or("");
-                let bad = [
-                    "Color::from_rgb",
-                    "Color::new(",
-                    "color!(",
-                    "rgb8(",
-                    "rgba8(",
-                ]
-                .iter()
-                .any(|p| code.contains(p))
+                let bad = ["Color::from_rgb", "Color::new(", "color!("]
+                    .iter()
+                    .any(|p| code.contains(p))
+                    || has_rgb_call(code)
                     || has_hex_color(code)
                     || has_bare_float(code);
                 if bad {
@@ -225,6 +220,19 @@ fn has_hex_color(code: &str) -> bool {
             return false;
         };
         b.len() >= start + 6 && b[start..start + 6].iter().all(u8::is_ascii_hexdigit)
+    })
+}
+
+/// A bare `rgb8(` / `rgba8(` call; a method that only ends that way (like
+/// `image`'s `into_rgba8()`) is not a color.
+fn has_rgb_call(code: &str) -> bool {
+    ["rgb8(", "rgba8("].iter().any(|p| {
+        code.match_indices(p).any(|(i, _)| {
+            !code[..i]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        })
     })
 }
 
@@ -276,6 +284,8 @@ fn the_literal_checks_catch_what_they_should() {
     assert!(has_hex_color("let c = \"#1A2B3C\";"));
     assert!(has_hex_color("hex(0x121614)"));
     assert!(!has_hex_color("let issue = \"#12\";"));
+    assert!(has_rgb_call("let c = rgba8(1, 2, 3, 4);"));
+    assert!(!has_rgb_call("let px = img.into_rgba8();"));
     assert!(has_bare_float(".size(14.0)"));
     assert!(!has_bare_float("width: 0.0, \"v1.25\""));
     assert!(!has_bare_float(

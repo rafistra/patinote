@@ -6,6 +6,7 @@ pub mod dialogs;
 pub mod explorer;
 pub mod panel;
 pub mod popups;
+pub mod reading;
 pub mod start;
 pub mod switcher;
 pub mod welcome;

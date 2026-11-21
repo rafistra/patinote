@@ -21,6 +21,8 @@ pub enum Icon {
     Search,
     /// A folder (move picker).
     Folder,
+    /// A note (embedded note card).
+    Note,
 }
 
 impl Icon {
@@ -34,6 +36,7 @@ impl Icon {
             Self::Logo => include_bytes!("../../assets/icons/logo.svg"),
             Self::Search => include_bytes!("../../assets/icons/search.svg"),
             Self::Folder => include_bytes!("../../assets/icons/folder.svg"),
+            Self::Note => include_bytes!("../../assets/icons/note.svg"),
         }
     }
 }

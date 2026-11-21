@@ -18,8 +18,11 @@ clap_complete = "4.6.12"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 ctrlc = "3.5.3"
 # Locked after step 0.6 (docs/design/0002). Both renderers ship; tiny-skia is the default (Q-004).
-iced = { version = "=0.14.0", default-features = false, features = ["advanced", "crisp", "thread-pool", "tiny-skia", "wgpu", "wayland", "x11", "svg"] }
+iced = { version = "=0.14.0", default-features = false, features = ["advanced", "crisp", "thread-pool", "tiny-skia", "wgpu", "wayland", "x11", "svg", "image-without-codecs"] }
 iced_runtime = "=0.14.0"
+# Images in reading mode (F-27): decoded and shrunk to the column width off
+# the UI thread, so only the shown bitmap stays in memory (F-27.4, Q-016).
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 ignore = "0.4.34"
 insta = { version = "1.49.0", features = ["json"] }
 notify = { version = "8.2.2", default-features = false }
