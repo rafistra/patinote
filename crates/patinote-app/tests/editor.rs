@@ -232,3 +232,18 @@ fn f05_relative_line_numbers_can_be_turned_off() {
     let app = other.start(other.launch(Some(other.vault()), config));
     assert!(!app.relative_numbers());
 }
+
+#[test]
+fn f05_clicking_past_the_end_of_a_line_in_normal_mode_lands_on_its_last_character() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggOabc<Esc>");
+    send(&mut app, Message::Click(0, 3, false));
+    assert_eq!(app.active_cursor(), Some((0, 2)));
+    keys(&mut app, "x");
+    assert!(app.active_text().unwrap().starts_with("ab\n"));
+    // In insert mode the cursor may sit after the last character.
+    keys(&mut app, "A");
+    send(&mut app, Message::Click(0, 2, false));
+    assert_eq!(app.active_cursor(), Some((0, 2)));
+}

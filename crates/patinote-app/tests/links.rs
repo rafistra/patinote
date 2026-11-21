@@ -164,3 +164,32 @@ fn ambiguous_links_are_marked_in_the_note() {
     let app = open(&env, "Harian/2026-11-19.md");
     assert_eq!(app.ambiguous_targets(), ["rapat"]);
 }
+
+#[test]
+fn f08_suggestions_and_the_picker_close_when_another_note_opens() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[");
+    assert!(app.suggestions_open());
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Referensi/Daftar bacaan.md".into(),
+        }),
+    );
+    assert!(
+        !app.suggestions_open(),
+        "the suggestions belonged to the other note"
+    );
+
+    let mut app = open(&env, "Harian/2026-11-19.md");
+    keys(&mut app, "7G0f[gd");
+    assert!(!app.picker_choices().is_empty());
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Referensi/Daftar bacaan.md".into(),
+        }),
+    );
+    assert_eq!(app.picker_choices(), Vec::<String>::new());
+}
