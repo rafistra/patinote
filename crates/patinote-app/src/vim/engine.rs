@@ -223,6 +223,8 @@ struct VisualRedo {
 #[derive(Debug, Clone)]
 pub struct Vim {
     config: Config,
+    /// A count was dropped for being too large; reported in the next [`Outcome`].
+    too_large: bool,
     mode: Mode,
     keys: Vec<Key>,
     pending: String,
@@ -284,6 +286,7 @@ impl Vim {
             replaying: false,
             held: Vec::new(),
             held_at: None,
+            too_large: false,
         }
     }
 
@@ -370,6 +373,7 @@ impl Vim {
         let rev = buf.revision();
         let mut out = Outcome::default();
         self.feed(buf, key, now, viewport_lines, &mut out);
+        out.too_large = std::mem::take(&mut self.too_large);
         if self.mode != Mode::Insert && self.keys.is_empty() {
             buf.end_step();
         }
@@ -1368,6 +1372,7 @@ impl Vim {
             return false;
         };
         if reg.text.len().saturating_mul(n) > MAX_REPEAT_BYTES {
+            self.too_large = true;
             return false;
         }
         let cur = buf.cursor();
@@ -2035,12 +2040,26 @@ impl Vim {
     /// cursor stays on a character.
     pub fn move_cursor(&mut self, buf: &mut Buffer, pos: Pos) {
         if self.mode != Mode::Insert {
+            // Visual modes too: a click past the end selects the last
+            // character, not the line break.
             buf.set_cursor(pos);
-            self.clamp_normal(buf);
+            let at = buf.cursor();
+            let len = buf.line_len(at.line);
+            buf.set_cursor_raw(Pos::new(at.line, at.col.min(len.saturating_sub(1))));
             self.update_curswant(buf);
             return;
         }
+        // A held `insert_escape` key belongs where it was typed.
+        self.flush_held(buf);
+        self.update_pending();
         let cur = buf.cursor();
+        buf.set_cursor(pos);
+        let to = buf.cursor();
+        buf.set_cursor_raw(cur);
+        if to == cur {
+            // Vim only breaks the insert when the cursor really moves.
+            return;
+        }
         if !self.replaying {
             buf.end_step();
             if let Some(ins) = &self.insert
@@ -2185,9 +2204,18 @@ impl Vim {
         {
             return false;
         }
-        let typed_len = ins.typed.len().max(1);
-        if typed_len.saturating_mul(ins.count) > MAX_REPEAT_BYTES {
-            return true; // too much to insert: the first one stays
+        let typed_len: usize = ins
+            .typed
+            .iter()
+            .map(|k| match k {
+                Key::Char(c) => c.len_utf8(),
+                _ => 1,
+            })
+            .sum();
+        if typed_len.max(1).saturating_mul(ins.count) > MAX_REPEAT_BYTES {
+            // Too much to insert: the first one stays, and the app says so.
+            self.too_large = true;
+            return true;
         }
         let cur = buf.cursor();
         let mut scratch = Buffer::from_text(buf.line(cur.line));

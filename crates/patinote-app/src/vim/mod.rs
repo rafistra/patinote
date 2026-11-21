@@ -119,6 +119,9 @@ pub struct Outcome {
     pub yanked: Option<Register>,
     /// The app should open a prompt.
     pub request: Option<Request>,
+    /// A count asked for more text than the engine inserts at once
+    /// (`MAX_REPEAT_BYTES`): the count was not used.
+    pub too_large: bool,
 }
 
 /// A prompt the app opens for the engine.

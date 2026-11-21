@@ -427,3 +427,82 @@ fn a_huge_count_does_not_stall_the_editor() {
         assert_eq!(buf.lines()[0].chars().count(), first_len, "{keys}");
     }
 }
+
+#[test]
+fn f06_7_a_click_types_a_held_key_where_it_was_typed() {
+    let config = Config {
+        insert_escape: Some("jk".to_owned()),
+    };
+    let t0 = Instant::now();
+    let ms = |n| t0 + Duration::from_millis(n);
+    let mut buf = Buffer::from_text("abc\nxyz");
+    let mut vim = Vim::new(config);
+    vim.handle(&mut buf, Key::Char('A'), ms(0), VIEWPORT);
+    vim.handle(&mut buf, Key::Char('j'), ms(10), VIEWPORT);
+    vim.move_cursor(&mut buf, Pos::new(1, 0));
+    assert_eq!(vim.pending(), "");
+    vim.tick(&mut buf, ms(2000));
+    assert_eq!(buf.text(), "abcj\nxyz");
+    assert_eq!(buf.cursor(), Pos::new(1, 0));
+}
+
+#[test]
+fn f06_a_click_in_visual_mode_stays_on_a_character() {
+    for start in ["v", "V"] {
+        let mut buf = Buffer::from_text("abc\ndefgh\nij");
+        let mut vim = Vim::new(Config::default());
+        type_keys(&mut vim, &mut buf, start, Instant::now());
+        vim.move_cursor(&mut buf, Pos::new(1, 5));
+        assert_eq!(buf.cursor(), Pos::new(1, 4), "{start}");
+    }
+    // `d` then leaves the line break alone.
+    let mut buf = Buffer::from_text("abc\ndefgh\nij");
+    let mut vim = Vim::new(Config::default());
+    type_keys(&mut vim, &mut buf, "lv", Instant::now());
+    vim.move_cursor(&mut buf, Pos::new(1, 5));
+    type_keys(&mut vim, &mut buf, "d", Instant::now());
+    assert_eq!(buf.text(), "a\nij");
+}
+
+#[test]
+fn f06_a_click_that_does_not_move_keeps_the_insert_going() {
+    let mut buf = Buffer::from_text("x");
+    let mut vim = Vim::new(Config::default());
+    let now = Instant::now();
+    type_keys(&mut vim, &mut buf, "3ifoo", now);
+    let here = buf.cursor();
+    vim.move_cursor(&mut buf, here);
+    type_keys(&mut vim, &mut buf, "<Esc>", now);
+    assert_eq!(buf.text(), "foofoofoox");
+    // One undo step, and `.` repeats the whole insert.
+    type_keys(&mut vim, &mut buf, ".", now);
+    assert_eq!(buf.text(), "foofoofofoofoofooox");
+    assert!(vim.undo(&mut buf));
+    assert!(vim.undo(&mut buf));
+    assert_eq!(buf.text(), "x");
+    // A click that moves still ends the change, as before.
+    let mut buf = Buffer::from_text("ab");
+    let mut vim = Vim::new(Config::default());
+    type_keys(&mut vim, &mut buf, "3ifoo", now);
+    vim.move_cursor(&mut buf, Pos::new(0, 0));
+    type_keys(&mut vim, &mut buf, "<Esc>", now);
+    assert_eq!(buf.text(), "fooab");
+}
+
+#[test]
+fn a_count_too_large_to_insert_says_so() {
+    let mut buf = Buffer::from_text("");
+    let mut vim = Vim::new(Config::default());
+    let now = Instant::now();
+    type_keys(&mut vim, &mut buf, "99999i", now);
+    // 400 keys, but 800 bytes: 99999 copies are over the limit.
+    for _ in 0..400 {
+        vim.handle(&mut buf, Key::Char('é'), now, VIEWPORT);
+    }
+    let out = vim.handle(&mut buf, Key::Esc, now, VIEWPORT);
+    assert!(out.too_large);
+    assert_eq!(buf.text().chars().count(), 400);
+    // A count that fits says nothing.
+    let out = vim.handle(&mut buf, Key::Char('x'), now, VIEWPORT);
+    assert!(!out.too_large);
+}

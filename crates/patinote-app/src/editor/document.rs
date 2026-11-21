@@ -148,6 +148,15 @@ impl Document {
         self.last_edit = Some(now);
     }
 
+    /// After the app moved the cursor (a click, the wheel): a held key typed
+    /// or an unused indent removed on the way counts as an edit.
+    pub fn moved_cursor(&mut self, rev: u64) {
+        if self.buffer.revision() != rev {
+            self.edited(Instant::now());
+            self.kinds();
+        }
+    }
+
     /// Whether autosave should run now: unsaved, idle for a second (or
     /// `force`, for switching notes, losing focus and quitting), and not
     /// already saving. A failed save is retried every few seconds.
