@@ -532,3 +532,23 @@ fn f10_6_every_image_inside_a_link_is_updated() {
         "[![a](Arsip/Lama/x.png) ![b](Arsip/Lama/y.png)](Arsip/Lama/Note.md)\n"
     );
 }
+
+#[test]
+fn f10_6_links_nested_three_deep_are_all_updated() {
+    let paths: &[(&str, &[&str])] = &[
+        ("Lama/c.md", &[]),
+        ("Lama/a.png", &[]),
+        ("Lama/b.png", &[]),
+        ("x.md", &[]),
+    ];
+    let vault = Vault::new(
+        paths,
+        &[("x.md", "[![![x](Lama/a.png)](Lama/b.png)](Lama/c.md)\n")],
+    );
+    let note_paths: Vec<String> = paths.iter().map(|(p, _)| p.to_string()).collect();
+    let p = vault.plan(&folder_moves("Lama", "Arsip/Lama", &note_paths));
+    assert_eq!(
+        new_text(&p, "x.md"),
+        "[![![x](Arsip/Lama/a.png)](Arsip/Lama/b.png)](Arsip/Lama/c.md)\n"
+    );
+}

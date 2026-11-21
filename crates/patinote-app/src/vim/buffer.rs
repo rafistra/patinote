@@ -109,7 +109,6 @@ impl Buffer {
         self.cursor = Pos { line, col };
     }
 
-    /// Increases on every change to the text, undo and redo included.
     /// Replaces the whole text, as reading the file again does. The
     /// revision keeps going up, so whatever was computed from the old text
     /// is computed again.
@@ -119,6 +118,7 @@ impl Buffer {
         self.revision = revision;
     }
 
+    /// Increases on every change to the text, undo and redo included.
     pub fn revision(&self) -> u64 {
         self.revision
     }

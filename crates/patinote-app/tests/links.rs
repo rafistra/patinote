@@ -221,3 +221,29 @@ fn f08_6_a_link_to_a_new_note_outside_the_vault_says_so() {
         Some(patinote_app::theme::styles::Level::Error)
     );
 }
+
+#[test]
+fn f08_gd_on_a_markdown_link_with_an_encoded_hash_opens_its_note() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("C# notes.md"), "# Bagian\n").unwrap();
+    std::fs::write(vault.join("Sumber.md"), "[c](C%23%20notes.md#Bagian)\n").unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Sumber.md".into(),
+        }),
+    );
+    keys(&mut app, "lgd");
+    assert_eq!(title(&app), "C# notes");
+}
+
+#[test]
+fn f08_a_link_to_the_notes_own_folder_is_not_called_outside_the_vault() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[di sini](./)<Esc>0lgd");
+    assert_eq!(title(&app), "Ide cepat");
+    assert_eq!(app.message(), None, "{:?}", app.message());
+}

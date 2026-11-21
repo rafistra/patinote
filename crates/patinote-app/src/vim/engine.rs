@@ -19,6 +19,9 @@ const ESCAPE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Counts are capped so a stray `99999999` cannot stall the editor.
 const MAX_COUNT: usize = 100_000;
+/// The most a count may repeat text into the buffer (bytes), so a count
+/// times a large register cannot exhaust memory.
+const MAX_REPEAT_BYTES: usize = 64 * 1024 * 1024;
 
 /// `curswant` value for "end of line" (`$`).
 const END: usize = usize::MAX;
@@ -214,7 +217,9 @@ struct VisualRedo {
 
 /// The Vim engine: mode, pending keys, registers, and repeat state.
 ///
-/// One engine serves every note; undo history lives in each [`Buffer`].
+/// Each note has its own engine (mode, pending keys, last search, `.`);
+/// undo history lives in its [`Buffer`]. The app copies the register
+/// between them, so `y` in one note and `p` in another work.
 #[derive(Debug, Clone)]
 pub struct Vim {
     config: Config,
@@ -399,7 +404,6 @@ impl Vim {
         found.is_some()
     }
 
-    /// Undoes the last whole command (also `u`).
     /// Replaces characters `start..end` of the cursor line with `text` as
     /// part of the current insert session (one undo step with what was
     /// typed), then puts the cursor at column `cursor`. Used by link
@@ -441,6 +445,7 @@ impl Vim {
         true
     }
 
+    /// Undoes the last whole command (also `u`).
     pub fn undo(&mut self, buf: &mut Buffer) -> bool {
         self.sync(buf);
         self.leave_to_normal(buf);
@@ -1362,6 +1367,9 @@ impl Vim {
         let Some(reg) = self.register.clone() else {
             return false;
         };
+        if reg.text.len().saturating_mul(n) > MAX_REPEAT_BYTES {
+            return false;
+        }
         let cur = buf.cursor();
         if reg.linewise {
             let at = if before { cur.line } else { cur.line + 1 };
@@ -2125,12 +2133,14 @@ impl Vim {
             if ins.count > 1 && ins.repeat != Repeat::None {
                 let was = self.replaying;
                 self.replaying = true;
-                for _ in repeat_n((), ins.count - 1) {
-                    if ins.repeat == Repeat::Lines {
-                        self.newline(buf);
-                    }
-                    for &key in &ins.typed {
-                        self.insert_key_raw(buf, key, false);
+                if !self.repeat_simple(buf, &ins) {
+                    for _ in repeat_n((), ins.count - 1) {
+                        if ins.repeat == Repeat::Lines {
+                            self.newline(buf);
+                        }
+                        for &key in &ins.typed {
+                            self.insert_key_raw(buf, key, false);
+                        }
                     }
                 }
                 self.replaying = was;
@@ -2160,6 +2170,71 @@ impl Vim {
         if !self.replaying {
             buf.end_step();
         }
+    }
+
+    /// The count of an insert of plain text and Enter (`3ia<Esc>`, `5ox<Esc>`)
+    /// done in one step: built in a scratch buffer from the cursor's line,
+    /// then spliced in once. Repeating key by key re-copies the growing line
+    /// every time, which stalls on a count like 100000. Returns false (and
+    /// does nothing) for anything else.
+    fn repeat_simple(&mut self, buf: &mut Buffer, ins: &InsertState) -> bool {
+        if !ins
+            .typed
+            .iter()
+            .all(|k| matches!(k, Key::Char(_) | Key::Enter))
+        {
+            return false;
+        }
+        let typed_len = ins.typed.len().max(1);
+        if typed_len.saturating_mul(ins.count) > MAX_REPEAT_BYTES {
+            return true; // too much to insert: the first one stays
+        }
+        let cur = buf.cursor();
+        let mut scratch = Buffer::from_text(buf.line(cur.line));
+        scratch.set_cursor_raw(Pos::new(0, cur.col));
+        // Runs of characters go in as one string.
+        let mut runs: Vec<Option<String>> = Vec::new();
+        for k in &ins.typed {
+            match (k, runs.last_mut()) {
+                (Key::Char(c), Some(Some(run))) => run.push(*c),
+                (Key::Char(c), _) => runs.push(Some(c.to_string())),
+                _ => runs.push(None),
+            }
+        }
+        if ins.repeat == Repeat::Text && runs.len() == 1 {
+            // One line of text: the whole repeat is one string.
+            if let Some(Some(run)) = runs.first() {
+                let text = run.repeat(ins.count - 1);
+                replace(buf, cur, cur, &text);
+                buf.set_cursor_raw(Pos::new(cur.line, cur.col + text.chars().count()));
+                if let Some(i) = &mut self.insert {
+                    i.did_ai = false;
+                }
+                return true;
+            }
+        }
+        for _ in repeat_n((), ins.count - 1) {
+            if ins.repeat == Repeat::Lines {
+                self.newline(&mut scratch);
+            }
+            for run in &runs {
+                match run {
+                    Some(text) => {
+                        let at = scratch.cursor();
+                        replace(&mut scratch, at, at, text);
+                        scratch.set_cursor_raw(Pos::new(at.line, at.col + text.chars().count()));
+                        if let Some(i) = &mut self.insert {
+                            i.did_ai = false;
+                        }
+                    }
+                    None => self.newline(&mut scratch),
+                }
+            }
+        }
+        let end = scratch.cursor();
+        buf.splice_lines(cur.line..cur.line + 1, scratch.lines().to_vec());
+        buf.set_cursor_raw(Pos::new(cur.line + end.line, end.col));
+        true
     }
 
     /// Vim's `stop_insert()` after an autoindent with nothing typed: drop the

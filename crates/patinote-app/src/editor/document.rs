@@ -1,6 +1,7 @@
 //! An open note: its text in a Vim buffer, how it is written on disk, and
 //! where saving stands (F-05).
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -68,6 +69,8 @@ pub struct Document {
     pub recheck: bool,
     kinds: Vec<LineKind>,
     kinds_rev: u64,
+    /// Words in the note, with the buffer revision they were counted at.
+    words: Cell<Option<(u64, usize)>>,
 }
 
 impl Document {
@@ -91,6 +94,7 @@ impl Document {
             recheck: false,
             kinds,
             kinds_rev: rev,
+            words: Cell::new(None),
         }
     }
 
@@ -113,6 +117,25 @@ impl Document {
             self.kinds_rev = self.buffer.revision();
         }
         &self.kinds
+    }
+
+    /// Words in the note, for the status line. Counted once per change, line
+    /// by line, since the status line is drawn many times per frame.
+    pub fn word_count(&self) -> usize {
+        let rev = self.buffer.revision();
+        if let Some((at, n)) = self.words.get()
+            && at == rev
+        {
+            return n;
+        }
+        let n = self
+            .buffer
+            .lines()
+            .iter()
+            .map(|l| l.split_whitespace().count())
+            .sum();
+        self.words.set(Some((rev, n)));
+        n
     }
 
     /// The kinds as last computed (call [`Self::kinds`] after edits).
@@ -264,5 +287,22 @@ fn io_reason(e: &WriteError) -> String {
         Some(std::io::ErrorKind::PermissionDenied) => "permission denied".into(),
         Some(std::io::ErrorKind::ReadOnlyFilesystem) => "the disk is read-only".into(),
         _ => e.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_word_count_follows_edits() {
+        let mut doc = Document::new(
+            "a.md".into(),
+            b"satu dua\ntiga\n",
+            vim::Vim::new(vim::Config::default()),
+        );
+        assert_eq!(doc.word_count(), 3);
+        doc.buffer.replace_text("satu\n");
+        assert_eq!(doc.word_count(), 1);
     }
 }
