@@ -372,6 +372,56 @@ pub fn cmdline_input(_: &Theme, _: text_input::Status) -> text_input::Style {
     }
 }
 
+/// How a name input looks (0003 section 6): `accent` edge, `status.warning`
+/// for a risky name, `status.error` when rejected; on `bg.chrome`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Field {
+    Normal,
+    Warning,
+    Rejected,
+}
+
+/// A name input in a dialog or the explorer.
+pub fn field(state: Field) -> impl Fn(&Theme, text_input::Status) -> text_input::Style {
+    move |_, _| {
+        let edge = match state {
+            Field::Normal => ACCENT,
+            Field::Warning => STATUS_WARNING,
+            Field::Rejected => STATUS_ERROR,
+        };
+        text_input::Style {
+            background: Background::Color(BG_CHROME),
+            border: border(edge, SIZE_BORDER, RADIUS_CONTROL),
+            icon: TEXT_MUTED,
+            placeholder: TEXT_MUTED,
+            value: TEXT_STRONG,
+            selection: EDITOR_SELECTION,
+        }
+    }
+}
+
+/// The main button of a dialog that moves something to `.trash/`: orange
+/// (`mode.conflict`), since it can be undone (0003 section 3.3).
+pub fn button_trash(_: &Theme, _: button::Status) -> button::Style {
+    button_style(Some(MODE_CONFLICT), TEXT_ON_ACCENT, None)
+}
+
+/// A box inside a dialog (the list of link changes): `bg.card.inline`.
+pub fn inset(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(Color::TRANSPARENT, 0.0, RADIUS_CONTROL),
+        ..filled(BG_CARD_INLINE, TEXT_PRIMARY)
+    }
+}
+
+/// A warning box inside a dialog (`banner.warning` colors).
+pub fn warning_box(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(BANNER_WARNING_BORDER, SIZE_BORDER, RADIUS_CONTROL),
+        ..filled(BANNER_WARNING_BG, BANNER_WARNING_TEXT)
+    }
+}
+
 // --- Icons --------------------------------------------------------------------
 
 /// Colors a line icon.

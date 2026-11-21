@@ -638,7 +638,7 @@ impl App {
         line.buttons = vec![
             StatusButton {
                 label: "␣e explorer",
-                on: false,
+                on: self.explorer_open,
             },
             StatusButton {
                 label: "␣b panel",

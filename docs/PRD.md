@@ -764,14 +764,14 @@ Mengelola catatan dan folder dari dalam Patinote tanpa kehilangan data dan tanpa
 
 **Kriteria penerimaan**
 
-- [ ] F-10.1 `<leader>n`, ketik nama, isi teks: file muncul di folder yang benar dan langsung ada di quick switcher.
-- [ ] F-10.2 Nama dengan karakter terlarang ditolak dengan pesan yang menjelaskan alasannya.
-- [ ] F-10.3 Hapus memindahkan catatan ke `.trash/` dengan path relatif sama; isi utuh, tidak ada yang terhapus permanen.
-- [ ] F-10.4 Dua catatan dengan path sama yang dihapus bergantian tidak saling menimpa di `.trash/`.
-- [ ] F-10.5 Hapus folder berisi 10 catatan memindahkan seluruh isinya ke `.trash/`.
-- [ ] F-10.6 Ganti nama catatan yang ditautkan dari 5 catatan memperbarui kelima link; teks tampilan dan `#heading` utuh; selain teks link, setiap file identik byte per byte.
-- [ ] F-10.7 Pindah catatan ke folder lain memperbarui link yang memakai path; link yang hanya memakai nama tidak berubah bila nama masih unik.
-- [ ] F-10.8 Setelah ganti nama, panel backlinks catatan itu berisi catatan sumber yang sama seperti sebelumnya.
+- [x] F-10.1 `<leader>n`, ketik nama, isi teks: file muncul di folder yang benar dan langsung ada di quick switcher. `f10_1_leader_n_creates_the_note_and_the_switcher_finds_it`, `f10_1_a_in_the_explorer_creates_the_note_in_that_folder`
+- [x] F-10.2 Nama dengan karakter terlarang ditolak dengan pesan yang menjelaskan alasannya. `f10_2_forbidden_names_are_rejected_and_risky_ones_warned`, `f10_2_names_with_forbidden_characters_are_refused`
+- [x] F-10.3 Hapus memindahkan catatan ke `.trash/` dengan path relatif sama; isi utuh, tidak ada yang terhapus permanen. `f10_3_delete_moves_the_note_to_trash_with_the_same_path`
+- [x] F-10.4 Dua catatan dengan path sama yang dihapus bergantian tidak saling menimpa di `.trash/`. `f10_4_deleting_the_same_path_twice_keeps_both_in_trash`
+- [x] F-10.5 Hapus folder berisi 10 catatan memindahkan seluruh isinya ke `.trash/`. `f10_5_deleting_a_folder_moves_all_ten_notes_to_trash`
+- [x] F-10.6 Ganti nama catatan yang ditautkan dari 5 catatan memperbarui kelima link; teks tampilan dan `#heading` utuh; selain teks link, setiap file identik byte per byte. `f10_6_rename_updates_five_links_and_nothing_else`, `f10_6_renaming_updates_every_link_and_nothing_else`
+- [x] F-10.7 Pindah catatan ke folder lain memperbarui link yang memakai path; link yang hanya memakai nama tidak berubah bila nama masih unik. `f10_7_move_updates_path_links_and_keeps_name_links` (core dan app)
+- [x] F-10.8 Setelah ganti nama, panel backlinks catatan itu berisi catatan sumber yang sama seperti sebelumnya. `f10_8_after_a_rename_backlinks_come_from_the_same_notes`
 
 ### F-11 · Perubahan dari luar saat mengedit dan konflik Syncthing
 

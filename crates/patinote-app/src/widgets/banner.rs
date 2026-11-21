@@ -19,6 +19,8 @@ pub enum Icon {
     Logo,
     /// The quick switcher's magnifier.
     Search,
+    /// A folder (move picker).
+    Folder,
 }
 
 impl Icon {
@@ -31,6 +33,7 @@ impl Icon {
             Self::Info => include_bytes!("../../assets/icons/info.svg"),
             Self::Logo => include_bytes!("../../assets/icons/logo.svg"),
             Self::Search => include_bytes!("../../assets/icons/search.svg"),
+            Self::Folder => include_bytes!("../../assets/icons/folder.svg"),
         }
     }
 }

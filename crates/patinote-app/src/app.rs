@@ -4,8 +4,10 @@
 //! in [`App::update`] so tests can drive it without a window.
 
 mod editing;
+mod files;
 mod linking;
 mod panels;
+mod renaming;
 mod switching;
 
 use std::collections::{HashMap, HashSet};
@@ -100,6 +102,11 @@ pub struct App {
     navigating: bool,
     /// Counts buffer activations, to find the least recently used one.
     use_counter: u64,
+    /// The explorer is open (F-10) and whether it has the keyboard focus.
+    explorer_open: bool,
+    explorer_focus: bool,
+    /// An open dialog (new note, rename, delete, move).
+    dialog: Option<files::Dialog>,
 }
 
 /// The screen shown.
@@ -133,6 +140,8 @@ pub struct Workspace {
     /// Attachments, suggested after `![[` (F-08).
     attachments: Vec<Candidate>,
     finder: Finder,
+    /// The explorer's tree, selection and input (F-10).
+    explorer: files::ExplorerState,
     /// Link targets (lowercase) that match several notes, per open note.
     ambiguous: HashMap<String, HashSet<String>>,
 }
@@ -222,6 +231,28 @@ pub enum Message {
     Ambiguous(String, HashSet<String>),
     /// The index was refreshed after saving this note.
     Reindexed(String),
+    /// Tags for the explorer: (tag, uses, depth).
+    Tags(Vec<(String, usize, usize)>),
+    /// A click on an explorer row.
+    ExplorerClick(usize),
+    /// Typing in, and Enter in, the explorer's input.
+    InlineInput(String),
+    InlineSubmit,
+    /// Typing in, Enter in, and cancelling a dialog.
+    DialogInput(String),
+    DialogSubmit,
+    DialogCancel,
+    /// A folder picked in the move dialog.
+    PickFolder(usize),
+    /// What the delete dialog shows: path, folder?, notes, attachments, and
+    /// notes elsewhere linking in.
+    DeleteCounted(String, bool, usize, usize, usize),
+    /// A trash, rename or move finished: the paths that are gone.
+    FilesChanged(Vec<String>, Result<(), String>),
+    /// What a rename or move will change, for its dialog.
+    RenamePreview(renaming::Preview),
+    /// A rename or move finished: from, to, and the files whose links changed.
+    Moved(String, String, Result<Vec<String>, String>),
     SwitcherInput(String),
     SwitcherSubmit,
     SwitcherPick(usize),
@@ -262,6 +293,9 @@ impl App {
             jump_at: 0,
             navigating: false,
             use_counter: 0,
+            explorer_open: false,
+            explorer_focus: false,
+            dialog: None,
         };
         let vault = launch
             .vault
@@ -405,6 +439,7 @@ impl App {
             candidates: Vec::new(),
             attachments: Vec::new(),
             finder: Finder::new(),
+            explorer: files::ExplorerState::default(),
             ambiguous: HashMap::new(),
         }));
         Task::batch(tasks)
@@ -782,6 +817,40 @@ impl App {
                     w.attachments = attachments;
                 }
                 self.refresh_switcher();
+                self.rebuild_tree();
+                Task::none()
+            }
+            Message::Tags(tags) => {
+                self.tags_loaded(tags);
+                Task::none()
+            }
+            Message::ExplorerClick(i) => {
+                if let Some(w) = self.workspace_mut() {
+                    w.explorer.selected = Some(i);
+                }
+                self.explorer_focus = true;
+                self.explorer_key(&Key::Named(Named::Enter), None, Modifiers::default())
+            }
+            Message::InlineInput(value) => {
+                self.inline_input(value);
+                Task::none()
+            }
+            Message::InlineSubmit => self.inline_submit(),
+            Message::DialogInput(value) => self.dialog_input(value),
+            Message::DialogSubmit => self.dialog_submit(),
+            Message::DialogCancel => {
+                self.dialog = None;
+                Task::none()
+            }
+            Message::PickFolder(i) => self.pick_folder(i),
+            Message::DeleteCounted(path, folder, notes, attachments, linking) => {
+                self.delete_counted(path, folder, notes, attachments, linking);
+                Task::none()
+            }
+            Message::FilesChanged(gone, result) => self.files_changed(gone, result),
+            Message::Moved(from, to, result) => self.moved(from, to, result),
+            Message::RenamePreview(preview) => {
+                self.rename_preview(preview);
                 Task::none()
             }
             Message::Followed(name, col, followed) => self.followed(name, col, followed),
@@ -850,6 +919,18 @@ impl App {
             }
             return Task::none();
         }
+        if self.dialog.is_some() {
+            return self.dialog_key(&key, modifiers, captured);
+        }
+        let editing_inline = self
+            .workspace()
+            .is_some_and(|w| w.explorer.editing.is_some());
+        if editing_inline {
+            if key == Key::Named(Named::Escape) {
+                self.inline_cancel();
+            }
+            return Task::none();
+        }
         if self.switcher.is_some() {
             // The input takes typed text; Escape and movement come here.
             if captured && key != Key::Named(Named::Escape) {
@@ -866,7 +947,22 @@ impl App {
             return task;
         }
         if std::mem::take(&mut self.window_prefix) {
+            // `Ctrl+w h` goes left (explorer, then editor), `l` right.
+            match text.as_deref() {
+                Some("h") if self.focus.is_none() && self.explorer_open => {
+                    self.explorer_focus = true;
+                    return Task::none();
+                }
+                Some("l") if self.explorer_focus => {
+                    self.explorer_focus = false;
+                    return Task::none();
+                }
+                _ => {}
+            }
             return self.window_key(text.as_deref());
+        }
+        if self.explorer_focus {
+            return self.explorer_key(&key, text.as_deref(), modifiers);
         }
         if self.focus.is_some() {
             return self.panel_key(&key, text.as_deref(), modifiers);
@@ -884,6 +980,8 @@ impl App {
             return match text.as_deref() {
                 Some("f") => self.open_switcher(),
                 Some("b") => self.toggle_panel(true),
+                Some("e") => self.toggle_explorer(),
+                Some("n") => self.open_new_note_dialog(),
                 Some("o") => self.toggle_panel(false),
                 Some("x") if self.active_document().is_some() => self.close_or_quit(false),
                 _ => Task::none(),
@@ -1016,7 +1114,7 @@ impl App {
                 None => w.start().view(Message::OpenRecent),
             },
         };
-        let body = self.with_switcher(self.with_panel(body));
+        let body = self.with_dialog(self.with_switcher(self.with_explorer(self.with_panel(body))));
         // Before a vault is open the status line is an empty bar (mockup 10).
         let status: Element<'_, Message> = if self.workspace().is_some() {
             self.status_line().view_with(|_| None)
