@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod args;
+pub mod editor;
 pub mod fonts;
 pub mod mode;
 pub mod screens;

@@ -223,6 +223,11 @@ fn check_path(path: &str) -> Result<(), WriteError> {
     Ok(())
 }
 
+/// The hash [`Expect::Hash`] compares against: blake3 of the file's bytes.
+pub fn content_hash(bytes: &[u8]) -> Hash {
+    *blake3::hash(bytes).as_bytes()
+}
+
 fn hash_file(path: &Path) -> io::Result<Hash> {
     Ok(*blake3::hash(&fs::read(path)?).as_bytes())
 }

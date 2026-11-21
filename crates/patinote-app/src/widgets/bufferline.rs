@@ -15,6 +15,8 @@ pub struct Tab {
     pub title: String,
     /// Unsaved changes: a `●` after the title.
     pub modified: bool,
+    /// Insert mode: the dot takes `mode.insert` (0003 section 3.3).
+    pub insert: bool,
 }
 
 /// The bufferline. The mark is shown when notes are open (mockup 01); the
@@ -48,12 +50,12 @@ pub fn view<'a, Message: Clone + 'a>(
             .spacing(SPACE_8)
             .align_y(Alignment::Center);
         if tab.modified {
-            label = label.push(
-                text("●")
-                    .font(FONT_MONO)
-                    .size(TYPE_MONO_UI.size)
-                    .color(ACCENT),
-            );
+            let dot = if tab.insert && is_active {
+                MODE_INSERT
+            } else {
+                ACCENT
+            };
+            label = label.push(text("●").font(FONT_MONO).size(TYPE_MONO_UI.size).color(dot));
         }
         let underline: Element<'a, Message> = if is_active {
             container(Space::new().width(Length::Fill).height(SIZE_FOCUS_OUTLINE))

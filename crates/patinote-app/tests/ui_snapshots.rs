@@ -18,14 +18,14 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use common::{Env, command, send};
+use common::{Env, command};
+use iced::Length;
 use iced::advanced::graphics::text::font_system;
 use iced::advanced::renderer::{Headless, Style};
 use iced::widget::{column, container};
 use iced::{Color, Element, Event, Pixels, Size, mouse, window};
-use iced::{Length, Task};
 use iced_runtime::user_interface::{self, UserInterface};
-use patinote_app::app::{App, Message};
+use patinote_app::app::App;
 use patinote_app::screens::welcome;
 use patinote_app::sheet::Sheet;
 use patinote_app::state::{self, Recent, VaultState};
@@ -353,8 +353,8 @@ fn mockup_01_minimal_chrome() {
         command(&mut app, &format!("e {name}"));
     }
     command(&mut app, "b 1");
-    let _: Task<Message> = Task::none();
-    send(&mut app, Message::Done);
+    // The cursor on the "Tabel inti" heading, as in the mockup.
+    common::keys(&mut app, "12G");
     let mut h = Harness::new();
     for scale in SCALES {
         let frame = h.render(app.view().map(|_| ()), size(), scale);
@@ -368,6 +368,11 @@ fn mockup_01_minimal_chrome() {
         assert!(
             frame.count(BG_STATUSLINE_SEGMENT) >= area(5_000.0),
             "path and position segments"
+        );
+        assert!(frame.count(BG_CURSORLINE) >= area(20_000.0), "cursor line");
+        assert!(
+            frame.count(MODE_NORMAL) >= area(1_100.0),
+            "badge and block cursor"
         );
     }
     assert_eq!(app.title(), "Desain indeks Patinote — Patinote");
