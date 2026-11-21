@@ -178,6 +178,26 @@ impl Resolver {
     }
 }
 
+/// Where the note a link points to goes when it does not exist yet: a
+/// Markdown link starting with `./` or `../` is relative to the source
+/// note's folder, anything else is from the vault root; `.md` is added when
+/// missing. `None` when the path would leave the vault.
+pub fn missing_note_path(source: &str, kind: LinkKind, target: &str) -> Option<String> {
+    let relative =
+        kind == LinkKind::Markdown && (target.starts_with("./") || target.starts_with("../"));
+    let path = if relative {
+        let dir = source.rsplit_once('/').map_or("", |(d, _)| d);
+        normalize(&format!("{dir}/{target}"))?
+    } else {
+        normalize(target)?
+    };
+    Some(if path.to_lowercase().ends_with(".md") {
+        path
+    } else {
+        format!("{path}.md")
+    })
+}
+
 /// `![alt](img/a.png)` is a path; `![[a.png]]` is a name.
 fn looks_like_path(target: &str) -> bool {
     target.contains('/')
@@ -310,6 +330,29 @@ mod tests {
         assert_eq!(
             path(&r, "a.md", LinkKind::Frontmatter, "Patinote"),
             Some("Proyek/Patinote.md")
+        );
+    }
+
+    #[test]
+    fn missing_notes_go_where_the_link_says() {
+        let src = "Proyek/Sumber.md";
+        let md = LinkKind::Markdown;
+        assert_eq!(
+            missing_note_path(src, md, "../Arsip/Baru.md").as_deref(),
+            Some("Arsip/Baru.md")
+        );
+        assert_eq!(
+            missing_note_path(src, md, "./Baru").as_deref(),
+            Some("Proyek/Baru.md")
+        );
+        assert_eq!(
+            missing_note_path(src, md, "/Baru.md").as_deref(),
+            Some("Baru.md")
+        );
+        assert_eq!(missing_note_path(src, md, "../../Luar.md"), None);
+        assert_eq!(
+            missing_note_path(src, LinkKind::Wiki, "Ide/Baru").as_deref(),
+            Some("Ide/Baru.md")
         );
     }
 

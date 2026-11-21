@@ -256,6 +256,8 @@ pub fn render(text: &str) -> Document {
     let mut ordered: Vec<Option<u64>> = Vec::new();
     let mut task: Option<(bool, usize)> = None;
     let mut quote: Option<(Vec<Vec<Inline>>, usize)> = None;
+    // How many links came before the quote, to number a callout's links.
+    let mut quote_links = 0;
     let mut table: Option<TableParts> = None;
     let mut row: Vec<Vec<Inline>> = Vec::new();
     let mut in_head = false;
@@ -319,10 +321,8 @@ pub fn render(text: &str) -> Document {
                 dest_url,
                 ..
             }) => {
-                link = Some((
-                    dest_url.to_string(),
-                    !matches!(link_type, LinkType::WikiLink { .. }),
-                ));
+                let markdown = !matches!(link_type, LinkType::WikiLink { .. });
+                link = Some((destination(&dest_url, markdown), markdown));
                 link_text.clear();
             }
             Event::End(TagEnd::Link) => {
@@ -344,8 +344,13 @@ pub fn render(text: &str) -> Document {
                     });
                 }
             }
-            Event::Start(Tag::Image { dest_url, .. }) => {
-                image = Some(dest_url.to_string());
+            Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                ..
+            }) => {
+                let markdown = !matches!(link_type, LinkType::WikiLink { .. });
+                image = Some(destination(&dest_url, markdown));
                 block_line = line;
             }
             Event::End(TagEnd::Image) => {
@@ -417,6 +422,7 @@ pub fn render(text: &str) -> Document {
             Event::Start(Tag::BlockQuote(_)) => {
                 flush_paragraph(&mut inlines, &mut quote, &mut doc, block_line);
                 quote = Some((Vec::new(), line));
+                quote_links = doc.links.len();
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 flush_paragraph(&mut inlines, &mut quote, &mut doc, block_line);
@@ -444,11 +450,24 @@ pub fn render(text: &str) -> Document {
                     match callout {
                         Some(title) => {
                             let inner = render(&source[1..].join("\n"));
+                            // The body is parsed again on its own, so its
+                            // links replace the ones found in the quote and
+                            // are numbered after the links before it.
+                            doc.links.truncate(quote_links);
+                            let offset = doc.links.len();
+                            doc.links.extend(inner.links);
                             let body = inner
                                 .blocks
                                 .into_iter()
                                 .filter_map(|b| match b {
-                                    Block::Paragraph { inlines, .. } => Some(inlines),
+                                    Block::Paragraph { mut inlines, .. } => {
+                                        for i in &mut inlines {
+                                            if let Inline::Link { index, .. } = i {
+                                                *index += offset;
+                                            }
+                                        }
+                                        Some(inlines)
+                                    }
                                     _ => None,
                                 })
                                 .collect();
@@ -530,6 +549,16 @@ pub fn render(text: &str) -> Document {
     }
     flush_paragraph(&mut inlines, &mut quote, &mut doc, block_line);
     doc
+}
+
+/// A link's target as the index reads it: Markdown destinations to files
+/// are percent-decoded (`%20` is a space); web addresses stay as written.
+fn destination(dest: &str, markdown: bool) -> String {
+    if markdown && !dest.contains("://") && !dest.starts_with("mailto:") {
+        patinote_core::parser::percent_decode(dest)
+    } else {
+        dest.to_owned()
+    }
 }
 
 /// The text with the task on 0-based `line` checked or unchecked (F-27.3):
@@ -636,5 +665,52 @@ mod tests {
         );
         assert_eq!(toggle_task("- [X] besar").as_deref(), Some("- [ ] besar"));
         assert_eq!(toggle_task("no task"), None);
+    }
+
+    /// Every link's number points at its own target, callouts included.
+    #[test]
+    fn f27_links_in_callouts_are_numbered_with_the_rest() {
+        let doc = render("Lihat [[A]]\n\n> [!note] Catatan\n> Ke [[B]] dan [[C]]\n\nLalu [[D]]\n");
+        let mut seen = Vec::new();
+        let mut check = |inlines: &[Inline]| {
+            for i in inlines {
+                if let Inline::Link { target, index, .. } = i {
+                    assert_eq!(&doc.links[*index].target, target, "{:?}", doc.links);
+                    seen.push(target.clone());
+                }
+            }
+        };
+        for b in &doc.blocks {
+            match b {
+                Block::Paragraph { inlines, .. } => check(inlines),
+                Block::Quote { body, .. } => body.iter().for_each(|p| check(p)),
+                _ => {}
+            }
+        }
+        assert_eq!(seen, ["A", "B", "C", "D"]);
+        let targets: Vec<&str> = doc.links.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(
+            targets,
+            ["A", "B", "C", "D"],
+            "Tab goes through them in order"
+        );
+    }
+
+    /// Markdown destinations are decoded as the index decodes them, so
+    /// `%20` names the same note; web addresses stay as written.
+    #[test]
+    fn f27_markdown_link_targets_are_percent_decoded() {
+        let doc = render(
+            "[doc](Proyek/Desain%20indeks.md) [web](https://x.y/a%20b)\n\n![](Lampiran/foto%20saya.png)\n",
+        );
+        let targets: Vec<&str> = doc.links.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(targets, ["Proyek/Desain indeks.md", "https://x.y/a%20b"]);
+        assert!(
+            doc.blocks.iter().any(
+                |b| matches!(b, Block::Image { target, .. } if target == "Lampiran/foto saya.png")
+            ),
+            "{:?}",
+            doc.blocks
+        );
     }
 }

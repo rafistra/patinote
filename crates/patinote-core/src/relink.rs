@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::model::{Link, LinkKind};
 use crate::names::{fold, stem};
+use crate::parser::percent_decode;
 use crate::store::Hash;
 use crate::write::{Actor, Expect, Op, Transaction, content_hash};
 
@@ -247,10 +248,10 @@ pub fn plan(
                 });
             }
         }
+        let changes = nest(changes);
         if changes.is_empty() {
             continue;
         }
-        changes.sort_by_key(|c| c.byte_start);
         let mut content = Vec::with_capacity(bytes.len());
         let mut at = 0;
         for c in &changes {
@@ -270,6 +271,31 @@ pub fn plan(
         moves: moves.to_vec(),
         files,
     }
+}
+
+/// Sorts changes by position and folds a link inside another
+/// (`[![alt](img.png)](Note.md)`) into the outer one's new text, so no two
+/// changes overlap. An inner change whose text the outer rewrite no longer
+/// holds where it was, or a partial overlap, is dropped: that link stays.
+fn nest(mut changes: Vec<LinkChange>) -> Vec<LinkChange> {
+    changes.sort_by_key(|c| (c.byte_start, std::cmp::Reverse(c.byte_end)));
+    let mut out: Vec<LinkChange> = Vec::with_capacity(changes.len());
+    for c in changes {
+        let Some(outer) = out.last_mut().filter(|o| c.byte_start < o.byte_end) else {
+            out.push(c);
+            continue;
+        };
+        if c.byte_end > outer.byte_end {
+            continue;
+        }
+        // Rewrites only change a link's target, which comes after any link
+        // in its text, so the inner link sits at the same offset.
+        let at = c.byte_start - outer.byte_start;
+        if outer.new.get(at..at + c.old.len()) == Some(c.old.as_str()) {
+            outer.new.replace_range(at..at + c.old.len(), &c.new);
+        }
+    }
+    out
 }
 
 /// One link being rewritten.
@@ -575,28 +601,6 @@ fn keep_case(written: &str, new: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("/")
-}
-
-/// Decodes `%XX` escapes like the parser does.
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && i + 2 < bytes.len()
-            && let Some(b) = std::str::from_utf8(&bytes[i + 1..i + 3])
-                .ok()
-                .and_then(|h| u8::from_str_radix(h, 16).ok())
-        {
-            out.push(b);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
 }
 
 /// Escapes what a bare Markdown destination cannot hold: spaces, `<`, `>`,

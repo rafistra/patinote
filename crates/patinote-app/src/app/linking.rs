@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use iced::keyboard::{Key, Modifiers, key::Named};
 use iced::{Element, Task};
 use patinote_core::model::LinkKind;
+use patinote_core::resolve::missing_note_path;
 use patinote_core::{IndexOptions, Resolver};
 use patinote_index::update_index;
 
@@ -167,13 +168,9 @@ impl App {
                 let found = store.link_candidates(&target).unwrap_or_default();
                 let resolver = Resolver::new(found);
                 match resolver.resolve(&source, kind, &target) {
-                    None => {
-                        let mut path = target.trim_start_matches('/').to_owned();
-                        if !path.to_lowercase().ends_with(".md") {
-                            path.push_str(".md");
-                        }
-                        Followed::Missing(path)
-                    }
+                    None => Followed::Missing(
+                        missing_note_path(&source, kind, &target).unwrap_or_default(),
+                    ),
                     Some(r) if r.is_ambiguous() => Followed::Ambiguous {
                         name: target.clone(),
                         choices: r

@@ -494,3 +494,18 @@ fn f10_7_markdown_link_found_by_name_becomes_a_path_only_when_needed() {
         "[x](../Proyek/Rapat%20IKN.md)\n"
     );
 }
+
+#[test]
+fn f10_6_a_link_around_an_image_link_updates_both() {
+    let paths: &[(&str, &[&str])] = &[("Lama/Note.md", &[]), ("Lama/img.png", &[]), ("a.md", &[])];
+    let vault = Vault::new(
+        paths,
+        &[("a.md", "Lihat [![alt](Lama/img.png)](Lama/Note.md) ya\n")],
+    );
+    let note_paths: Vec<String> = paths.iter().map(|(p, _)| p.to_string()).collect();
+    let p = vault.plan(&folder_moves("Lama", "Baru", &note_paths));
+    assert_eq!(
+        new_text(&p, "a.md"),
+        "Lihat [![alt](Baru/img.png)](Baru/Note.md) ya\n"
+    );
+}

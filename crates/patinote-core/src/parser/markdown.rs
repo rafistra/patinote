@@ -156,8 +156,9 @@ fn has_scheme(dest: &str) -> bool {
     }
 }
 
-/// Decodes `%XX` escapes. Invalid escapes and invalid UTF-8 keep the input.
-fn percent_decode(s: &str) -> String {
+/// Decodes `%XX` escapes in a Markdown link destination. Invalid escapes
+/// and invalid UTF-8 keep the input.
+pub fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;

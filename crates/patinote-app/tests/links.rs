@@ -166,6 +166,22 @@ fn ambiguous_links_are_marked_in_the_note() {
 }
 
 #[test]
+fn f08_6_a_relative_markdown_link_to_a_missing_note_opens_it_in_that_folder() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[x](../Arsip/Baru.md)<Esc>0lgd");
+    assert_eq!(title(&app), "Baru");
+    assert!(
+        app.buffer_text("Arsip/Baru.md").is_some(),
+        "{:?}",
+        app.buffer_titles()
+    );
+    keys(&mut app, "iisi<Esc>");
+    command(&mut app, "w");
+    assert!(env.path("Vault/Arsip/Baru.md").exists());
+}
+
+#[test]
 fn f08_suggestions_and_the_picker_close_when_another_note_opens() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
