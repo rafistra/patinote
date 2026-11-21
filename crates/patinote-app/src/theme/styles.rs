@@ -1,7 +1,7 @@
 //! Iced widget styles, built only from [`super::tokens`] (0003 section 1).
 //! Widgets call these functions and never build a style themselves.
 
-use iced::widget::{button, container, svg};
+use iced::widget::{button, container, svg, text_input};
 use iced::{Background, Border, Color, Shadow, Theme};
 
 use super::tokens::*;
@@ -205,6 +205,20 @@ pub fn list_item(selected: bool) -> impl Fn(&Theme) -> container::Style {
     }
 }
 
+/// A filled bar: the 2 px `accent` line under the active buffer.
+pub fn accent_bar(_: &Theme) -> container::Style {
+    filled(ACCENT, TEXT_ON_ACCENT)
+}
+
+/// A command or path shown in a box (the missing vault path): `bg.chrome`
+/// with `border.default`.
+pub fn path_box(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(BORDER_DEFAULT, SIZE_BORDER, RADIUS_CONTROL),
+        ..filled(BG_CHROME, TEXT_STRONG)
+    }
+}
+
 // --- Buttons ------------------------------------------------------------------
 
 fn button_style(bg: Option<Color>, text: Color, edge: Option<Color>) -> button::Style {
@@ -245,6 +259,43 @@ pub fn button_secondary(focus: bool) -> impl Fn(&Theme, button::Status) -> butto
     }
 }
 
+/// A buffer in the bufferline: the active one on `tab.active.bg` in
+/// `text.strong`, the others in `text.subtle` (0003 section 6).
+pub fn buffer_tab(active: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let mut s = button_style(
+            active.then_some(TAB_ACTIVE_BG),
+            if active { TEXT_STRONG } else { TEXT_SUBTLE },
+            None,
+        );
+        s.border.radius = iced::border::Radius::default();
+        s
+    }
+}
+
+/// A button in the status line (`␣e explorer`): `text.secondary`, no frame;
+/// `text.strong` when its panel is open.
+pub fn statusline_button(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let mut s = button_style(None, if on { TEXT_STRONG } else { TEXT_SECONDARY }, None);
+        s.border.radius = iced::border::Radius::default();
+        s
+    }
+}
+
+/// A row of a list that is a button (recent notes): like [`list_item`].
+pub fn list_button(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let mut s = button_style(
+            selected.then_some(BG_SELECTED),
+            if selected { TEXT_STRONG } else { TEXT_PRIMARY },
+            None,
+        );
+        s.border.radius = RADIUS_ITEM.into();
+        s
+    }
+}
+
 /// The main action of a banner, rightmost: the banner's status color.
 pub fn banner_action(kind: BannerKind) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, _| button_style(Some(kind.colors().action), TEXT_ON_ACCENT, None)
@@ -255,6 +306,20 @@ pub fn banner_button(kind: BannerKind) -> impl Fn(&Theme, button::Status) -> but
     move |_, _| {
         let c = kind.colors();
         button_style(None, c.text, Some(c.border))
+    }
+}
+
+// --- Inputs -------------------------------------------------------------------
+
+/// The `:` input on the command line: no frame, `text.primary`.
+pub fn cmdline_input(_: &Theme, _: text_input::Status) -> text_input::Style {
+    text_input::Style {
+        background: Background::Color(Color::TRANSPARENT),
+        border: Border::default(),
+        icon: TEXT_MUTED,
+        placeholder: TEXT_MUTED,
+        value: TEXT_PRIMARY,
+        selection: EDITOR_SELECTION,
     }
 }
 

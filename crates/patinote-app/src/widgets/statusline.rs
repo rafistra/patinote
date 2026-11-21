@@ -1,7 +1,8 @@
-//! The status line (0003 sections 5 and 6, mockup 17): mode badge, path,
-//! optional notes, and one indicator on the right.
+//! The status line (F-28; 0003 sections 5 and 6; mockups 01, 11, 17): mode
+//! badge, path, notes (word and backlink counts), the index indicator, the
+//! conflict count, panel buttons and `line:column`.
 
-use iced::widget::{Space, container, rich_text, row, span};
+use iced::widget::{Space, button, container, rich_text, row, span};
 use iced::{Alignment, Color, Element, Length, Padding};
 
 use crate::mode::Mode;
@@ -57,16 +58,32 @@ pub fn thousands(n: usize) -> String {
     out
 }
 
-/// What the status line shows.
+/// A panel button at the right of the status line, like `␣e explorer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusButton {
+    pub label: &'static str,
+    /// Its panel is open.
+    pub on: bool,
+}
+
+/// What the status line shows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StatusLine {
     pub mode: Mode,
+    /// The note's path; empty when no note is open (`no note open`).
     pub path: String,
     /// Unsaved changes: `[+]` after the path.
     pub modified: bool,
-    /// Muted notes after the path, like `read-only`.
+    /// Muted notes after the path, like `186 words` or `read-only`.
     pub notes: Vec<String>,
     pub indicator: Option<Indicator>,
+    /// Syncthing conflicts (F-11); shown only when there are some.
+    pub conflicts: usize,
+    /// Panel buttons. With them, the indicator follows the notes instead of
+    /// sitting at the right end (mockup 01).
+    pub buttons: Vec<StatusButton>,
+    /// `line:column` of the cursor.
+    pub position: Option<String>,
 }
 
 fn segment<'a, Message: 'a>(
@@ -77,38 +94,80 @@ fn segment<'a, Message: 'a>(
         .center_y(Length::Fill)
 }
 
+fn indicator_segment<'a, Message: 'a>(indicator: &Indicator) -> container::Container<'a, Message> {
+    let (glyph, glyph_color, text, text_color) = indicator.parts();
+    let rich: iced::widget::text::Rich<'a, (), Message> = rich_text![
+        span(glyph).color(glyph_color),
+        span(" "),
+        span(text).color(text_color),
+    ]
+    .font(TYPE_MONO_UI.font)
+    .size(TYPE_MONO_UI.size);
+    segment(rich)
+}
+
 impl StatusLine {
-    /// Draws the status line at full width.
-    pub fn view<'a, Message: 'a>(&'a self) -> Element<'a, Message> {
+    /// Draws the status line at full width; its buttons do nothing.
+    pub fn view<'a, Message: Clone + 'a>(&self) -> Element<'a, Message> {
+        self.view_with(|_| None)
+    }
+
+    /// Draws the status line; `on_button` gives the message of each button.
+    pub fn view_with<'a, Message: Clone + 'a>(
+        &self,
+        on_button: impl Fn(usize) -> Option<Message>,
+    ) -> Element<'a, Message> {
         let badge = segment(typed(self.mode.label(), TYPE_MONO_UI).font(FONT_MONO_BOLD))
             .style(styles::mode_badge(self.mode));
-        let path = if self.modified {
-            format!("{} [+]", self.path)
+        let path: Element<'a, Message> = if self.path.is_empty() {
+            segment(typed("no note open", TYPE_MONO_UI).color(TEXT_MUTED)).into()
         } else {
-            self.path.clone()
+            let path = if self.modified {
+                format!("{} [+]", self.path)
+            } else {
+                self.path.clone()
+            };
+            segment(typed(path, TYPE_MONO_UI))
+                .style(styles::statusline_segment)
+                .into()
         };
-        let mut line = row![
-            badge,
-            segment(typed(path, TYPE_MONO_UI)).style(styles::statusline_segment)
-        ]
-        .align_y(Alignment::Center)
-        .height(SIZE_STATUSLINE_H);
+        let mut line = row![badge, path]
+            .align_y(Alignment::Center)
+            .height(SIZE_STATUSLINE_H);
         for note in &self.notes {
-            line = line.push(segment(
-                typed(note.as_str(), TYPE_MONO_UI).color(TEXT_MUTED),
-            ));
+            line = line.push(segment(typed(note.clone(), TYPE_MONO_UI).color(TEXT_MUTED)));
+        }
+        // With buttons the indicator follows the notes (mockup 01);
+        // otherwise it sits at the right end (mockups 11, 17).
+        let inline = !self.buttons.is_empty();
+        if inline && let Some(indicator) = &self.indicator {
+            line = line.push(indicator_segment(indicator));
+        }
+        if self.conflicts > 0 {
+            let label = if self.conflicts == 1 {
+                "⚠ 1 conflict".to_owned()
+            } else {
+                format!("⚠ {} conflicts", self.conflicts)
+            };
+            line = line.push(segment(typed(label, TYPE_MONO_UI).color(STATUS_WARNING)));
         }
         line = line.push(Space::new().width(Length::Fill));
-        if let Some(indicator) = &self.indicator {
-            let (glyph, glyph_color, text, text_color) = indicator.parts();
-            let indicator: iced::widget::text::Rich<'a, (), Message> = rich_text![
-                span(glyph).color(glyph_color),
-                span(" "),
-                span(text).color(text_color),
-            ]
-            .font(TYPE_MONO_UI.font)
-            .size(TYPE_MONO_UI.size);
-            line = line.push(segment(indicator));
+        if !inline && let Some(indicator) = &self.indicator {
+            line = line.push(indicator_segment(indicator));
+        }
+        for (i, b) in self.buttons.iter().enumerate() {
+            let mut btn = button(container(typed(b.label, TYPE_MONO_UI)).center_y(Length::Fill))
+                .padding(Padding::from([0.0, SPACE_12]))
+                .height(Length::Fill)
+                .style(styles::statusline_button(b.on));
+            if let Some(m) = on_button(i) {
+                btn = btn.on_press(m);
+            }
+            line = line.push(container(btn).center_y(Length::Fill));
+        }
+        if let Some(pos) = &self.position {
+            line = line
+                .push(segment(typed(pos.clone(), TYPE_MONO_UI)).style(styles::statusline_segment));
         }
         container(line)
             .width(Length::Fill)

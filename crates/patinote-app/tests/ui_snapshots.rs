@@ -12,16 +12,26 @@
 //! ICED_TEST_BACKEND=tiny-skia cargo test -p patinote-app --test ui_snapshots
 //! ```
 
+mod common;
+
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use common::{Env, command, send};
 use iced::advanced::graphics::text::font_system;
 use iced::advanced::renderer::{Headless, Style};
+use iced::widget::{column, container};
 use iced::{Color, Element, Event, Pixels, Size, mouse, window};
+use iced::{Length, Task};
 use iced_runtime::user_interface::{self, UserInterface};
+use patinote_app::app::{App, Message};
+use patinote_app::screens::welcome;
 use patinote_app::sheet::Sheet;
+use patinote_app::state::{self, Recent, VaultState};
 use patinote_app::theme::{self, tokens::*};
+use patinote_app::widgets::bufferline;
+use patinote_core::config::Config;
 
 struct Harness {
     renderer: iced::Renderer,
@@ -199,10 +209,166 @@ fn bundled_fonts_render_without_system_fonts() {
         modified: false,
         notes: vec![],
         indicator: Some(patinote_app::widgets::statusline::Indicator::NotSaved),
+        ..Default::default()
     };
     let frame = h.render(line.view(), Size::new(400.0, SIZE_STATUSLINE_H), 1.0);
     assert!(
         frame.count_near(STATUS_ERROR, 24) > 20,
         "the ✕ glyph and text are drawn in status.error"
     );
+}
+
+const SCALES: [f32; 3] = [1.0, 1.25, 2.0];
+
+fn size() -> Size {
+    Size::new(SIZE_WINDOW.0, SIZE_WINDOW.1)
+}
+
+fn rgb(c: Color) -> [u8; 3] {
+    let [r, g, b, _] = c.into_rgba8();
+    [r, g, b]
+}
+
+/// Mockup 10: both cards side by side in the app's frame (bufferline with
+/// the name only, empty status line and command line).
+#[test]
+fn mockup_10_welcome_and_missing_vault() {
+    let mut h = Harness::new();
+    let actions = welcome::Actions {
+        choose: (),
+        retry: (),
+    };
+    let welcome_card = welcome::Card::Welcome;
+    let missing = welcome::Card::Missing {
+        path: "~/Vault".into(),
+    };
+    for scale in SCALES {
+        let view: Element<'_, ()> = column![
+            bufferline::view(&[], None, |_| ()),
+            container(welcome::sheet(&welcome_card, &missing, &actions))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(theme::styles::app),
+            container("")
+                .width(Length::Fill)
+                .height(SIZE_STATUSLINE_H)
+                .style(theme::styles::statusline),
+            container("")
+                .width(Length::Fill)
+                .height(SIZE_CMDLINE_H)
+                .style(theme::styles::cmdline),
+        ]
+        .into();
+        let frame = h.render(view, size(), scale);
+        frame.save(&out_dir().join(file_name("10-welcome-and-missing-vault", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(
+            frame.count(BG_OVERLAY) >= area(150_000.0),
+            "two cards on bg.overlay"
+        );
+        assert!(
+            frame.count(ACCENT) >= area(3_000.0),
+            "primary buttons in accent"
+        );
+        assert_eq!(frame.pixel(2, 2), rgb(BG_CHROME), "bufferline");
+    }
+}
+
+/// The real first-run screen: one card, centered.
+#[test]
+fn welcome_screen_shows_one_centered_card() {
+    let env = Env::new();
+    let (app, _) = App::new(env.launch(None, Config::default()));
+    let mut h = Harness::new();
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("10-welcome.png"));
+    // The card's middle sits at the window's middle.
+    let y = 200;
+    let row: Vec<u32> = (0..frame.size.width)
+        .filter(|x| frame.pixel(*x, y) == rgb(BG_OVERLAY))
+        .collect();
+    let (first, last) = (row[0], row[row.len() - 1]);
+    assert!(
+        ((first + last) as i64 / 2 - 720).abs() <= 2,
+        "{first}..{last}"
+    );
+    // The border is drawn in `border.strong`, so the fill is 2 px narrower.
+    assert!(((last - first) as f32 - SIZE_WELCOME_W).abs() <= 4.0);
+}
+
+/// Seconds before now for each recent note of mockup 11.
+const RECENT: [(&str, u64); 5] = [
+    ("Proyek/Desain indeks Patinote.md", 120),
+    ("Harian/2026-11-19.md", 30 * 3600),
+    ("Proyek/Patinote.md", 31 * 3600),
+    ("Rapat/Rapat 19 Nov.md", 2 * 86_400 + 60),
+    ("Referensi/Daftar bacaan.md", 8 * 86_400),
+];
+
+/// A started app on the mockup vault, with mockup 11's recent notes.
+fn app_with_recent(env: &Env) -> App {
+    let vault = env.vault();
+    let id = patinote_core::location::vault_id(&vault).unwrap();
+    let now = state::now();
+    let ui = VaultState {
+        recent: RECENT
+            .iter()
+            .map(|(path, ago)| Recent {
+                path: (*path).into(),
+                opened: now - ago,
+            })
+            .collect(),
+        ..VaultState::default()
+    };
+    state::save(&state::vault_state_path(&env.path("state"), &id), &ui).unwrap();
+    env.start(env.launch(Some(vault), Config::default()))
+}
+
+/// Mockup 11: no note open.
+#[test]
+fn mockup_11_no_note_open() {
+    let env = Env::new();
+    let app = app_with_recent(&env);
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("11-no-note-open", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(
+            frame.count(BG_SELECTED) >= area(15_000.0),
+            "selected recent note"
+        );
+        assert!(frame.count(MODE_NORMAL) >= area(1_000.0), "NORMAL badge");
+        assert_eq!(frame.pixel(2, 2), rgb(BG_CHROME), "bufferline");
+    }
+}
+
+/// Mockup 01: three notes open, the first active. The editor of step 2.3
+/// is not here yet; the bufferline and status line are compared.
+#[test]
+fn mockup_01_minimal_chrome() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    for name in ["Desain indeks Patinote", "Patinote", "2026-11-19"] {
+        command(&mut app, &format!("e {name}"));
+    }
+    command(&mut app, "b 1");
+    let _: Task<Message> = Task::none();
+    send(&mut app, Message::Done);
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("01-minimal", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(TAB_ACTIVE_BG) >= area(3_000.0), "active buffer");
+        assert!(
+            frame.count(ACCENT) >= area(200.0),
+            "accent underline and mark"
+        );
+        assert!(
+            frame.count(BG_STATUSLINE_SEGMENT) >= area(5_000.0),
+            "path and position segments"
+        );
+    }
+    assert_eq!(app.title(), "Desain indeks Patinote — Patinote");
 }

@@ -7,6 +7,8 @@
 pub mod commands;
 pub mod config;
 pub mod index;
+#[cfg(unix)]
+pub mod ipc;
 pub mod location;
 pub mod model;
 pub mod names;

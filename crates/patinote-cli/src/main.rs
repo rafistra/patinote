@@ -7,6 +7,7 @@ mod cli;
 mod commands;
 mod context;
 mod mcp;
+mod open;
 mod output;
 
 fn main() -> std::process::ExitCode {

@@ -901,7 +901,7 @@ Komponen yang sama disusun dalam tiga mode; berpindah mode tidak menutup buffer 
 **Kriteria penerimaan**
 
 - [ ] F-28.1 Layar utama sesuai `docs/mockups/01-minimal.html` dan `02-minimal-panels-open.html` (dicek dengan screenshot pembanding).
-- [ ] F-28.2 Saat pertama kali dibuka, tampil mode minimal: tanpa panel, hanya bufferline, editor, status line, baris perintah.
+- [x] F-28.2 Saat pertama kali dibuka, tampil mode minimal: tanpa panel, hanya bufferline, editor, status line, baris perintah. `f28_2_first_open_is_minimal_with_no_note_open`
 - [ ] F-28.3 `<leader>e`, `<leader>b`, `<leader>o` membuka dan menutup panelnya; panel yang ditutup melepas memorinya.
 - [ ] F-28.4 Spasi lalu tunggu 300 ms memunculkan popup; Spasi lalu `f` dengan cepat membuka quick switcher tanpa popup sempat tampil.
 - [ ] F-28.5 Status line menampilkan mode yang benar dalam satu frame setelah mode berganti.

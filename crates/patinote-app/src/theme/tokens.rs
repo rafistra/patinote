@@ -166,6 +166,9 @@ pub const TYPE_UI_SMALL: Type = ty(FONT_UI, 13.0, 13.0 * 1.5);
 pub const TYPE_LABEL: Type = ty(FONT_UI_SEMIBOLD, 11.0, 11.0 * 1.2);
 /// Letter spacing of `type.label`.
 pub const TYPE_LABEL_TRACKING: f32 = 0.8;
+/// `type.title`: 22 px / 1.3, weight 700. Page titles: the welcome card and
+/// the vault name on the start screen.
+pub const TYPE_TITLE: Type = ty(FONT_UI_BOLD, 22.0, 22.0 * 1.3);
 /// `type.read.body`: 16 px / 1.7.
 pub const TYPE_READ_BODY: Type = ty(FONT_UI, 16.0, 16.0 * 1.7);
 /// `type.read.h1`: 32 px / 1.25, weight 700.
@@ -245,6 +248,13 @@ pub const SIZE_LIST_ROW: f32 = 34.0;
 pub const SIZE_LIST_ROW_LARGE: f32 = 40.0;
 /// Banner and status line icons.
 pub const SIZE_ICON: f32 = 18.0;
+/// The Patinote mark in the bufferline, and on the welcome card.
+pub const SIZE_LOGO: f32 = 16.0;
+pub const SIZE_LOGO_LARGE: f32 = 28.0;
+/// Key column of the shortcut list on the start screen.
+pub const SIZE_SHORTCUT_KEY_W: f32 = 64.0;
+/// Time column of the recent notes list on the start screen.
+pub const SIZE_RECENT_TIME_W: f32 = 84.0;
 /// Borders, and the active tab and focus outlines.
 pub const SIZE_BORDER: f32 = 1.0;
 pub const SIZE_FOCUS_OUTLINE: f32 = 2.0;

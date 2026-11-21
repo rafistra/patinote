@@ -8,8 +8,8 @@ use std::time::Instant;
 use clap::{CommandFactory, Parser};
 use patinote_core::commands::{
     AgentsInitOutput, BacklinksOutput, CacheCleanOutput, ConflictsOutput, ErrorBody, ErrorCode,
-    IndexOutput, LinksOutput, ListOutput, OrphansOutput, OutputWarning, ReadOutput, ResolveOutput,
-    SearchOutput, TagsOutput, UnresolvedOutput, VaultInfoOutput, exit,
+    IndexOutput, LinksOutput, ListOutput, OpenOutput, OrphansOutput, OutputWarning, ReadOutput,
+    ResolveOutput, SearchOutput, TagsOutput, UnresolvedOutput, VaultInfoOutput, exit,
 };
 use patinote_core::location;
 use patinote_index::cache_clean;
@@ -172,6 +172,7 @@ fn run(cli: &Cli) -> Result<usize, Failure> {
         Command::Unresolved => with_vault(g, commands::unresolved),
         Command::Resolve { name } => with_vault(g, |ctx| commands::resolve(ctx, name)),
         Command::Conflicts => with_vault(g, commands::conflicts),
+        Command::Open { note } => with_vault(g, |ctx| crate::open::open(ctx, note)),
         Command::Agents(AgentsCommand::Init { update, agents }) => {
             with_vault(g, |ctx| crate::agents::init(ctx, *update, agents))
         }
@@ -266,6 +267,11 @@ printable!(UnresolvedOutput, |o| lines(o.targets.iter().map(|t| {
             .join(", ")
     )
 })));
+printable!(OpenOutput, |o| format!(
+    "{}\t{}\n",
+    o.note.path,
+    if o.started { "started" } else { "opened" }
+));
 printable!(ResolveOutput, |o| match &o.path {
     Some(p) => lines(
         std::iter::once(p.clone()).chain(

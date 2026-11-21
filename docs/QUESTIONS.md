@@ -157,3 +157,23 @@ Rekomendasi agent: A.
 
 Rekomendasi agent: A. Pemeriksaan tetap ketat, dan setiap pengecualian punya alasan.
 **Jawaban:** A, disetujui pemilik (20 November 2026).
+
+## Q-013 · Bentuk kunci `layout` dan `renderer` di `config.toml` (langkah 2.2, 21 November 2026)
+
+**Konteks:** PRD F-28 menulis `layout = "minimal"` (kunci di tingkat atas), dan F-28.12 memakai `layout = "classic"`. Bagian "Gerbang 2: dampak arsitektur" butir 3 menyebut bagian `[layout]`. Di TOML, `layout` tidak bisa sekaligus berupa string dan tabel. Q-004 juga meminta pilihan `renderer = "tiny-skia" | "wgpu"` tanpa menyebut bagiannya.
+**Pilihan:**
+- A. Kunci tingkat atas: `layout = "classic"` dan `renderer = "wgpu"`, persis seperti tulisan F-28 dan Q-004. Bagian `[layout]` tidak dipakai.
+- B. Di dalam bagian: `[layout] default = "classic"` dan `[editor] renderer = "wgpu"`. F-28.12 perlu ditulis ulang.
+
+Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2; bisa diubah bila pemilik memilih B.
+**Jawaban:** _(belum dijawab)_
+
+## Q-014 · Urutan memilih vault di aplikasi (langkah 2.2, 21 November 2026)
+
+**Konteks:** F-01 menetapkan urutan untuk CLI (`--vault`, `PATINOTE_VAULT`, vault default di konfigurasi) dan menyebut aplikasi "membuka vault terakhir". Urutan lengkap untuk aplikasi tidak ditulis.
+**Pilihan:**
+- A. `--vault` (dari `patinote open`), lalu `PATINOTE_VAULT`, lalu vault terakhir, lalu `[vault] default`, lalu layar awal.
+- B. Vault terakhir selalu menang atas `PATINOTE_VAULT` dan `[vault] default`.
+
+Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2.
+**Jawaban:** _(belum dijawab)_
