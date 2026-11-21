@@ -722,6 +722,16 @@ impl App {
 
     /// Moves a note or folder to `.trash/` through the write path (F-10.3).
     fn trash(&mut self, path: String) -> Task<Message> {
+        // Text that cannot be saved would be closed with the note: the
+        // trash only gets what is on disk.
+        let prefix = format!("{path}/");
+        if let Some(p) = self.unsaved_stuck(|p| p == path || p.starts_with(&prefix), true) {
+            self.say(
+                Level::Error,
+                format!("Can't delete \"{path}\": \"{p}\" has unsaved changes"),
+            );
+            return Task::none();
+        }
         // Open notes inside are saved first, then closed.
         let save = self.autosave(true);
         let Some(w) = self.workspace() else {

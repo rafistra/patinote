@@ -335,11 +335,23 @@ impl App {
         from: String,
         to: String,
     ) -> Task<Message> {
+        // Text that cannot be saved would be lost when its note is read
+        // again after the move: settle it first.
+        if let Some(p) = self.unsaved_stuck(|_| true, true) {
+            self.say(
+                super::Level::Error,
+                format!("Can't rename \"{from}\": \"{p}\" has unsaved changes"),
+            );
+            return Task::none();
+        }
         // Open notes are saved first, so nothing on disk is newer than them.
         let save = self.autosave(true);
-        let Some(w) = self.workspace() else {
+        let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
+        // No save starts at a path that is moving; text typed meanwhile is
+        // saved at the new path once the move lands.
+        w.moving = true;
         let root: PathBuf = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let job = Task::perform(
@@ -361,6 +373,9 @@ impl App {
         to: String,
         result: Result<Vec<String>, String>,
     ) -> Task<Message> {
+        if let Some(w) = self.workspace_mut() {
+            w.moving = false;
+        }
         let changed = match result {
             Ok(c) => c,
             Err(e) => {
@@ -369,6 +384,7 @@ impl App {
             }
         };
         let mut reload = Vec::new();
+        let mut compare = Vec::new();
         if let Some(w) = self.workspace_mut() {
             let prefix = format!("{from}/");
             for b in &mut w.buffers {
@@ -379,11 +395,24 @@ impl App {
                         .strip_prefix(&prefix)
                         .map(|rest| format!("{to}/{rest}"))
                 };
+                let rewritten = changed.contains(&b.path)
+                    || new_path.as_ref().is_some_and(|p| changed.contains(p));
+                let moved = new_path.is_some();
                 if let Some(p) = new_path {
                     b.path = p;
-                    reload.push(b.path.clone());
-                } else if changed.contains(&b.path) {
-                    reload.push(b.path.clone());
+                }
+                match b.doc.as_mut() {
+                    // Typed into while the move ran: the text stays, at the
+                    // new path. When the move also rewrote its links, the
+                    // disk differs and the usual banner lets the user pick.
+                    Some(d) if d.dirty() => {
+                        d.path = b.path.clone();
+                        if rewritten {
+                            compare.push(b.path.clone());
+                        }
+                    }
+                    _ if moved || rewritten => reload.push(b.path.clone()),
+                    _ => {}
                 }
             }
             for r in &mut w.state.recent {
@@ -416,7 +445,13 @@ impl App {
                 }))
             })
             .collect();
+        let compare: Vec<Task<Message>> = compare.into_iter().map(|p| self.read_disk(p)).collect();
         let refresh = self.refresh_index(to);
-        Task::batch(tasks.into_iter().chain([refresh, self.save_vault_state()]))
+        Task::batch(
+            tasks
+                .into_iter()
+                .chain(compare)
+                .chain([refresh, self.save_vault_state()]),
+        )
     }
 }

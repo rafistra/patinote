@@ -57,6 +57,17 @@ pub fn vim_key(key: &Key, text: Option<&str>, modifiers: Modifiers) -> Option<vi
     (chars.next().is_none() && !c.is_control()).then_some(vim::Key::Char(c))
 }
 
+/// The error to show after a save that failed.
+fn landed_message(doc: &Document) -> Option<(Level, String)> {
+    match &doc.save {
+        Save::Failed { reason, .. } => Some((
+            Level::Error,
+            format!("Can't save \"{}\": {reason}", doc.path),
+        )),
+        _ => None,
+    }
+}
+
 /// `186 words`.
 fn word_count(text: &str) -> String {
     let n = text.split_whitespace().count();
@@ -88,6 +99,22 @@ impl App {
             .backlinks
             .as_ref()
             .map(Vec::len)
+    }
+
+    /// The text of the open note at `path`, for tests.
+    pub fn buffer_text(&self, path: &str) -> Option<String> {
+        self.workspace()?
+            .buffers
+            .iter()
+            .find(|b| b.path == path)?
+            .doc
+            .as_ref()
+            .map(|d| d.buffer.text())
+    }
+
+    /// Whether the app waits for saves to land before quitting, for tests.
+    pub fn quitting(&self) -> bool {
+        self.quitting
     }
 
     /// Whether the active note has unsaved changes, for tests.
@@ -309,6 +336,8 @@ impl App {
             && let Some(b) = w.buffers.iter_mut().find(|b| b.path == path)
         {
             match result {
+                // Reopened while its closing save ran: its text is newer.
+                _ if b.doc.is_some() => loaded = true,
                 Ok(bytes) => {
                     let mut engine = vim::Vim::new(vim::Config { insert_escape });
                     if let Some(text) = register {
@@ -366,6 +395,32 @@ impl App {
         })
     }
 
+    /// An open or closing note in the paths `within` whose text is not on
+    /// disk and will not get there on its own: waiting on a conflict, or
+    /// (with `failed`) after a failed save.
+    pub(super) fn unsaved_stuck(
+        &self,
+        within: impl Fn(&str) -> bool,
+        failed: bool,
+    ) -> Option<String> {
+        let w = self.workspace()?;
+        w.buffers
+            .iter()
+            .filter_map(|b| b.doc.as_ref())
+            .chain(&w.closing)
+            .find(|d| {
+                d.dirty()
+                    && d.read_only.is_none()
+                    && within(&d.path)
+                    && match d.save {
+                        Save::Changed => true,
+                        Save::Failed { .. } => failed,
+                        _ => false,
+                    }
+            })
+            .map(|d| d.path.clone())
+    }
+
     /// Saves every note that needs it (`force`: now, without waiting for
     /// the one-second pause).
     pub(super) fn autosave(&mut self, force: bool) -> Task<Message> {
@@ -376,6 +431,9 @@ impl App {
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
+        if w.moving {
+            return Task::none();
+        }
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let jobs: Vec<_> = w
@@ -405,12 +463,23 @@ impl App {
         let now = Instant::now();
         let mut message = None;
         let mut reread = None;
+        let mut next = Task::none();
         if let Some(w) = self.workspace_mut() {
             if let Some(i) = w.closing.iter().position(|d| d.path == done.path) {
                 let mut doc = w.closing.remove(i);
                 doc.finish_save(&done, now);
-                if doc.dirty() {
+                if doc.dirty() && doc.save == Save::Idle {
+                    // Typed into before it was closed, after this save
+                    // started: save the rest, still closed.
+                    let job = doc.start_save(&w.session.paths.root, &w.journal);
+                    w.closing.push(doc);
+                    next = Task::future(async move { Message::Saved(job.run()) });
+                } else if doc.dirty() {
                     // Saving a closed note failed: bring it back, text intact.
+                    message = landed_message(&doc);
+                    if doc.save == Save::Changed {
+                        reread = Some(doc.path.clone());
+                    }
                     let id = w.buffers.iter().map(|b| b.id).max().map_or(0, |m| m + 1);
                     w.buffers.push(Buffer {
                         path: doc.path.clone(),
@@ -429,18 +498,10 @@ impl App {
                 .find(|d| d.path == done.path)
             {
                 doc.finish_save(&done, now);
-                match &doc.save {
-                    Save::Failed { reason, .. } => {
-                        message = Some((
-                            Level::Error,
-                            format!("Can't save \"{}\": {reason}", doc.path),
-                        ));
-                    }
-                    Save::Changed => {
-                        // The hash on disk differs (F-11.3): read it for the banner.
-                        reread = Some(doc.path.clone());
-                    }
-                    _ => {}
+                message = landed_message(doc);
+                if doc.save == Save::Changed {
+                    // The hash on disk differs (F-11.3): read it for the banner.
+                    reread = Some(doc.path.clone());
                 }
             }
         }
@@ -449,6 +510,9 @@ impl App {
         }
         if let Some(path) = reread {
             return self.read_disk(path);
+        }
+        if self.workspace().is_some_and(|w| !w.closing.is_empty()) {
+            return next;
         }
         if self.quitting {
             if self.save_failed() {
