@@ -223,6 +223,30 @@ fn check_path(path: &str) -> Result<(), WriteError> {
     Ok(())
 }
 
+/// A note that is a symlink is written through the link, to the file it
+/// points to, and only when that file is itself a note the vault may write:
+/// inside the vault, not hidden. Anything else is refused, so the link is
+/// never replaced by a copy and nothing outside the vault is touched.
+fn check_link(root: &Path, path: &str) -> Result<(), WriteError> {
+    let full = root.join(path);
+    let is_link = fs::symlink_metadata(&full).is_ok_and(|m| m.file_type().is_symlink());
+    if !is_link {
+        return Ok(());
+    }
+    let bad = |reason| WriteError::InvalidPath {
+        path: path.to_owned(),
+        reason,
+    };
+    let target =
+        fs::canonicalize(&full).map_err(|_| bad("the note links to a file that does not exist"))?;
+    let root = fs::canonicalize(root).map_err(io_err(root))?;
+    let rel = target
+        .strip_prefix(&root)
+        .map_err(|_| bad("the note links to a file outside the vault"))?;
+    check_path(&rel.to_string_lossy())
+        .map_err(|_| bad("the note links to a file the vault may not write"))
+}
+
 /// The hash [`Expect::Hash`] compares against: blake3 of the file's bytes.
 pub fn content_hash(bytes: &[u8]) -> Hash {
     *blake3::hash(bytes).as_bytes()
@@ -373,6 +397,7 @@ pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
                 content,
                 expect,
             } => {
+                check_link(root, path)?;
                 let ok = matches(root, path, expect).map_err(io_err(&root.join(path)))?;
                 let old = fs::read(root.join(path)).unwrap_or_default();
                 PlannedOp {
@@ -605,7 +630,16 @@ impl Journal {
 
 /// Writes `bytes` to `path` atomically: a hidden temporary file in the same
 /// folder, synced, then renamed over the target. `mode` keeps permissions.
+/// A symlink is written through: the file it points to is replaced, and
+/// the link stays (callers check where it points, see `check_link`).
 fn atomic_write(path: &Path, bytes: &[u8], mode: Option<u32>) -> io::Result<()> {
+    let resolved;
+    let path = if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        resolved = fs::canonicalize(path)?;
+        resolved.as_path()
+    } else {
+        path
+    };
     let dir = path
         .parent()
         .ok_or_else(|| io::Error::other("no parent folder"))?;

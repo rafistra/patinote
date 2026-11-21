@@ -242,6 +242,9 @@ impl SaveJob {
 
 /// A short reason for the banner: "the disk is full", "permission denied".
 fn io_reason(e: &WriteError) -> String {
+    if let WriteError::InvalidPath { reason, .. } = e {
+        return (*reason).to_owned();
+    }
     let source = match e {
         WriteError::Io { source, .. }
         | WriteError::RolledBack { source, .. }
