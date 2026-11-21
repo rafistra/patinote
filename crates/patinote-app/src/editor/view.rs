@@ -310,11 +310,11 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
         }
         self.entry(cur, text_w, &mut cache);
         let anchor = self.popup.as_ref().map_or(self.cursor.1, |(c, _)| *c);
+        let line_h = self.ty.line_height;
         let at = |c: usize| {
-            cache
-                .get(&cur)
-                .and_then(|e| e.paragraph.grapheme_position(0, c))
-                .unwrap_or(Point::ORIGIN)
+            cache.get(&cur).map_or(Point::ORIGIN, |e| {
+                char_position(&e.paragraph, &self.lines[cur], c, line_h)
+            })
         };
         let n = self.lines[cur].chars().count();
         let pos = at(self.cursor.1.min(n));
@@ -433,6 +433,52 @@ fn paragraph<P: text::Paragraph<Font = Font>>(
         shaping: Shaping::Advanced,
         wrapping: Wrapping::WordOrGlyph,
     })
+}
+
+/// Where character `c` of `text` sits in its paragraph, relative to the
+/// paragraph's top left. `grapheme_position` only looks at one visual row
+/// and counts from that row's start, so the row holding `c` is found first.
+fn char_position<P: text::Paragraph<Font = Font>>(
+    p: &P,
+    text: &str,
+    c: usize,
+    line_h: f32,
+) -> Point {
+    let rows = ((p.min_bounds().height / line_h).round() as usize).max(1);
+    let (mut row, mut start) = (0, 0);
+    for k in 1..rows {
+        match row_start(p, text, k, line_h) {
+            Some(s) if s <= c && s > start => (row, start) = (k, s),
+            _ => break,
+        }
+    }
+    let y = row as f32 * line_h;
+    p.grapheme_position(row, c - start)
+        .map_or(Point::new(0.0, y), |at| Point::new(at.x, y + at.y))
+}
+
+/// The first character of visual row `row`.
+fn row_start<P: text::Paragraph<Font = Font>>(
+    p: &P,
+    text: &str,
+    row: usize,
+    line_h: f32,
+) -> Option<usize> {
+    // Just above the row's bottom edge: inside the row.
+    let y = (row as f32 + 1.0) * line_h - 1.0;
+    p.hit_test(Point::new(-1.0, y))
+        .map(|hit| char_index(text, hit.cursor()))
+}
+
+/// The character of `text` under `point`, relative to the paragraph.
+fn char_at<P: text::Paragraph<Font = Font>>(p: &P, text: &str, point: Point) -> usize {
+    p.hit_test(point)
+        .map_or(0, |hit| char_index(text, hit.cursor()))
+}
+
+/// Hits are byte offsets; the editor counts characters.
+fn char_index(text: &str, byte: usize) -> usize {
+    text.char_indices().take_while(|(i, _)| *i < byte).count()
 }
 
 fn cell_text(
@@ -621,10 +667,7 @@ where
                     let h = entry.paragraph.min_bounds().height.max(self.ty.line_height);
                     if point.y < y + h {
                         let local = Point::new((point.x - text_x).max(0.0), point.y - y);
-                        let col = entry
-                            .paragraph
-                            .hit_test(local)
-                            .map_or(0, |hit| hit.cursor());
+                        let col = char_at(&entry.paragraph, &self.lines[i], local);
                         shell.publish(f((i, col), ctrl));
                         shell.capture_event();
                         return;
@@ -785,11 +828,13 @@ where
             if i == cur.0 && self.shape != Shape::Hidden {
                 let n = self.lines[i].chars().count();
                 let c = cur.1.min(n);
-                let pos = p.grapheme_position(0, c).unwrap_or(Point::ORIGIN);
+                let pos = char_position(p, &self.lines[i], c, line_h);
                 let at = Point::new(origin.x + pos.x, origin.y + pos.y);
-                let cell = match p.grapheme_position(0, c + 1) {
-                    Some(next) if next.x > pos.x && next.y == pos.y => next.x - pos.x,
-                    _ => SIZE_EDITOR_CELL_W,
+                let next = char_position(p, &self.lines[i], (c + 1).min(n), line_h);
+                let cell = if next.x > pos.x && next.y == pos.y {
+                    next.x - pos.x
+                } else {
+                    SIZE_EDITOR_CELL_W
                 };
                 let ch = self.lines[i].chars().nth(c);
                 cursor_paint = match self.shape {
@@ -990,6 +1035,46 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    type P = iced::advanced::graphics::text::Paragraph;
+
+    fn laid_out(text: &str, width: f32) -> P {
+        paragraph(
+            &[(text.to_owned(), TEXT_PRIMARY, false)],
+            width,
+            TYPE_EDITOR,
+        )
+    }
+
+    #[test]
+    fn f05_the_cursor_on_a_wrapped_row_is_on_that_row() {
+        let text = "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh";
+        let lh = TYPE_EDITOR.line_height;
+        // Narrow enough that the line wraps.
+        let p = laid_out(text, f32::from(160u16));
+        assert!(p.min_bounds().height > lh, "the line wraps");
+        assert_eq!(char_position(&p, text, 0, lh), Point::ORIGIN);
+        let end = char_position(&p, text, text.chars().count(), lh);
+        assert!(end.y >= lh, "the end is on a later row: {end:?}");
+        // Each character is drawn where clicking it lands.
+        for c in 0..text.chars().count() {
+            let at = char_position(&p, text, c, lh);
+            let hit = char_at(&p, text, Point::new(at.x + 1.0, at.y + lh - 1.0));
+            assert_eq!(hit, c, "character {c} at {at:?}");
+        }
+    }
+
+    #[test]
+    fn f05_clicking_after_non_ascii_text_lands_on_the_character_clicked() {
+        let text = "é—ü—é abc";
+        let lh = TYPE_EDITOR.line_height;
+        let p = laid_out(text, SIZE_EDITOR_MAXW);
+        for c in 0..text.chars().count() {
+            let at = char_position(&p, text, c, lh);
+            let hit = char_at(&p, text, Point::new(at.x + 1.0, lh - 1.0));
+            assert_eq!(hit, c, "character {c}");
+        }
+    }
 
     #[test]
     fn matches_are_found_without_overlap() {

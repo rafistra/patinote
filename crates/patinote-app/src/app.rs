@@ -659,6 +659,15 @@ impl App {
         Task::batch([leave, read, backlinks, self.save_vault_state()])
     }
 
+    /// Backlinks of every open note.
+    fn load_open_backlinks(&self) -> Task<Message> {
+        let open: Vec<String> = self
+            .workspace()
+            .map(|w| w.buffers.iter().map(|b| b.path.clone()).collect())
+            .unwrap_or_default();
+        Task::batch(open.into_iter().map(|p| self.load_backlinks(p)))
+    }
+
     /// How many links point at the note at `path` (status line).
     fn load_backlinks(&self, path: String) -> Task<Message> {
         let Some(w) = self.workspace() else {
@@ -842,6 +851,23 @@ impl App {
 
     /// Handles a message.
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let before = self.shown_note().map(str::to_owned);
+        let task = self.handle(message);
+        if self.shown_note() != before.as_deref() {
+            // Link suggestions and the picker belong to the note they were
+            // opened on; left open, they would take the next note's keys.
+            self.autocomplete = None;
+            self.picker = None;
+        }
+        task
+    }
+
+    /// The path of the note in the active buffer.
+    fn shown_note(&self) -> Option<&str> {
+        self.workspace()?.active_buffer().map(|b| b.path.as_str())
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ChooseFolder => Self::choose_folder(),
             Message::FolderChosen(Some(folder)) => self.open_vault(&folder),
@@ -877,7 +903,13 @@ impl App {
                     self.say(Level::Error, why);
                 }
                 if ready {
-                    Task::batch([self.load_candidates(), self.load_conflicts()])
+                    // Notes restored or opened before the index was ready
+                    // get their backlinks now (F-09.6).
+                    Task::batch([
+                        self.load_open_backlinks(),
+                        self.load_candidates(),
+                        self.load_conflicts(),
+                    ])
                 } else {
                     Task::none()
                 }
@@ -1104,11 +1136,7 @@ impl App {
             }
             Message::Reindexed(path) => {
                 // A save can add links to any open note (F-09.1).
-                let open: Vec<String> = self
-                    .workspace()
-                    .map(|w| w.buffers.iter().map(|b| b.path.clone()).collect())
-                    .unwrap_or_default();
-                let mut tasks: Vec<_> = open.into_iter().map(|p| self.load_backlinks(p)).collect();
+                let mut tasks = vec![self.load_open_backlinks()];
                 tasks.push(self.load_candidates());
                 tasks.push(self.load_conflicts());
                 tasks.push(self.load_ambiguous(path));

@@ -222,3 +222,17 @@ fn a01_7_the_panel_shows_exactly_what_patinote_backlinks_prints() {
     assert!(!cli.is_empty());
     assert_eq!(shown, cli);
 }
+
+#[test]
+fn f09_6_notes_from_the_last_session_show_their_backlinks() {
+    let env = Env::new();
+    let before = {
+        let mut app = start(&env);
+        open(&mut app, "Proyek/Desain indeks Patinote.md");
+        app.active_backlinks()
+    };
+    assert!(before.is_some_and(|n| n > 0), "{before:?}");
+    let app = start(&env);
+    assert_eq!(title(&app), "Desain indeks Patinote");
+    assert_eq!(app.active_backlinks(), before);
+}
