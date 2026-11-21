@@ -1119,10 +1119,7 @@ impl App {
             }
             Message::Saved(done) => self.saved(done),
             Message::Click(line, col, ctrl) => self.click(line, col, ctrl),
-            Message::Scrolled(first, last) => {
-                self.scrolled(first, last);
-                Task::none()
-            }
+            Message::Scrolled(first, last) => self.scrolled(first, last),
             Message::Candidates(candidates, attachments) => {
                 if let Some(w) = self.workspace_mut() {
                     w.candidates = candidates;
