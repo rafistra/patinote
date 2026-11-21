@@ -262,6 +262,11 @@ pub const SIZE_RECENT_TIME_W: f32 = 84.0;
 /// bottom of the text run (0003 section 3.5).
 pub const SIZE_WAVE_STEP: f32 = 2.0;
 pub const SIZE_WAVE_OFFSET: f32 = 4.0;
+/// `size.tree.indent`: how far each folder level is indented in the
+/// explorer (mockup 02).
+pub const SIZE_TREE_INDENT: f32 = 18.0;
+/// `size.control.h.small`: the name input inside the explorer (mockup 14).
+pub const SIZE_CONTROL_H_SMALL: f32 = 30.0;
 /// Lines the editor scrolls per mouse wheel notch.
 pub const SCROLL_LINES_PER_NOTCH: f32 = 3.0;
 /// `size.cursor.insert.w`: the line cursor in insert mode (0003 section 6).

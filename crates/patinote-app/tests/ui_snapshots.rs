@@ -468,7 +468,7 @@ fn mockup_02_side_panel() {
     let mut h = Harness::new();
     for scale in SCALES {
         let frame = h.render(app.view().map(|_| ()), size(), scale);
-        frame.save(&out_dir().join(file_name("02-minimal-panels-open", scale)));
+        frame.save(&out_dir().join(file_name("02-side-panel", scale)));
         let area = |px: f32| (px * scale * scale) as usize;
         assert!(frame.count(BG_PANEL) >= area(100_000.0), "side panel");
         assert!(
@@ -492,5 +492,132 @@ fn mockup_01_backlinks_under_the_note() {
     assert!(
         frame.count(BG_CARD_INLINE) >= 20_000,
         "backlink cards under the note"
+    );
+}
+
+/// Mockup 02 with the explorer: explorer, editor and side panel. The leader
+/// popup comes with step 2.9.
+#[test]
+fn mockup_02_explorer_and_panel() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    for name in ["Desain indeks Patinote", "Patinote", "2026-11-19"] {
+        command(&mut app, &format!("e {name}"));
+    }
+    command(&mut app, "b 1");
+    common::keys(&mut app, "12G");
+    common::leader(&mut app, "b");
+    common::press(&mut app, "Escape");
+    common::leader(&mut app, "e");
+    common::press(&mut app, "Escape");
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("02-minimal-panels-open", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(
+            frame.count(BG_PANEL) >= area(200_000.0),
+            "explorer and side panel"
+        );
+        assert!(
+            frame.count(BG_SELECTED) >= area(3_000.0),
+            "the open note in the explorer"
+        );
+    }
+}
+
+/// Mockup 09: the rename and delete dialogs, one picture each.
+#[test]
+fn mockup_09_rename_and_delete_dialogs() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    common::leader(&mut app, "e");
+    app.select_in_explorer("Proyek/Rapat.md");
+    common::press(&mut app, "r");
+    common::send(
+        &mut app,
+        patinote_app::app::Message::DialogInput("Rapat IKN".into()),
+    );
+    let mut h = Harness::new();
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("09-rename-delete-dialogs-rename.png"));
+    assert!(frame.count(BG_OVERLAY) >= 60_000, "rename dialog");
+    common::press(&mut app, "Escape");
+    app.select_in_explorer("Proyek/Rapat.md");
+    common::press(&mut app, "d");
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("09-rename-delete-dialogs-delete.png"));
+    assert!(
+        frame.count(MODE_CONFLICT) >= 2_000,
+        "orange Move to trash button"
+    );
+}
+
+/// Mockup 14: new note with a name warning, the explorer's input with an
+/// error, the move picker, and deleting a folder; one picture each.
+#[test]
+fn mockup_14_create_move_delete_folder() {
+    use patinote_app::app::Message;
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    let mut h = Harness::new();
+    let big = Size::new(SIZE_WINDOW.0, 1180.0);
+
+    common::leader(&mut app, "n");
+    common::send(&mut app, Message::DialogInput("Ide #rapat".into()));
+    common::send(&mut app, Message::DialogSubmit);
+    let frame = h.render(app.view().map(|_| ()), big, 1.0);
+    frame.save(&out_dir().join("14-create-move-delete-folder-new-note.png"));
+    assert!(
+        frame.count_near(STATUS_WARNING, 16) >= 60,
+        "warning edge and icon"
+    );
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+        iced::keyboard::Modifiers::default(),
+        None,
+        true,
+    );
+
+    common::leader(&mut app, "e");
+    app.select_in_explorer("Proyek");
+    common::press(&mut app, "a");
+    common::send(&mut app, Message::InlineInput("Rapat: evaluasi".into()));
+    let frame = h.render(app.view().map(|_| ()), big, 1.0);
+    frame.save(&out_dir().join("14-create-move-delete-folder-inline.png"));
+    assert!(
+        frame.count_near(STATUS_ERROR, 16) >= 60,
+        "rejected edge and reason"
+    );
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+        iced::keyboard::Modifiers::default(),
+        None,
+        true,
+    );
+
+    app.select_in_explorer("Rapat/Rapat 19 Nov.md");
+    common::press(&mut app, "m");
+    common::send(&mut app, Message::DialogInput("pro".into()));
+    let frame = h.render(app.view().map(|_| ()), big, 1.0);
+    frame.save(&out_dir().join("14-create-move-delete-folder-move.png"));
+    assert!(frame.count(BG_SELECTED) >= 5_000, "selected folder");
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+        iced::keyboard::Modifiers::default(),
+        None,
+        true,
+    );
+
+    app.select_in_explorer("Rapat");
+    common::press(&mut app, "d");
+    let frame = h.render(app.view().map(|_| ()), big, 1.0);
+    frame.save(&out_dir().join("14-create-move-delete-folder-delete.png"));
+    assert!(
+        frame.count(MODE_CONFLICT) >= 2_000,
+        "orange Move to trash button"
     );
 }
