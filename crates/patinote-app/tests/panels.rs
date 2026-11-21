@@ -277,3 +277,22 @@ fn f09_5_a_search_that_finds_nothing_is_not_a_jump() {
     ctrl(&mut app, "i");
     assert_eq!(title(&app), "Ide cepat");
 }
+
+#[test]
+fn f09_5_a_search_that_does_not_move_is_not_a_jump() {
+    let env = Env::new();
+    let mut app = start(&env);
+    open(&mut app, "Proyek/Patinote.md");
+    open(&mut app, "Inbox/Ide cepat.md");
+    ctrl(&mut app, "o");
+    assert_eq!(title(&app), "Patinote");
+    // The only match is under the cursor.
+    keys(&mut app, "ggOzqzq<Esc>0");
+    let before = app.active_cursor();
+    press(&mut app, "/");
+    send(&mut app, Message::CmdInput("zqzq".into()));
+    send(&mut app, Message::CmdSubmit);
+    assert_eq!(app.active_cursor(), before);
+    ctrl(&mut app, "i");
+    assert_eq!(title(&app), "Ide cepat");
+}

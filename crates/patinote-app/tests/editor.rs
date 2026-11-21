@@ -290,3 +290,33 @@ fn f05_8_a_read_only_note_does_not_stay_in_insert_mode() {
         "no link suggestions on a read-only note"
     );
 }
+
+#[test]
+fn f06_7_a_click_types_a_held_key_where_it_was_typed_and_saves_it() {
+    let env = Env::new();
+    let config = Config {
+        insert_escape: Some("jk".into()),
+        ..Config::default()
+    };
+    let mut app = env.start(env.launch(Some(env.vault()), config));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Inbox/Ide cepat.md".into(),
+        }),
+    );
+    keys(&mut app, "ggAj");
+    send(&mut app, Message::Click(2, 0, false));
+    let first = app
+        .active_text()
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .to_owned();
+    assert_eq!(first, "# Ide cepatj");
+    assert_eq!(app.active_dirty(), Some(true));
+    wait(&mut app, Duration::from_secs(3));
+    let disk = std::fs::read_to_string(env.path("Vault/Inbox/Ide cepat.md")).unwrap();
+    assert!(disk.starts_with("# Ide cepatj\n"), "{disk:?}");
+}

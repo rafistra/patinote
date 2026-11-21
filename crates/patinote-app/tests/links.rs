@@ -247,3 +247,22 @@ fn f08_a_link_to_the_notes_own_folder_is_not_called_outside_the_vault() {
     assert_eq!(title(&app), "Ide cepat");
     assert_eq!(app.message(), None, "{:?}", app.message());
 }
+
+#[test]
+fn f08_5_gd_on_a_markdown_heading_link_in_the_same_note_jumps_to_it() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(
+        &mut app,
+        "GoSee [intro](#Bagian%20dua)<CR><CR>## Bagian dua<CR>teks<Esc>",
+    );
+    let heading = app
+        .active_text()
+        .unwrap()
+        .lines()
+        .position(|l| l == "## Bagian dua")
+        .unwrap();
+    keys(&mut app, &format!("{}G0figd", heading - 1));
+    assert_eq!(title(&app), "Ide cepat");
+    assert_eq!(app.active_cursor().map(|c| c.0), Some(heading));
+}

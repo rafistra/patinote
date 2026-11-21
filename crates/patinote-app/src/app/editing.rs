@@ -319,6 +319,12 @@ impl App {
 
     fn after_outcome(&mut self, outcome: Outcome) -> Task<Message> {
         let mut tasks = Vec::new();
+        if outcome.too_large {
+            self.say(
+                Level::Warning,
+                "Too much text to repeat, the count was not used",
+            );
+        }
         if let Some(register) = outcome.yanked {
             // `y` and `p` use the system clipboard (F-06: unnamedplus).
             self.share_register(&register);
@@ -372,6 +378,9 @@ impl App {
         // Only a search that moved is a jump (Vim's previous context mark):
         // record where it started.
         let found = doc.buffer.cursor();
+        if found == before {
+            return Task::none();
+        }
         doc.buffer.set_cursor(before);
         self.record_jump();
         if let Some(doc) = self.active_document_mut() {
@@ -639,7 +648,9 @@ impl App {
     /// under it (F-08).
     pub(super) fn click(&mut self, line: usize, col: usize, ctrl: bool) -> Task<Message> {
         if let Some(doc) = self.active_document_mut() {
+            let rev = doc.buffer.revision();
             doc.vim.move_cursor(&mut doc.buffer, vim::Pos { line, col });
+            doc.moved_cursor(rev);
         }
         if ctrl {
             return self.follow_link();
@@ -658,7 +669,9 @@ impl App {
             } else {
                 return;
             }
+            let rev = doc.buffer.revision();
             doc.vim.move_cursor(&mut doc.buffer, pos);
+            doc.moved_cursor(rev);
         }
     }
 
