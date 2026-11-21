@@ -5,6 +5,7 @@ pub mod app;
 pub mod args;
 pub mod editor;
 pub mod fonts;
+pub mod links;
 pub mod mode;
 pub mod screens;
 pub mod session;

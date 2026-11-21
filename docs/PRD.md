@@ -681,13 +681,13 @@ Membuat link secepat mengetik nama catatan, dan berpindah lewat link tanpa mouse
 
 **Kriteria penerimaan**
 
-- [ ] F-08.1 Saran muncul di bawah 50 ms setelah `[[` dan diperbarui di bawah 16 ms per tombol di vault 10.000 catatan.
-- [ ] F-08.2 Memilih alias menghasilkan link dengan alias sebagai teks tampilan.
-- [ ] F-08.3 Bila ada dua catatan bernama sama, link yang disisipkan menyertakan folder.
-- [ ] F-08.4 `[[Catatan#` menampilkan heading catatan yang benar, urut sesuai dokumen.
-- [ ] F-08.5 `gd` pada link heading membuka catatan dengan heading itu terlihat di layar.
-- [ ] F-08.6 `gd` pada link ke catatan yang belum ada lalu `:q` tanpa mengetik: tidak ada file baru di vault.
-- [ ] F-08.7 Link dari autocomplete langsung terhitung di backlinks catatan tujuan setelah autosave.
+- [x] F-08.1 Saran muncul di bawah 50 ms setelah `[[` dan diperbarui di bawah 16 ms per tombol di vault 10.000 catatan. Saran dihitung langsung di thread UI dengan mesin F-07: `cargo bench -p patinote-app --bench switcher` (10.000 catatan: 1,6–2,4 ms per tombol)
+- [x] F-08.2 Memilih alias menghasilkan link dengan alias sebagai teks tampilan. `f08_2_picking_an_alias_makes_it_the_display_text`
+- [x] F-08.3 Bila ada dua catatan bernama sama, link yang disisipkan menyertakan folder. `f08_3_link_names_include_the_folder_only_when_needed`, `f08_3_a_name_shared_by_two_notes_gets_its_folder`
+- [x] F-08.4 `[[Catatan#` menampilkan heading catatan yang benar, urut sesuai dokumen. `f08_4_hash_lists_the_notes_headings_in_order`
+- [x] F-08.5 `gd` pada link heading membuka catatan dengan heading itu terlihat di layar. `f08_5_gd_on_a_heading_link_opens_the_note_at_the_heading`
+- [x] F-08.6 `gd` pada link ke catatan yang belum ada lalu `:q` tanpa mengetik: tidak ada file baru di vault. `f08_6_a_link_to_a_missing_note_opens_it_empty_and_writes_nothing`
+- [x] F-08.7 Link dari autocomplete langsung terhitung di backlinks catatan tujuan setelah autosave. `f08_7_a_link_from_autocomplete_counts_as_a_backlink_after_autosave`
 
 ### F-09 · Backlinks, outline, riwayat, dan buffer
 

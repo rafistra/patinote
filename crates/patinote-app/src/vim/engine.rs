@@ -400,6 +400,33 @@ impl Vim {
     }
 
     /// Undoes the last whole command (also `u`).
+    /// Replaces characters `start..end` of the cursor line with `text` as
+    /// part of the current insert session (one undo step with what was
+    /// typed), then puts the cursor at column `cursor`. Used by link
+    /// autocomplete (F-08). Does nothing outside insert mode; returns whether
+    /// the text changed. `.` repeats the keys typed, not this text.
+    pub fn insert_text(
+        &mut self,
+        buf: &mut Buffer,
+        start: usize,
+        end: usize,
+        text: &str,
+        cursor: usize,
+    ) -> bool {
+        if self.mode() != Mode::Insert {
+            return false;
+        }
+        let line = buf.cursor().line;
+        let len = buf.line_len(line);
+        let (start, end) = (start.min(len), end.min(len).max(start.min(len)));
+        let rev = buf.revision();
+        self.before_edit(buf);
+        replace(buf, Pos::new(line, start), Pos::new(line, end), text);
+        let new_len = buf.line_len(line);
+        buf.set_cursor_raw(Pos::new(line, cursor.min(new_len)));
+        buf.revision() != rev
+    }
+
     pub fn undo(&mut self, buf: &mut Buffer) -> bool {
         self.sync(buf);
         self.leave_to_normal(buf);

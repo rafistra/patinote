@@ -258,6 +258,10 @@ pub const SIZE_LOGO_LARGE: f32 = 28.0;
 pub const SIZE_SHORTCUT_KEY_W: f32 = 64.0;
 /// Time column of the recent notes list on the start screen.
 pub const SIZE_RECENT_TIME_W: f32 = 84.0;
+/// The wavy underline of an ambiguous link: steps of 2 px, 4 px above the
+/// bottom of the text run (0003 section 3.5).
+pub const SIZE_WAVE_STEP: f32 = 2.0;
+pub const SIZE_WAVE_OFFSET: f32 = 4.0;
 /// Lines the editor scrolls per mouse wheel notch.
 pub const SCROLL_LINES_PER_NOTCH: f32 = 3.0;
 /// `size.cursor.insert.w`: the line cursor in insert mode (0003 section 6).

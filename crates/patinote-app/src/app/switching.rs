@@ -7,14 +7,11 @@ use iced::keyboard::{Key, Modifiers, key::Named};
 use iced::widget::{container, stack};
 use iced::{Element, Length, Padding, Task};
 
-use super::{App, Buffer, Message};
-use crate::editor::document::Document;
+use super::{App, Message};
 use crate::screens::switcher::{self, View};
-use crate::state;
 use crate::switcher::{Candidate, Results};
 use crate::theme::styles;
 use crate::theme::tokens::*;
-use crate::vim;
 
 /// An open quick switcher.
 #[derive(Debug, Clone, Default)]
@@ -39,7 +36,8 @@ impl App {
             .unwrap_or_default()
     }
 
-    /// Loads the notes the switcher finds, from the index.
+    /// Loads the notes the switcher finds, and the attachments `![[`
+    /// suggests, from the index.
     pub(super) fn load_candidates(&self) -> Task<Message> {
         let Some(w) = self.workspace() else {
             return Task::none();
@@ -47,18 +45,26 @@ impl App {
         Task::perform(
             w.session.query(|store| {
                 let aliases = store.all_aliases().unwrap_or_default();
-                store
-                    .all_notes()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|n| n.kind == "note" && !n.excluded)
-                    .map(|n| {
-                        let a = aliases.get(&n.id).cloned().unwrap_or_default();
-                        Candidate::new(&n.path, a)
-                    })
-                    .collect::<Vec<_>>()
+                let mut notes = Vec::new();
+                let mut attachments = Vec::new();
+                for n in store.all_notes().unwrap_or_default() {
+                    if n.excluded {
+                        continue;
+                    }
+                    match n.kind.as_str() {
+                        "note" => {
+                            let a = aliases.get(&n.id).cloned().unwrap_or_default();
+                            notes.push(Candidate::new(&n.path, a));
+                        }
+                        _ => attachments.push(Candidate::new(&n.path, Vec::new())),
+                    }
+                }
+                (notes, attachments)
             }),
-            |c| Message::Candidates(c.unwrap_or_default()),
+            |c| {
+                let (notes, attachments) = c.unwrap_or_default();
+                Message::Candidates(notes, attachments)
+            },
         )
     }
 
@@ -186,26 +192,10 @@ impl App {
         if let Some(existing) = exists {
             return self.open_note(existing);
         }
-        let leave = self.autosave(true);
-        let insert_escape = self.config.insert_escape.clone();
-        let Some(w) = self.workspace_mut() else {
-            return Task::none();
-        };
-        let mut doc =
-            Document::new_note(path.clone(), vim::Vim::new(vim::Config { insert_escape }));
-        let now = std::time::Instant::now();
-        doc.vim.handle(&mut doc.buffer, vim::Key::Char('i'), now, 1);
-        let id = w.buffers.iter().map(|b| b.id).max().map_or(0, |m| m + 1);
-        w.buffers.push(Buffer {
-            path: path.clone(),
-            doc: Some(doc),
-            backlinks: Some(0),
-            id,
-        });
-        w.active = Some(w.buffers.len() - 1);
-        w.state.touch(&path, state::now());
-        w.candidates.push(Candidate::new(&path, Vec::new()));
-        Task::batch([leave, self.save_vault_state()])
+        if let Some(w) = self.workspace_mut() {
+            w.candidates.push(Candidate::new(&path, Vec::new()));
+        }
+        self.open_new_note(path, true)
     }
 
     /// The body with the switcher over it (mockup 05): the editor behind is

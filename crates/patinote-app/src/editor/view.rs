@@ -1,25 +1,28 @@
-//! The editor widget (F-05, F-06; docs/design/0002 sections 3 and 6), built
-//! on `iced::advanced`: one paragraph per source line with colored spans,
-//! backgrounds for the visual selection and search matches from
-//! `span_bounds`, a full-width cursor line, block and line cursors in token
-//! colors, and relative line numbers aligned with soft-wrapped lines.
+//! The editor widget (F-05, F-06, F-08; docs/design/0002 sections 3 and 6),
+//! built on `iced::advanced`: one paragraph per source line with colored
+//! spans, backgrounds for the visual selection and search matches from
+//! `span_bounds`, a wavy underline under ambiguous links, a full-width cursor
+//! line, block and line cursors in token colors, and relative line numbers
+//! aligned with soft-wrapped lines. A popup (link suggestions, the ambiguous
+//! link picker) can hang under the cursor as an overlay.
 //!
 //! It only draws. Keys go to the Vim engine through the app; the widget
-//! reports clicks (as a line and column) and wheel scrolling (as the range of
-//! visible lines, so the app can keep the cursor on screen like Vim does).
+//! reports clicks (with whether Ctrl was held) and wheel scrolling (as the
+//! range of visible lines, so the app can keep the cursor on screen).
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::text::{self, Paragraph as _, Span, Text};
-use iced::advanced::widget::{self, Widget, tree};
-use iced::advanced::{Clipboard, Shell, mouse};
+use iced::advanced::widget::{Tree, Widget, tree};
+use iced::advanced::{Clipboard, Shell, mouse, overlay};
 use iced::alignment::Vertical;
+use iced::keyboard::{self, Modifiers};
 use iced::widget::text::{Alignment, LineHeight, Shaping, Wrapping};
-use iced::{Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size};
+use iced::{Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Vector};
 
 use super::highlight::{self, LineKind};
 use crate::theme::tokens::*;
@@ -39,7 +42,7 @@ pub enum Shape {
 pub type At = (usize, usize);
 
 /// What the editor shows, borrowed from the app.
-pub struct Editor<'a, Message> {
+pub struct Editor<'a, Message, Theme = iced::Theme, R = iced::Renderer> {
     /// Identifies the note: scrolling starts over when it changes.
     pub id: u64,
     pub lines: &'a [String],
@@ -51,14 +54,17 @@ pub struct Editor<'a, Message> {
     pub selection: Option<(At, At)>,
     /// The search pattern whose matches are highlighted.
     pub search: Option<&'a str>,
+    /// Link targets (lowercase) that match more than one note.
+    pub ambiguous: Option<&'a HashSet<String>>,
     pub relative_numbers: bool,
     /// The widest the text column gets (920 px in minimal mode).
     pub max_width: f32,
-    on_click: Option<Box<dyn Fn(At) -> Message + 'a>>,
+    popup: Option<(usize, Element<'a, Message, Theme, R>)>,
+    on_click: Option<Box<dyn Fn(At, bool) -> Message + 'a>>,
     on_scroll: Option<Box<dyn Fn(usize, usize) -> Message + 'a>>,
 }
 
-impl<'a, Message> Editor<'a, Message> {
+impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
     /// An editor over `lines`, which must have one [`LineKind`] each.
     pub fn new(
         id: u64,
@@ -75,15 +81,18 @@ impl<'a, Message> Editor<'a, Message> {
             shape,
             selection: None,
             search: None,
+            ambiguous: None,
             relative_numbers: true,
             max_width: SIZE_EDITOR_MAXW,
+            popup: None,
             on_click: None,
             on_scroll: None,
         }
     }
 
-    /// The message for a click at a text position.
-    pub fn on_click(mut self, f: impl Fn(At) -> Message + 'a) -> Self {
+    /// The message for a click at a text position; `true` when Ctrl was
+    /// held (Ctrl+click follows a link, F-08).
+    pub fn on_click(mut self, f: impl Fn(At, bool) -> Message + 'a) -> Self {
         self.on_click = Some(Box::new(f));
         self
     }
@@ -91,6 +100,13 @@ impl<'a, Message> Editor<'a, Message> {
     /// The message after the wheel scrolled: first and last visible line.
     pub fn on_scroll(mut self, f: impl Fn(usize, usize) -> Message + 'a) -> Self {
         self.on_scroll = Some(Box::new(f));
+        self
+    }
+
+    /// Shows `content` just under the cursor line, its left edge at
+    /// character `col` of that line.
+    pub fn popup(mut self, col: usize, content: impl Into<Element<'a, Message, Theme, R>>) -> Self {
+        self.popup = Some((col, content.into()));
         self
     }
 
@@ -105,8 +121,8 @@ impl<'a, Message> Editor<'a, Message> {
         }
     }
 
-    /// Splits line `i` into colored spans and their backgrounds.
-    fn runs(&self, i: usize) -> (Vec<(String, Color, bool)>, Vec<Bg>) {
+    /// Splits line `i` into colored spans and their decorations.
+    fn runs(&self, i: usize) -> (Vec<(String, Color, bool)>, Vec<Deco>) {
         let text = &self.lines[i];
         let chars: Vec<char> = text.chars().collect();
         let n = chars.len();
@@ -144,7 +160,7 @@ impl<'a, Message> Editor<'a, Message> {
         cuts.dedup();
 
         let mut spans = Vec::new();
-        let mut bgs = Vec::new();
+        let mut decos = Vec::new();
         for w in cuts.windows(2) {
             let (a, b) = (w[0], w[1]);
             if a == b {
@@ -153,6 +169,10 @@ impl<'a, Message> Editor<'a, Message> {
             let seg = segs.iter().find(|s| s.start <= a && b <= s.end);
             let mut color = seg.map_or(TEXT_PRIMARY, |s| s.color);
             let bold = seg.is_some_and(|s| s.bold);
+            let ambiguous = seg
+                .and_then(|s| s.link_target.as_deref())
+                .zip(self.ambiguous)
+                .is_some_and(|(t, set)| set.contains(&t.trim().to_lowercase()));
             let bg = if current.is_some_and(|(s, e)| s <= a && b <= e) {
                 color = EDITOR_SEARCH_CURRENT_TEXT;
                 Bg::Current
@@ -168,18 +188,120 @@ impl<'a, Message> Editor<'a, Message> {
                 Bg::None
             };
             spans.push((chars[a..b].iter().collect(), color, bold));
-            bgs.push(bg);
+            decos.push(Deco { bg, ambiguous });
         }
         if n == 0 {
             // An empty selected line still shows one cell, as in Vim.
             spans.push((" ".to_owned(), TEXT_PRIMARY, false));
-            bgs.push(if selection.is_some() {
-                Bg::Selection
-            } else {
-                Bg::None
+            decos.push(Deco {
+                bg: if selection.is_some() {
+                    Bg::Selection
+                } else {
+                    Bg::None
+                },
+                ambiguous: false,
             });
         }
-        (spans, bgs)
+        (spans, decos)
+    }
+
+    /// Builds (or reuses) the paragraph of line `i`; returns its height.
+    fn entry<P: text::Paragraph<Font = Font>>(
+        &self,
+        i: usize,
+        width: f32,
+        cache: &mut HashMap<usize, Cached<P>>,
+    ) -> f32 {
+        let (spans, decos) = self.runs(i);
+        let mut h = DefaultHasher::new();
+        for (t, c, b) in &spans {
+            t.hash(&mut h);
+            c.r.to_bits().hash(&mut h);
+            c.g.to_bits().hash(&mut h);
+            c.b.to_bits().hash(&mut h);
+            b.hash(&mut h);
+        }
+        decos.hash(&mut h);
+        width.to_bits().hash(&mut h);
+        let key = h.finish();
+        let entry = cache.entry(i).or_insert_with(|| Cached {
+            key: !key,
+            paragraph: paragraph(&[], width),
+            decos: Vec::new(),
+        });
+        if entry.key != key {
+            entry.paragraph = paragraph(&spans, width);
+            entry.decos = decos;
+            entry.key = key;
+        }
+        entry
+            .paragraph
+            .min_bounds()
+            .height
+            .max(TYPE_EDITOR.line_height)
+    }
+
+    /// Scrolls to keep the cursor visible (unless the wheel moved the view)
+    /// and remembers where the cursor and the popup anchor are, relative to
+    /// the widget. Runs in `layout`, so overlays know it the same frame.
+    fn prepare<P: text::Paragraph<Font = Font>>(&self, state: &State<P>, size: Size) {
+        let mut cache = state.lines.borrow_mut();
+        if state.id.get() != self.id {
+            state.id.set(self.id);
+            state.top.set(0);
+            state.follow.set(true);
+            cache.clear();
+        }
+        if state.last_cursor.get() != self.cursor {
+            state.last_cursor.set(self.cursor);
+            state.follow.set(true);
+        }
+        let count = self.lines.len();
+        if count == 0 {
+            return;
+        }
+        let col = self.column(Rectangle::new(Point::ORIGIN, size));
+        let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
+        let cur = self.cursor.0.min(count - 1);
+        if state.follow.get() {
+            let mut top = state.top.get().min(cur);
+            loop {
+                let used: f32 = (top..=cur).map(|i| self.entry(i, text_w, &mut cache)).sum();
+                if used <= col.height || top == cur {
+                    break;
+                }
+                top += 1;
+            }
+            state.top.set(top);
+        }
+        let top = state.top.get().min(count - 1);
+        let mut y = col.y;
+        for i in top..cur {
+            y += self.entry(i, text_w, &mut cache);
+        }
+        self.entry(cur, text_w, &mut cache);
+        let anchor = self.popup.as_ref().map_or(self.cursor.1, |(c, _)| *c);
+        let at = |c: usize| {
+            cache
+                .get(&cur)
+                .and_then(|e| e.paragraph.grapheme_position(0, c))
+                .unwrap_or(Point::ORIGIN)
+        };
+        let n = self.lines[cur].chars().count();
+        let pos = at(self.cursor.1.min(n));
+        let anchor_pos = at(anchor.min(n));
+        let text_x = col.x + SIZE_GUTTER_W;
+        state.cursor_rect.set(Some(Rectangle {
+            x: text_x + pos.x,
+            y: y + pos.y,
+            width: SIZE_EDITOR_CELL_W,
+            height: TYPE_EDITOR.line_height,
+        }));
+        // The popup hangs under the cursor's visual row, from the anchor.
+        state.anchor.set(Some(Point::new(
+            text_x + anchor_pos.x,
+            y + pos.y.max(anchor_pos.y) + TYPE_EDITOR.line_height,
+        )));
     }
 }
 
@@ -211,14 +333,23 @@ enum Bg {
     Current,
 }
 
+/// How a run of text is decorated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Deco {
+    bg: Bg,
+    /// Under a link that matches more than one note (F-08, mockup 12).
+    ambiguous: bool,
+}
+
 struct Cached<P> {
     key: u64,
     paragraph: P,
-    bgs: Vec<Bg>,
+    decos: Vec<Deco>,
 }
 
 /// Paragraphs cached per line, rebuilt only when the line, its decorations
-/// or the column width change; and where the view is scrolled to.
+/// or the column width change; where the view is scrolled to; and where the
+/// cursor is.
 pub struct State<P> {
     lines: RefCell<HashMap<usize, Cached<P>>>,
     id: Cell<u64>,
@@ -229,6 +360,10 @@ pub struct State<P> {
     follow: Cell<bool>,
     /// First and last line drawn.
     visible: Cell<(usize, usize)>,
+    /// The cursor cell and the popup's top-left, relative to the widget.
+    cursor_rect: Cell<Option<Rectangle>>,
+    anchor: Cell<Option<Point>>,
+    modifiers: Cell<Modifiers>,
 }
 
 fn editor_font(bold: bool) -> Font {
@@ -267,7 +402,35 @@ fn cell_text(content: String, bounds: Size, align_x: Alignment, bold: bool) -> T
     }
 }
 
-impl<Message, Theme, R> Widget<Message, Theme, R> for Editor<'_, Message>
+/// A zigzag line under `r`, drawn with small quads (0003 3.5).
+fn wavy_underline<R: renderer::Renderer>(renderer: &mut R, r: Rectangle, color: Color) {
+    let base = r.y + r.height - SIZE_WAVE_OFFSET;
+    let mut x = r.x;
+    let mut k = 0u32;
+    while x < r.x + r.width {
+        let dy = match k % 4 {
+            0 => 0.0,
+            2 => SIZE_WAVE_STEP,
+            _ => SIZE_BORDER,
+        };
+        renderer.fill_quad(
+            Quad {
+                bounds: Rectangle {
+                    x,
+                    y: base + dy,
+                    width: SIZE_WAVE_STEP,
+                    height: SIZE_BORDER,
+                },
+                ..Quad::default()
+            },
+            color,
+        );
+        x += SIZE_WAVE_STEP;
+        k += 1;
+    }
+}
+
+impl<Message, Theme, R> Widget<Message, Theme, R> for Editor<'_, Message, Theme, R>
 where
     R: text::Renderer<Font = Font> + renderer::Renderer,
 {
@@ -287,21 +450,36 @@ where
             last_cursor: Cell::new(self.cursor),
             follow: Cell::new(true),
             visible: Cell::new((0, 0)),
+            cursor_rect: Cell::new(None),
+            anchor: Cell::new(None),
+            modifiers: Cell::new(Modifiers::default()),
         })
     }
 
-    fn layout(
-        &mut self,
-        _tree: &mut widget::Tree,
-        _renderer: &R,
-        limits: &layout::Limits,
-    ) -> layout::Node {
-        layout::Node::new(limits.max())
+    fn children(&self) -> Vec<Tree> {
+        self.popup
+            .iter()
+            .map(|(_, p)| Tree::new(p.as_widget()))
+            .collect()
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        match &self.popup {
+            Some((_, p)) => tree.diff_children(std::slice::from_ref(p)),
+            None => tree.children.clear(),
+        }
+    }
+
+    fn layout(&mut self, tree: &mut Tree, _renderer: &R, limits: &layout::Limits) -> layout::Node {
+        let size = limits.max();
+        let state = tree.state.downcast_ref::<State<R::Paragraph>>();
+        self.prepare(state, size);
+        layout::Node::new(size)
     }
 
     fn update(
         &mut self,
-        tree: &mut widget::Tree,
+        tree: &mut Tree,
         event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
@@ -310,11 +488,15 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
+        let state = tree.state.downcast_ref::<State<R::Paragraph>>();
+        if let Event::Keyboard(keyboard::Event::ModifiersChanged(m)) = event {
+            state.modifiers.set(*m);
+            return;
+        }
         let bounds = layout.bounds();
         let Some(at) = cursor.position_in(bounds) else {
             return;
         };
-        let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         match event {
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let lines = match delta {
@@ -339,6 +521,7 @@ where
             }
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let Some(f) = &self.on_click else { return };
+                let ctrl = state.modifiers.get().control();
                 let col = self.column(bounds);
                 let text_x = col.x + SIZE_GUTTER_W;
                 let point = Point::new(bounds.x + at.x, bounds.y + at.y);
@@ -358,14 +541,14 @@ where
                             .paragraph
                             .hit_test(local)
                             .map_or(0, |hit| hit.cursor());
-                        shell.publish(f((i, col)));
+                        shell.publish(f((i, col), ctrl));
                         shell.capture_event();
                         return;
                     }
                     y += h;
                 }
                 let last_line = self.lines.len().saturating_sub(1);
-                shell.publish(f((last_line, 0)));
+                shell.publish(f((last_line, 0), ctrl));
                 shell.capture_event();
             }
             _ => {}
@@ -374,7 +557,7 @@ where
 
     fn mouse_interaction(
         &self,
-        _tree: &widget::Tree,
+        _tree: &Tree,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
@@ -389,7 +572,7 @@ where
 
     fn draw(
         &self,
-        tree: &widget::Tree,
+        tree: &Tree,
         renderer: &mut R,
         _theme: &Theme,
         _style: &renderer::Style,
@@ -400,16 +583,6 @@ where
         let bounds = layout.bounds();
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         let mut cache = state.lines.borrow_mut();
-        if state.id.get() != self.id {
-            state.id.set(self.id);
-            state.top.set(0);
-            state.follow.set(true);
-            cache.clear();
-        }
-        if state.last_cursor.get() != self.cursor {
-            state.last_cursor.set(self.cursor);
-            state.follow.set(true);
-        }
         let col = self.column(bounds);
         let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
         let text_x = col.x + SIZE_GUTTER_W;
@@ -427,54 +600,12 @@ where
             BG_APP,
         );
 
-        let entry_for = |i: usize, cache: &mut HashMap<usize, Cached<R::Paragraph>>| -> f32 {
-            let (spans, bgs) = self.runs(i);
-            let mut h = DefaultHasher::new();
-            for (t, c, b) in &spans {
-                t.hash(&mut h);
-                c.r.to_bits().hash(&mut h);
-                c.g.to_bits().hash(&mut h);
-                c.b.to_bits().hash(&mut h);
-                b.hash(&mut h);
-            }
-            bgs.hash(&mut h);
-            text_w.to_bits().hash(&mut h);
-            let key = h.finish();
-            let entry = cache.entry(i).or_insert_with(|| Cached {
-                key: !key,
-                paragraph: paragraph(&[], text_w),
-                bgs: Vec::new(),
-            });
-            if entry.key != key {
-                entry.paragraph = paragraph(&spans, text_w);
-                entry.bgs = bgs;
-                entry.key = key;
-            }
-            entry.paragraph.min_bounds().height.max(line_h)
-        };
-
-        // Keep the cursor on screen unless the wheel moved the view.
-        if state.follow.get() && count > 0 {
-            let mut top = state.top.get().min(cur.0);
-            loop {
-                let mut used = 0.0;
-                for i in top..=cur.0 {
-                    used += entry_for(i, &mut cache);
-                }
-                if used <= col.height || top == cur.0 {
-                    break;
-                }
-                top += 1;
-            }
-            state.top.set(top);
-        }
         let top = state.top.get().min(count.saturating_sub(1));
-
         let mut y = col.y;
         let mut i = top;
         let mut cursor_paint: Option<(Rectangle, Option<char>, Color)> = None;
         while i < count && y < bottom {
-            let height = entry_for(i, &mut cache);
+            let height = self.entry(i, text_w, &mut cache);
             let Some(entry) = cache.get(&i) else { break };
             let p = &entry.paragraph;
             let origin = Point::new(text_x, y);
@@ -498,25 +629,34 @@ where
                 );
             }
 
-            for (idx, bg) in entry.bgs.iter().enumerate() {
-                let color = match bg {
-                    Bg::None => continue,
-                    Bg::Selection => EDITOR_SELECTION,
-                    Bg::Match => EDITOR_SEARCH_MATCH,
-                    Bg::Current => EDITOR_SEARCH_CURRENT,
+            for (idx, deco) in entry.decos.iter().enumerate() {
+                let color = match deco.bg {
+                    Bg::None => None,
+                    Bg::Selection => Some(EDITOR_SELECTION),
+                    Bg::Match => Some(EDITOR_SEARCH_MATCH),
+                    Bg::Current => Some(EDITOR_SEARCH_CURRENT),
                 };
+                if color.is_none() && !deco.ambiguous {
+                    continue;
+                }
                 for r in p.span_bounds(idx) {
-                    renderer.fill_quad(
-                        Quad {
-                            bounds: Rectangle {
-                                x: r.x + origin.x,
-                                y: r.y + origin.y,
-                                ..r
+                    let r = Rectangle {
+                        x: r.x + origin.x,
+                        y: r.y + origin.y,
+                        ..r
+                    };
+                    if let Some(color) = color {
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: r,
+                                ..Quad::default()
                             },
-                            ..Quad::default()
-                        },
-                        color,
-                    );
+                            color,
+                        );
+                    }
+                    if deco.ambiguous {
+                        wavy_underline(renderer, r, EDITOR_LINK_AMBIGUOUS);
+                    }
                 }
             }
 
@@ -609,13 +749,124 @@ where
             });
         }
     }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        _renderer: &R,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, R>> {
+        let (_, content) = self.popup.as_mut()?;
+        let state = tree.state.downcast_ref::<State<R::Paragraph>>();
+        let anchor = state.anchor.get()?;
+        let bounds = layout.bounds();
+        let child = tree.children.first_mut()?;
+        Some(overlay::Element::new(Box::new(Popup {
+            content,
+            tree: child,
+            position: Point::new(bounds.x + anchor.x, bounds.y + anchor.y) + translation,
+            line_height: TYPE_EDITOR.line_height,
+            viewport: *viewport,
+        })))
+    }
 }
 
-impl<'a, Message: 'a, Theme: 'a, R> From<Editor<'a, Message>> for Element<'a, Message, Theme, R>
+/// The popup under the cursor.
+struct Popup<'a, 'b, Message, Theme, R> {
+    content: &'b mut Element<'a, Message, Theme, R>,
+    tree: &'b mut Tree,
+    /// Top-left under the cursor line.
+    position: Point,
+    line_height: f32,
+    viewport: Rectangle,
+}
+
+impl<Message, Theme, R> overlay::Overlay<Message, Theme, R> for Popup<'_, '_, Message, Theme, R>
+where
+    R: renderer::Renderer,
+{
+    fn layout(&mut self, renderer: &R, bounds: Size) -> layout::Node {
+        let limits = layout::Limits::new(Size::ZERO, bounds);
+        let node = self
+            .content
+            .as_widget_mut()
+            .layout(self.tree, renderer, &limits);
+        let size = node.size();
+        // Below the cursor line, or above it when there is no room below;
+        // never past the window's right edge.
+        let x = self.position.x.min(bounds.width - size.width).max(0.0);
+        let y = if self.position.y + size.height <= bounds.height {
+            self.position.y
+        } else {
+            (self.position.y - self.line_height - size.height).max(0.0)
+        };
+        node.move_to(Point::new(x, y))
+    }
+
+    fn draw(
+        &self,
+        renderer: &mut R,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+    ) {
+        self.content.as_widget().draw(
+            self.tree,
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            &self.viewport,
+        );
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &R,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        self.content.as_widget_mut().update(
+            self.tree,
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            &self.viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &R,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            self.tree,
+            layout,
+            cursor,
+            &self.viewport,
+            renderer,
+        )
+    }
+}
+
+impl<'a, Message: 'a, Theme: 'a, R> From<Editor<'a, Message, Theme, R>>
+    for Element<'a, Message, Theme, R>
 where
     R: text::Renderer<Font = Font> + renderer::Renderer + 'a,
 {
-    fn from(editor: Editor<'a, Message>) -> Self {
+    fn from(editor: Editor<'a, Message, Theme, R>) -> Self {
         Element::new(editor)
     }
 }

@@ -407,3 +407,47 @@ fn mockup_05_quick_switcher() {
         );
     }
 }
+
+/// Mockup 06: `[[desa` typed in insert mode, suggestions under the cursor.
+#[test]
+fn mockup_06_link_autocomplete() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    command(&mut app, "e 2026-11-19");
+    command(&mut app, "e Patinote");
+    command(&mut app, "b 1");
+    common::keys(&mut app, "6GS- Lanjut bahas di [[desa");
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("06-link-autocomplete", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(BG_OVERLAY) >= area(20_000.0), "suggestions box");
+        assert!(
+            frame.count(MODE_INSERT) >= area(1_000.0),
+            "INSERT badge and line cursor"
+        );
+    }
+}
+
+/// Mockup 12: `gd` on `[[Rapat]]`, which two notes are named.
+#[test]
+fn mockup_12_ambiguous_link() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    command(&mut app, "e 2026-11-19");
+    command(&mut app, "e Patinote");
+    command(&mut app, "b 1");
+    common::keys(&mut app, "7G0f[gd");
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("12-ambiguous-link", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(BG_OVERLAY) >= area(20_000.0), "picker box");
+        assert!(
+            frame.count_near(STATUS_WARNING, 24) >= area(60.0),
+            "wavy underline and W: message"
+        );
+    }
+}
