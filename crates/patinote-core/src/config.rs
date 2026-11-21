@@ -2,9 +2,10 @@
 //! (PRD "Gerbang 2: dampak arsitektur", point 3).
 //!
 //! Unknown keys give warnings, not errors, so an older Patinote can read a
-//! newer file. Read so far: `[vault] default` (step 1.7), and `layout` and
-//! `renderer` for the desktop app (step 2.2); the other sections are accepted
-//! and read by later steps.
+//! newer file. Read so far: `[vault] default` (step 1.7), and `layout`,
+//! `renderer` and `[editor] insert_escape` and `relative_numbers` for the
+//! desktop app (Phase 2); the other sections are accepted and read by later
+//! steps.
 
 use std::path::{Path, PathBuf};
 
@@ -89,6 +90,9 @@ pub struct Config {
     pub renderer: Option<Renderer>,
     /// `[editor] insert_escape = "jk"`: keys that leave insert mode (F-06).
     pub insert_escape: Option<String>,
+    /// `[editor] relative_numbers = false`: real line numbers on every line
+    /// instead of relative ones (F-05). `:set rnu` changes it per vault.
+    pub relative_numbers: Option<bool>,
     /// Unknown keys and other problems that did not stop reading.
     pub warnings: Vec<String>,
 }
@@ -181,6 +185,15 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     continue;
                 };
                 for (k, v) in editor {
+                    if k == "relative_numbers" {
+                        match v.as_bool() {
+                            Some(b) => config.relative_numbers = Some(b),
+                            None => config
+                                .warnings
+                                .push("[editor] relative_numbers must be true or false".into()),
+                        }
+                        continue;
+                    }
                     match (k.as_str(), v.as_str()) {
                         ("insert_escape", Some(keys)) if keys.chars().count() == 2 => {
                             config.insert_escape = Some(keys.to_owned());
@@ -237,6 +250,15 @@ mod tests {
         assert_eq!((c.layout, c.renderer), (None, None));
         assert_eq!(c.warnings.len(), 2);
         assert_eq!(Layout::Focus.next(), Layout::Minimal);
+        let c = parse("[editor]\nrelative_numbers = false\n").unwrap();
+        assert_eq!(c.relative_numbers, Some(false));
+        assert_eq!(
+            parse("[editor]\nrelative_numbers = \"no\"\n")
+                .unwrap()
+                .warnings
+                .len(),
+            1
+        );
         let c = parse("[editor]\ninsert_escape = \"jk\"\n").unwrap();
         assert_eq!(c.insert_escape.as_deref(), Some("jk"));
         assert_eq!(

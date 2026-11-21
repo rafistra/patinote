@@ -112,6 +112,48 @@ impl App {
             .map(|d| d.buffer.text())
     }
 
+    /// Whether the gutter shows relative line numbers (F-05): `:set rnu`
+    /// in this vault, else `[editor] relative_numbers`, else on.
+    pub fn relative_numbers(&self) -> bool {
+        self.workspace()
+            .and_then(|w| w.state.relative_numbers)
+            .or(self.config.relative_numbers)
+            .unwrap_or(true)
+    }
+
+    /// `:set` with one of Vim's names for relative numbers: `rnu`, `nornu`,
+    /// `rnu!` or `invrnu` (toggle), `rnu?` (show).
+    pub(super) fn set_option(&mut self, arg: &str) -> Task<Message> {
+        let current = self.relative_numbers();
+        let value = match arg {
+            "relativenumber" | "rnu" => true,
+            "norelativenumber" | "nornu" => false,
+            "relativenumber!" | "rnu!" | "invrelativenumber" | "invrnu" => !current,
+            "relativenumber?" | "rnu?" => {
+                let name = if current {
+                    "relativenumber"
+                } else {
+                    "norelativenumber"
+                };
+                self.say(Level::Info, name);
+                return Task::none();
+            }
+            "" => {
+                self.say(Level::Error, "Argument required");
+                return Task::none();
+            }
+            other => {
+                self.say(Level::Error, format!("Unknown option: {other}"));
+                return Task::none();
+            }
+        };
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
+        w.state.relative_numbers = Some(value);
+        self.save_vault_state()
+    }
+
     /// Whether the app waits for saves to land before quitting, for tests.
     pub fn quitting(&self) -> bool {
         self.quitting
@@ -606,6 +648,7 @@ impl App {
             }
         });
         editor.search = doc.vim.last_search();
+        editor.relative_numbers = self.relative_numbers();
         editor.drawn = self.bench_clock();
         match self.layout() {
             patinote_core::config::Layout::Classic => editor.max_width = SIZE_EDITOR_MAXW_CLASSIC,

@@ -62,6 +62,8 @@ pub struct VaultState {
     /// The cursor (line, character) of each open buffer, to restore the
     /// session (F-09.6).
     pub cursors: HashMap<String, (usize, usize)>,
+    /// Set with `:set rnu` / `:set nornu`; `None` follows the configuration.
+    pub relative_numbers: Option<bool>,
 }
 
 impl VaultState {

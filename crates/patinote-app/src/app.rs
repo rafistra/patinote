@@ -739,6 +739,7 @@ impl App {
             "bd" | "bdelete" => self.close_or_quit(false),
             "conflicts" => self.open_conflicts(),
             "layout" => self.layout_command(arg),
+            "set" | "se" => self.set_option(arg),
             other => {
                 self.say(Level::Error, format!("Not an editor command: {other}"));
                 Task::none()
