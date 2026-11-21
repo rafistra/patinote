@@ -9,6 +9,8 @@ mod frontmatter;
 mod inline;
 mod markdown;
 
+pub use markdown::percent_decode;
+
 use std::ops::Range;
 
 use crate::model::{Heading, ParsedNote};

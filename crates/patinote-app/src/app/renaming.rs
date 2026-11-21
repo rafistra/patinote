@@ -28,13 +28,18 @@ pub struct Preview {
     pub notes: usize,
 }
 
+fn is_note(path: &str) -> bool {
+    path.to_lowercase().ends_with(".md")
+}
+
 /// Plans the link updates for `moves`, reading every note that links to a
 /// moved note (from the index) and the moved notes themselves.
 fn plan_on_index(store: &SqliteStore, root: &Path, moves: &[Moved]) -> RelinkPlan {
     let mut sources: Vec<String> = Vec::new();
     let mut seen = HashSet::new();
     for m in moves {
-        if seen.insert(m.from.clone()) {
+        // A moved note's own links may change; an attachment has none.
+        if is_note(&m.from) && seen.insert(m.from.clone()) {
             sources.push(m.from.clone());
         }
         if let Some(row) = store.note_by_path(&m.from).ok().flatten() {
@@ -315,16 +320,14 @@ impl App {
         )
     }
 
-    /// Renames or moves a folder with everything in it.
+    /// Renames or moves a folder with everything in it. Attachments are
+    /// among the moves, so links to them follow too.
     pub(super) fn rename_folder(&mut self, from: String, to: String) -> Task<Message> {
-        let notes: Vec<String> = self
+        let files: Vec<String> = self
             .workspace()
             .map(|w| w.explorer.tree.files_under(&from))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|p| p.ends_with(".md"))
-            .collect();
-        let moves = relink::folder_moves(&from, &to, &notes);
+            .unwrap_or_default();
+        let moves = relink::folder_moves(&from, &to, &files);
         self.run_moves(moves, Some((from.clone(), to.clone())), from, to)
     }
 

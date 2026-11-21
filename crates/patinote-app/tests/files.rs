@@ -276,3 +276,35 @@ fn nothing_is_deleted_when_no_row_is_selected() {
         );
     }
 }
+
+#[test]
+fn f10_7_renaming_a_folder_keeps_links_to_its_attachments() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::create_dir_all(vault.join("Tujuan/img")).unwrap();
+    std::fs::write(vault.join("Tujuan/img/foto.png"), b"\x89PNG\r\n").unwrap();
+    std::fs::write(
+        vault.join("Tujuan/Catatan.md"),
+        "![a](img/foto.png) ![[img/foto.png]]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        vault.join("luar.md"),
+        "![b](Tujuan/img/foto.png) ![[Tujuan/img/foto.png]]\n",
+    )
+    .unwrap();
+    let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    explorer_key(&mut app, "Tujuan", "r");
+    send(&mut app, Message::InlineInput("Sasaran".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert!(vault.join("Sasaran/img/foto.png").exists());
+    assert_eq!(
+        read(&env, "Sasaran/Catatan.md"),
+        "![a](img/foto.png) ![[img/foto.png]]\n",
+        "links inside the folder moved with it"
+    );
+    assert_eq!(
+        read(&env, "luar.md"),
+        "![b](Sasaran/img/foto.png) ![[Sasaran/img/foto.png]]\n"
+    );
+}

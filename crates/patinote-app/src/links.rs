@@ -2,6 +2,8 @@
 //! link under the cursor, what `[[` autocomplete should suggest, and the
 //! name a link should use. Columns are character indices.
 
+use patinote_core::parser::percent_decode;
+
 /// A link found under the cursor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Link {
@@ -98,26 +100,6 @@ fn is_url(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://") || s.starts_with("mailto:")
 }
 
-/// `%20` → space, for Markdown link targets.
-fn percent_decode(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'%'
-            && i + 2 < b.len()
-            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16)
-        {
-            out.push(v);
-            i += 3;
-            continue;
-        }
-        out.push(b[i]);
-        i += 1;
-    }
-    String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
-}
-
 /// What `[[` autocomplete should suggest at the cursor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Suggest {
@@ -212,6 +194,16 @@ mod tests {
             Some(wiki("gambar.png", None))
         );
         assert_eq!(link_at("no links here", 3), None);
+    }
+
+    #[test]
+    fn a_percent_before_a_non_ascii_character_is_kept() {
+        assert_eq!(
+            link_at("[x](Diskon 50%—baru.md)", 1).map(|l| l.0),
+            Some(Link::Markdown {
+                target: "Diskon 50%—baru.md".into()
+            })
+        );
     }
 
     #[test]
