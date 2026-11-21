@@ -158,10 +158,16 @@ impl Resolver {
     }
 
     /// A Markdown link destination as a path: relative to the source folder,
-    /// then from the vault root, with `.md` added when there is no extension.
+    /// then from the vault root (only the root with a leading `/`), with
+    /// `.md` added when there is no extension.
     fn markdown_path(&self, source: &str, target: &str) -> Option<usize> {
         let dir = source.rsplit_once('/').map_or("", |(d, _)| d);
-        let relative = normalize(&format!("{dir}/{target}"));
+        // `/Rapat.md` is from the vault root only.
+        let relative = if target.starts_with('/') {
+            None
+        } else {
+            normalize(&format!("{dir}/{target}"))
+        };
         let rooted = normalize(target);
         for candidate in [relative, rooted].into_iter().flatten() {
             let folded = fold(&candidate);
@@ -330,6 +336,20 @@ mod tests {
         assert_eq!(
             path(&r, "a.md", LinkKind::Frontmatter, "Patinote"),
             Some("Proyek/Patinote.md")
+        );
+    }
+
+    #[test]
+    fn a_leading_slash_is_the_vault_root() {
+        let r = Resolver::new([t("Rapat.md", &[]), t("Proyek/Rapat.md", &[])]);
+        assert_eq!(
+            path(&r, "Proyek/a.md", LinkKind::Markdown, "/Rapat.md"),
+            Some("Rapat.md")
+        );
+        assert_eq!(
+            path(&r, "Proyek/a.md", LinkKind::Markdown, "Rapat.md"),
+            Some("Proyek/Rapat.md"),
+            "without it, the source folder comes first"
         );
     }
 

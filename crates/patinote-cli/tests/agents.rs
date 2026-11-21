@@ -133,3 +133,28 @@ fn writes_are_journaled_as_cli() {
         (Some("cli"), Some("committed"))
     );
 }
+
+#[test]
+fn a05_2_an_end_marker_mentioned_above_the_generated_part_is_left_alone() {
+    let env = Env::new();
+    let vault = env.fixture();
+    let v = vault.to_str().unwrap();
+    assert_eq!(env.run(&["--vault", v, "agents", "init"]).code, 0);
+    let path = vault.join("AGENTS.md");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let prose = "Patinote replaces text up to <!-- patinote:end --> only.\n\n";
+    let text = text.replacen("# AGENTS.md\n\n", &format!("# AGENTS.md\n\n{prose}"), 1);
+    std::fs::write(&path, &text).unwrap();
+
+    env.write("vault/Inbox/Baru.md", "Catatan baru #topikbaru\n");
+    let r = env.run(&["--vault", v, "agents", "init", "--update"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let updated = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(updated.matches(prose).count(), 1, "{updated}");
+    assert_eq!(
+        updated.matches("<!-- patinote:begin -->").count(),
+        1,
+        "{updated}"
+    );
+    assert!(updated.contains("`#topikbaru` (1)"));
+}

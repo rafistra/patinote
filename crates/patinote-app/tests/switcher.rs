@@ -8,6 +8,7 @@ use std::time::Duration;
 use common::{Env, keys, leader, press, press_with, send, wait};
 use iced::keyboard::{Key, Modifiers, key};
 use patinote_app::app::{App, Message};
+use patinote_app::theme::styles::Level;
 use patinote_core::config::Config;
 
 fn start(env: &Env) -> App {
@@ -134,4 +135,51 @@ fn space_without_f_does_not_open_the_switcher() {
     leader(&mut app, "x");
     press(&mut app, "j");
     assert!(!app.switcher_open());
+}
+
+/// Shift+Enter in the open switcher with `query` typed.
+fn shift_enter(app: &mut App, query: &str) {
+    send(app, Message::SwitcherInput(query.into()));
+    send(
+        app,
+        Message::Key(
+            iced::keyboard::Event::ModifiersChanged(Modifiers::SHIFT),
+            false,
+        ),
+    );
+    send(app, Message::SwitcherSubmit);
+    send(
+        app,
+        Message::Key(
+            iced::keyboard::Event::ModifiersChanged(Modifiers::default()),
+            false,
+        ),
+    );
+}
+
+#[test]
+fn f10_2_shift_enter_checks_the_name_like_the_dialog() {
+    let env = Env::new();
+    let mut app = start(&env);
+    let open = |app: &mut App| {
+        press_with(
+            app,
+            Key::Character("o".into()),
+            Modifiers::CTRL | Modifiers::SHIFT,
+            None,
+            false,
+        )
+    };
+    open(&mut app);
+    shift_enter(&mut app, "Ide: baru");
+    assert!(app.switcher_open(), "a forbidden name is refused");
+    assert_eq!(open_note_path(&app), None);
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error));
+
+    // A risky name warns first and is created on the second Shift+Enter.
+    shift_enter(&mut app, "a#b");
+    assert!(app.switcher_open());
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Warning));
+    shift_enter(&mut app, "a#b");
+    assert_eq!(open_note_path(&app).as_deref(), Some("a#b"));
 }
