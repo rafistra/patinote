@@ -536,3 +536,61 @@ fn concurrent_commits_do_not_interleave() {
         "no update was lost"
     );
 }
+
+#[test]
+fn writing_a_symlinked_note_writes_the_file_it_points_to() {
+    let v = vault();
+    v.write("Arsip/Harian asli.md", "lama\n");
+    std::os::unix::fs::symlink("Arsip/Harian asli.md", v.root.join("Harian.md")).unwrap();
+    v.commit(vec![write_op("Harian.md", "baru\n", v.expect("Harian.md"))])
+        .unwrap();
+    assert!(
+        fs::symlink_metadata(v.root.join("Harian.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "the link stays a link"
+    );
+    assert_eq!(v.read("Arsip/Harian asli.md").as_deref(), Some("baru\n"));
+
+    // Undoing a crashed write goes through the link too.
+    let c = v
+        .commit(vec![write_op(
+            "Harian.md",
+            "rusak\n",
+            v.expect("Harian.md"),
+        )])
+        .unwrap();
+    let manifest = v.journal.dir().join(&c.id).join("manifest.json");
+    let text = fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("\"committed\"", "\"pending\"");
+    fs::write(&manifest, text).unwrap();
+    recover(&v.root, &v.journal).unwrap();
+    assert!(
+        fs::symlink_metadata(v.root.join("Harian.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(v.read("Arsip/Harian asli.md").as_deref(), Some("baru\n"));
+}
+
+#[test]
+fn a_note_linked_outside_the_vault_is_never_written() {
+    let v = vault();
+    let outside = v.root.parent().unwrap().join("luar.md");
+    fs::write(&outside, "di luar\n").unwrap();
+    std::os::unix::fs::symlink(&outside, v.root.join("Luar.md")).unwrap();
+    let err = v
+        .commit(vec![write_op("Luar.md", "baru\n", v.expect("Luar.md"))])
+        .unwrap_err();
+    assert!(matches!(err, WriteError::InvalidPath { .. }), "{err}");
+    assert_eq!(fs::read_to_string(&outside).unwrap(), "di luar\n");
+    assert!(
+        fs::symlink_metadata(v.root.join("Luar.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
