@@ -231,4 +231,4 @@ Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, da
 Melapor ke repositori Iced berarti mengirim tulisan ke layanan luar atas nama pemilik, jadi agent tidak melakukannya tanpa persetujuan.
 
 Rekomendasi agent: A. Tambalannya kecil dan mudah dibuang, dan dengan itu gulir mendekati satu frame tanpa mengorbankan target buka dan RAM.
-**Jawaban:** _(belum dijawab)_
+**Jawaban:** A (21 November 2026). Salinan bertambal ada di `vendor/iced_tiny_skia/` (cara membuangnya di `README.md` folder itu). Laporan ke Iced belum dikirim; teksnya disiapkan dan menunggu izin pemilik untuk dikirim atas nama akunnya.

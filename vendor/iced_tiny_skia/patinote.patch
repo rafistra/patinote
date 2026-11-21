@@ -1,0 +1,18 @@
+--- a/src/window/compositor.rs
++++ b/src/window/compositor.rs
+@@ -198,6 +198,15 @@
+             damage,
+             Rectangle::with_size(viewport.logical_size()),
+         );
++        // Patinote patch (vendor/iced_tiny_skia/README.md): `Renderer::draw`
++        // walks every layer once per damage region, so scrolling text (one
++        // region per line, 20+ regions) cost 20+ full passes. Past a few
++        // regions, one pass over their union is far cheaper.
++        let damage = if damage.len() > 4 {
++            damage.into_iter().reduce(|a, b| a.union(&b)).into_iter().collect()
++        } else {
++            damage
++        };
+ 
+         let mut pixels = tiny_skia::PixmapMut::from_bytes(
+             bytemuck::cast_slice_mut(&mut buffer),

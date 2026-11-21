@@ -190,5 +190,7 @@ Diukur dengan salinan `iced_tiny_skia` 0.14.1 yang diberi pencatat waktu di `win
 | Ditambah penggabungan damage di `iced_tiny_skia` (Q-018) | 24 / 41 ms |
 
 - **Di aplikasi (sudah diterapkan):** jendela sudah dibersihkan dengan `bg.app` (latar tema) sebelum apa pun digambar, jadi `styles::app` tidak lagi mengisi latar dan widget editor tidak lagi menggambar quad latar. Dua isian seukuran jendela itu dulu digambar ulang untuk setiap persegi damage. Tampilan tidak berubah; snapshot UI tetap sama.
-- **Di `iced_tiny_skia` (belum, menunggu Q-018):** bila `damage::group` menghasilkan lebih dari 4 persegi, gambar sekali di gabungannya. Satu persegi besar lebih murah daripada banyak persegi kecil yang masing-masing menggambar semua layer.
+- **Di `iced_tiny_skia` (Q-018 jawaban A):** salinan 0.14.1 di `vendor/iced_tiny_skia/`, dipakai lewat `[patch.crates-io]`, dengan satu perubahan (`patinote.patch`): bila `damage::group` menghasilkan lebih dari 4 persegi, gambar sekali di gabungannya. Satu persegi besar lebih murah daripada banyak persegi kecil yang masing-masing menggambar semua layer.
+- Diukur ulang dengan salinan di `vendor/` (`scripts/measure.sh 3 tiny-skia`): menahan `j` 23–24 / 39–42 ms; mengetik, `n`, dan `j` di mode visual tetap satu frame (20,8 ms); buka 194–272 ms; PSS 82–83 MB. Snapshot UI tidak berubah, karena screenshot headless tidak melewati `present`.
+- Salinan dibuang begitu rilis Iced memperbaikinya; langkahnya di `vendor/iced_tiny_skia/README.md`.
 - Sisa biaya setelah keduanya: teks sekitar 14 ms per layar penuh dan `adjust_clip_mask` 5–7 ms. Keduanya ada di dalam Iced.
