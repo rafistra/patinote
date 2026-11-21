@@ -582,6 +582,13 @@ impl App {
     /// under it (F-08).
     pub(super) fn click(&mut self, line: usize, col: usize, ctrl: bool) -> Task<Message> {
         if let Some(doc) = self.active_document_mut() {
+            // Past the last character only in insert mode, as in Vim.
+            let col = if doc.vim.mode() == vim::Mode::Insert {
+                col
+            } else {
+                let len = doc.buffer.line_len(line.min(doc.buffer.line_count() - 1));
+                col.min(len.saturating_sub(1))
+            };
             doc.buffer.set_cursor(vim::Pos { line, col });
         }
         if ctrl {
