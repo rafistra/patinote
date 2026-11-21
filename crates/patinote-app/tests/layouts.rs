@@ -270,3 +270,35 @@ fn f28_3_in_classic_the_panel_focus_is_on_the_tab_shown() {
     press(&mut app, "Enter");
     assert_eq!(app.title(), "Desain indeks Patinote — Patinote");
 }
+
+#[test]
+fn f28_3_clicking_a_panel_tab_moves_the_focus_with_it() {
+    let env = Env::new();
+    let config = Config {
+        layout: Some(Layout::Classic),
+        ..Config::default()
+    };
+    let mut app = env.start(env.launch(Some(env.vault()), config));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Desain indeks Patinote.md".into(),
+        }),
+    );
+    press_with(
+        &mut app,
+        Key::Character("w".into()),
+        Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(&mut app, "l");
+    // The focus is on a backlink; the Outline tab is clicked.
+    send(&mut app, Message::PanelTab(true));
+    press(&mut app, "Enter");
+    assert_eq!(
+        app.title(),
+        "Desain indeks Patinote — Patinote",
+        "Enter acts on the outline shown, not on a hidden backlink"
+    );
+}

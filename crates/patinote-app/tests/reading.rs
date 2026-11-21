@@ -103,3 +103,25 @@ fn f27_4_a_large_image_is_kept_at_column_width() {
     // 1.5 MB kept, instead of 48 MB for the full image.
     assert!(u64::from(w) * u64::from(h) * 4 < 2_000_000);
 }
+
+#[test]
+fn f27_5_a_markdown_link_with_an_encoded_hash_opens_its_note() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("C# notes.md"), "# Bagian dua\n").unwrap();
+    std::fs::write(
+        vault.join("Sumber.md"),
+        "[c](C%23%20notes.md#Bagian%20dua)\n",
+    )
+    .unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Sumber.md".into(),
+        }),
+    );
+    leader(&mut app, "r");
+    send(&mut app, Message::ReadLink(0));
+    assert_eq!(app.title(), "C# notes — Patinote");
+}

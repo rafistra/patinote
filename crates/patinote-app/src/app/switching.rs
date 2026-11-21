@@ -132,7 +132,21 @@ impl App {
                 return Task::none();
             }
             // The same name rules as the new note dialog (F-10.2).
-            match super::files::name_problem(&name) {
+            // `Proyek/Ide` creates the note in a folder: each part is a name.
+            let problem = name
+                .split('/')
+                .filter_map(|part| {
+                    if part.trim().is_empty() {
+                        Some((
+                            Field::Rejected,
+                            "Folder and note names can't be empty".to_owned(),
+                        ))
+                    } else {
+                        super::files::name_problem(part)
+                    }
+                })
+                .max_by_key(|(f, _)| *f == Field::Rejected);
+            match problem {
                 Some((Field::Rejected, why)) => {
                     self.say(Level::Error, why);
                     return Task::none();

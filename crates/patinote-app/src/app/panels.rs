@@ -109,6 +109,21 @@ impl App {
         self.focus = Some(focus);
     }
 
+    /// A click on a classic panel tab: a focus in the panel moves to the
+    /// section now shown.
+    pub(super) fn panel_tab(&mut self, outline: bool) -> Task<Message> {
+        self.panel_outline = outline;
+        if self.focus.is_some() {
+            let focus = if outline {
+                Focused::Outline(self.current_heading().unwrap_or(0))
+            } else {
+                Focused::Backlink(0)
+            };
+            self.focus = Some(focus);
+        }
+        Task::none()
+    }
+
     fn current_heading(&self) -> Option<usize> {
         let line = self.active_document()?.buffer.cursor().line;
         panel::current_heading(&self.outline(), line)

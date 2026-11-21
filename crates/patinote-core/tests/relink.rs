@@ -509,3 +509,26 @@ fn f10_6_a_link_around_an_image_link_updates_both() {
         "Lihat [![alt](Baru/img.png)](Baru/Note.md) ya\n"
     );
 }
+
+#[test]
+fn f10_6_every_image_inside_a_link_is_updated() {
+    let paths: &[(&str, &[&str])] = &[
+        ("Lama/Note.md", &[]),
+        ("Lama/x.png", &[]),
+        ("Lama/y.png", &[]),
+        ("a.md", &[]),
+    ];
+    let vault = Vault::new(
+        paths,
+        &[(
+            "a.md",
+            "[![a](Lama/x.png) ![b](Lama/y.png)](Lama/Note.md)\n",
+        )],
+    );
+    let note_paths: Vec<String> = paths.iter().map(|(p, _)| p.to_string()).collect();
+    let p = vault.plan(&folder_moves("Lama", "Arsip/Lama", &note_paths));
+    assert_eq!(
+        new_text(&p, "a.md"),
+        "[![a](Arsip/Lama/x.png) ![b](Arsip/Lama/y.png)](Arsip/Lama/Note.md)\n"
+    );
+}

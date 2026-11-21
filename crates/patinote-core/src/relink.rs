@@ -279,23 +279,29 @@ pub fn plan(
 /// holds where it was, or a partial overlap, is dropped: that link stays.
 fn nest(mut changes: Vec<LinkChange>) -> Vec<LinkChange> {
     changes.sort_by_key(|c| (c.byte_start, std::cmp::Reverse(c.byte_end)));
-    let mut out: Vec<LinkChange> = Vec::with_capacity(changes.len());
+    // Each outer change, with how much the inner changes folded into it so
+    // far moved the text after them.
+    let mut out: Vec<(LinkChange, isize)> = Vec::with_capacity(changes.len());
     for c in changes {
-        let Some(outer) = out.last_mut().filter(|o| c.byte_start < o.byte_end) else {
-            out.push(c);
+        let Some((outer, shift)) = out.last_mut().filter(|(o, _)| c.byte_start < o.byte_end) else {
+            out.push((c, 0));
             continue;
         };
         if c.byte_end > outer.byte_end {
             continue;
         }
         // Rewrites only change a link's target, which comes after any link
-        // in its text, so the inner link sits at the same offset.
-        let at = c.byte_start - outer.byte_start;
+        // in its text, so the inner link sits at the same offset, moved by
+        // the inner links before it.
+        let Some(at) = (c.byte_start - outer.byte_start).checked_add_signed(*shift) else {
+            continue;
+        };
         if outer.new.get(at..at + c.old.len()) == Some(c.old.as_str()) {
             outer.new.replace_range(at..at + c.old.len(), &c.new);
+            *shift += c.new.len() as isize - c.old.len() as isize;
         }
     }
-    out
+    out.into_iter().map(|(c, _)| c).collect()
 }
 
 /// One link being rewritten.

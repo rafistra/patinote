@@ -949,7 +949,9 @@ fn undo(root: &Path, journal: &Journal, entry: &Entry) -> io::Result<()> {
 
 /// Undoes journal entries left pending by a crash. Run it when a vault is
 /// opened for writing. Returns the ids it rolled back. An entry that cannot
-/// be read or undone does not stop the others; the error names it.
+/// be read or undone does not stop the others; the error names it. A
+/// manifest that cannot be read is renamed `manifest.json.damaged`, so it
+/// is reported once rather than on every start.
 pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
     let _lock = WriteLock::acquire(journal)?;
     let mut done = Vec::new();
@@ -958,7 +960,17 @@ pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
     // after it half-applied.
     for id in journal.ids()? {
         let undone = (|| {
-            let mut entry = journal.entry(&id)?;
+            let mut entry = match journal.entry(&id) {
+                Ok(entry) => entry,
+                Err(e) => {
+                    // Unreadable: nothing can be undone from it. It is set
+                    // aside (blobs kept, for a person to look at) and
+                    // reported this once.
+                    let manifest = journal.dir().join(&id).join("manifest.json");
+                    let _ = fs::rename(&manifest, manifest.with_extension("json.damaged"));
+                    return Err(e);
+                }
+            };
             if entry.status != EntryStatus::Pending {
                 return Ok(false);
             }

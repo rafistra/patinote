@@ -124,8 +124,12 @@ type TableParts = (Vec<Vec<Inline>>, Vec<Vec<Vec<Inline>>>, usize);
 /// A link target as written, in document order, for `Tab` and `Enter`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkTarget {
+    /// For a Markdown link to a file, the decoded path alone; otherwise the
+    /// target as written.
     pub target: String,
     pub markdown: bool,
+    /// The decoded `#heading` of a Markdown link to a file.
+    pub subpath: Option<String>,
 }
 
 /// The rendered note.
@@ -215,6 +219,7 @@ pub fn render(text: &str) -> Document {
                         doc.links.push(LinkTarget {
                             target: target.clone(),
                             markdown: false,
+                            subpath: None,
                         });
                         Value::Link {
                             target,
@@ -247,7 +252,7 @@ pub fn render(text: &str) -> Document {
         | Options::ENABLE_WIKILINKS;
     let mut inlines: Vec<Inline> = Vec::new();
     let (mut bold, mut italic, mut strike) = (false, false, false);
-    let mut link: Option<(String, bool)> = None;
+    let mut link: Option<(String, Option<String>, bool)> = None;
     let mut link_text = String::new();
     let mut image: Option<String> = None;
     let mut list: Vec<Item> = Vec::new();
@@ -322,14 +327,16 @@ pub fn render(text: &str) -> Document {
                 ..
             }) => {
                 let markdown = !matches!(link_type, LinkType::WikiLink { .. });
-                link = Some((destination(&dest_url, markdown), markdown));
+                let (target, subpath) = destination(&dest_url, markdown);
+                link = Some((target, subpath, markdown));
                 link_text.clear();
             }
             Event::End(TagEnd::Link) => {
-                if let Some((target, markdown)) = link.take() {
+                if let Some((target, subpath, markdown)) = link.take() {
                     doc.links.push(LinkTarget {
                         target: target.clone(),
                         markdown,
+                        subpath,
                     });
                     let text = if link_text.is_empty() {
                         target.clone()
@@ -350,7 +357,7 @@ pub fn render(text: &str) -> Document {
                 ..
             }) => {
                 let markdown = !matches!(link_type, LinkType::WikiLink { .. });
-                image = Some(destination(&dest_url, markdown));
+                image = Some(destination(&dest_url, markdown).0);
                 block_line = line;
             }
             Event::End(TagEnd::Image) => {
@@ -362,6 +369,7 @@ pub fn render(text: &str) -> Document {
                         doc.links.push(LinkTarget {
                             target: target.clone(),
                             markdown: false,
+                            subpath: None,
                         });
                         doc.blocks.push(Block::Embed {
                             target,
@@ -551,13 +559,19 @@ pub fn render(text: &str) -> Document {
     doc
 }
 
-/// A link's target as the index reads it: Markdown destinations to files
-/// are percent-decoded (`%20` is a space); web addresses stay as written.
-fn destination(dest: &str, markdown: bool) -> String {
+/// A link's target as the index reads it, and its `#heading`. A Markdown
+/// destination to a file is split at `#` first, then each part decoded
+/// (`%20` is a space, `%23` a `#` in the name); web addresses and
+/// wikilinks stay as written.
+fn destination(dest: &str, markdown: bool) -> (String, Option<String>) {
+    use patinote_core::parser::percent_decode;
     if markdown && !dest.contains("://") && !dest.starts_with("mailto:") {
-        patinote_core::parser::percent_decode(dest)
+        match dest.split_once('#') {
+            Some((path, sub)) => (percent_decode(path), Some(percent_decode(sub))),
+            None => (percent_decode(dest), None),
+        }
     } else {
-        dest.to_owned()
+        (dest.to_owned(), None)
     }
 }
 
@@ -712,5 +726,17 @@ mod tests {
             "{:?}",
             doc.blocks
         );
+    }
+
+    /// `%23` is a `#` in the file name, not the start of a heading.
+    #[test]
+    fn f27_an_encoded_hash_stays_in_the_file_name() {
+        let doc = render("[c](C%23%20notes.md#Bagian%20dua) [d](a%7Cb.md)\n");
+        let got: Vec<(&str, Option<&str>)> = doc
+            .links
+            .iter()
+            .map(|l| (l.target.as_str(), l.subpath.as_deref()))
+            .collect();
+        assert_eq!(got, [("C# notes.md", Some("Bagian dua")), ("a|b.md", None)]);
     }
 }
