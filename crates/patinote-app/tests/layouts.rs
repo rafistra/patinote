@@ -228,3 +228,45 @@ fn text_size_steps_by_ten_percent_within_its_limits() {
     }
     assert!((app.zoom() - 0.7).abs() < 0.001);
 }
+
+#[test]
+fn f28_3_in_classic_the_panel_focus_is_on_the_tab_shown() {
+    let env = Env::new();
+    let config = Config {
+        layout: Some(Layout::Classic),
+        ..Config::default()
+    };
+    let mut app = env.start(env.launch(Some(env.vault()), config));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Desain indeks Patinote.md".into(),
+        }),
+    );
+    // The Backlinks tab shows: Ctrl+w l, j and Enter act on backlinks.
+    press_with(
+        &mut app,
+        Key::Character("w".into()),
+        Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(&mut app, "l");
+    press(&mut app, "Enter");
+    assert_ne!(
+        app.title(),
+        "Desain indeks Patinote — Patinote",
+        "Enter opened the selected backlink"
+    );
+
+    // <leader>o shows the Outline tab with the focus on it.
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Desain indeks Patinote.md".into(),
+        }),
+    );
+    leader(&mut app, "o");
+    press(&mut app, "Enter");
+    assert_eq!(app.title(), "Desain indeks Patinote — Patinote");
+}

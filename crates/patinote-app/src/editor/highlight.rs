@@ -18,27 +18,45 @@ pub enum LineKind {
 /// Classifies every line of a document.
 pub fn line_kinds(lines: &[String]) -> Vec<LineKind> {
     let mut kinds = Vec::with_capacity(lines.len());
-    let mut in_front = lines.first().is_some_and(|l| l == "---");
-    let mut in_fence = false;
+    // Frontmatter needs a closing `---`, as the parser reads it.
+    let front_end = (lines.first().is_some_and(|l| l == "---"))
+        .then(|| lines.iter().skip(1).position(|l| l == "---"))
+        .flatten()
+        .map(|i| i + 1);
+    let mut open: Option<(char, usize)> = None;
     for (i, l) in lines.iter().enumerate() {
-        if in_front {
+        if front_end.is_some_and(|end| i <= end) {
             kinds.push(LineKind::Frontmatter);
-            if i > 0 && l == "---" {
-                in_front = false;
-            }
             continue;
         }
-        let fence = l.trim_start().starts_with("```") || l.trim_start().starts_with("~~~");
-        if fence || in_fence {
-            kinds.push(LineKind::Fence);
-            if fence {
-                in_fence = !in_fence;
+        let fence = fence_of(l);
+        match (open, fence) {
+            (None, Some((c, n, _))) => {
+                open = Some((c, n));
+                kinds.push(LineKind::Fence);
             }
-            continue;
+            (Some(o), f) => {
+                // Closes with the same character, at least as long, and
+                // nothing after it (CommonMark).
+                if f.is_some_and(|(c, n, rest)| c == o.0 && n >= o.1 && rest.is_empty()) {
+                    open = None;
+                }
+                kinds.push(LineKind::Fence);
+            }
+            (None, None) => kinds.push(LineKind::Text),
         }
-        kinds.push(LineKind::Text);
     }
     kinds
+}
+
+/// A fence line: its character, how many, and what follows (trimmed).
+fn fence_of(line: &str) -> Option<(char, usize, &str)> {
+    let t = line.trim_start();
+    let c = t.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let n = t.chars().take_while(|&x| x == c).count();
+    let rest = t[n..].trim();
+    // A backtick fence's info string has no backticks.
+    (n >= 3 && !(c == '`' && rest.contains('`'))).then_some((c, n, rest))
 }
 
 /// A colored run of characters `start..end`.
@@ -179,6 +197,33 @@ mod tests {
         assert_eq!(s[0].link_target.as_deref(), Some("Rapat"));
         assert_eq!((s[1].start, s[1].end), (18, 22));
         assert_eq!(s[2].color, SYNTAX_CODE);
+    }
+
+    fn kinds_of(lines: &[&str]) -> Vec<LineKind> {
+        let lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+        line_kinds(&lines)
+    }
+
+    /// Like the parser: frontmatter needs its closing `---`.
+    #[test]
+    fn a_rule_on_the_first_line_is_not_frontmatter() {
+        use LineKind::*;
+        assert_eq!(kinds_of(&["---", "# Judul", "teks"]), [Text, Text, Text]);
+    }
+
+    /// A fence closes only with its own character, at least as long, and
+    /// nothing after it.
+    #[test]
+    fn fences_close_like_commonmark() {
+        use LineKind::*;
+        assert_eq!(
+            kinds_of(&["```md", "~~~", "```js", "# bukan judul", "```", "# Judul"]),
+            [Fence, Fence, Fence, Fence, Fence, Text]
+        );
+        assert_eq!(
+            kinds_of(&["````", "```", "````", "t"]),
+            [Fence, Fence, Fence, Text]
+        );
     }
 
     #[test]

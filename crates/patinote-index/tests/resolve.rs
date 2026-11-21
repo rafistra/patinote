@@ -259,3 +259,21 @@ fn link_candidates_resolve_like_the_full_resolver() {
         );
     }
 }
+
+#[test]
+fn a01_orphans_ignore_links_from_a_note_to_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("v");
+    write(
+        &root,
+        "Sendiri.md",
+        "# Ringkasan\n\nLihat [[#Ringkasan]] dan [[Sendiri]].\n",
+    );
+    write(&root, "Keluar.md", "Ke [[Belum ada]].\n");
+    write(&root, "Sepi.md", "Tanpa link.\n");
+    let mut s = SqliteStore::open(&dir.path().join("index.db"), &OpenOptions::default()).unwrap();
+    index(&root, &mut s);
+    let orphans: Vec<String> = s.orphans().unwrap().into_iter().map(|n| n.path).collect();
+    // A link to a note that does not exist yet still points out.
+    assert_eq!(orphans, ["Sendiri.md", "Sepi.md"]);
+}
