@@ -43,6 +43,15 @@ pub struct BacklinkRow {
     pub line: usize,
 }
 
+/// A heading of a note.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeadingRow {
+    pub level: u8,
+    pub text: String,
+    /// The line it is on, as the parser numbers lines.
+    pub line: usize,
+}
+
 /// A link written in a note.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkRow {
@@ -262,6 +271,33 @@ impl SqliteStore {
                     line: r.get::<_, i64>(5)? as usize,
                 })
             })?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The headings of a note, in document order (F-08 autocomplete).
+    pub fn headings(&self, id: i64) -> Result<Vec<HeadingRow>, IndexError> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT level, text, line FROM headings WHERE note_id = ?1 ORDER BY line",
+        )?;
+        Ok(stmt
+            .query_map([id], |r| {
+                Ok(HeadingRow {
+                    level: r.get::<_, i64>(0)? as u8,
+                    text: r.get(1)?,
+                    line: r.get::<_, i64>(2)? as usize,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The block IDs (without `^`) of a note with their lines, in document
+    /// order (F-08 autocomplete).
+    pub fn blocks(&self, id: i64) -> Result<Vec<(String, usize)>, IndexError> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT block_id, line FROM blocks WHERE note_id = ?1 ORDER BY line")?;
+        Ok(stmt
+            .query_map([id], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize)))?
             .collect::<rusqlite::Result<_>>()?)
     }
 

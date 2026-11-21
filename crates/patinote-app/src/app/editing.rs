@@ -73,6 +73,19 @@ impl App {
         self.active_document().map(|d| d.buffer.text())
     }
 
+    /// The active note's cursor (line, character), for tests.
+    pub fn active_cursor(&self) -> Option<(usize, usize)> {
+        self.active_document().map(|d| {
+            let c = d.buffer.cursor();
+            (c.line, c.col)
+        })
+    }
+
+    /// Links into the active note, as the status line shows, for tests.
+    pub fn active_backlinks(&self) -> Option<usize> {
+        self.workspace()?.active_buffer()?.backlinks
+    }
+
     /// Whether the active note has unsaved changes, for tests.
     pub fn active_dirty(&self) -> Option<bool> {
         self.active_document().map(Document::dirty)
@@ -99,7 +112,7 @@ impl App {
             .and_then(|b| b.doc.as_ref())
     }
 
-    fn active_document_mut(&mut self) -> Option<&mut Document> {
+    pub(super) fn active_document_mut(&mut self) -> Option<&mut Document> {
         let w = self.workspace_mut()?;
         let i = w.active?;
         w.buffers.get_mut(i)?.doc.as_mut()
@@ -118,6 +131,9 @@ impl App {
         text: Option<&str>,
         modifiers: Modifiers,
     ) -> Task<Message> {
+        if let Some(task) = self.autocomplete_key(key, modifiers) {
+            return task;
+        }
         let Some(vk) = vim_key(key, text, modifiers) else {
             return Task::none();
         };
@@ -126,6 +142,33 @@ impl App {
         let Some(doc) = self.active_document_mut() else {
             return Task::none();
         };
+        // `gd`, `gx` and `Enter` on a link (F-08); Vim leaves them alone.
+        if doc.vim.mode() == vim::Mode::Normal {
+            let pending_g = doc.vim.pending() == "g";
+            match vk {
+                vim::Key::Char('d') | vim::Key::Char('x') if pending_g => {
+                    doc.vim.handle(&mut doc.buffer, vim::Key::Esc, now, lines);
+                    return if vk == vim::Key::Char('d') {
+                        self.follow_link()
+                    } else {
+                        self.open_link_externally()
+                    };
+                }
+                vim::Key::Enter if doc.vim.pending().is_empty() => {
+                    let c = doc.buffer.cursor();
+                    let on_link = doc
+                        .buffer
+                        .lines()
+                        .get(c.line)
+                        .and_then(|l| crate::links::link_at(l, c.col))
+                        .is_some();
+                    if on_link {
+                        return self.follow_link();
+                    }
+                }
+                _ => {}
+            }
+        }
         let outcome = doc.vim.handle(&mut doc.buffer, vk, now, lines);
         if doc.read_only.is_some() && outcome.changed {
             // Edits do nothing on a read-only note (F-05.8): take the change
@@ -142,7 +185,12 @@ impl App {
             doc.edited(now);
             doc.kinds();
         }
-        self.after_outcome(outcome)
+        let typed = match vk {
+            vim::Key::Char(c) => Some(c),
+            _ => None,
+        };
+        let suggest = self.after_insert_key(typed);
+        Task::batch([self.after_outcome(outcome), suggest])
     }
 
     fn after_outcome(&mut self, outcome: Outcome) -> Task<Message> {
@@ -207,6 +255,7 @@ impl App {
         let insert_escape = self.config.insert_escape.clone();
         let register = self.clipboard.clone();
         let mut error = None;
+        let mut loaded = false;
         if let Some(w) = self.workspace_mut()
             && let Some(b) = w.buffers.iter_mut().find(|b| b.path == path)
         {
@@ -218,6 +267,7 @@ impl App {
                         engine.set_register(Register { text, linewise });
                     }
                     b.doc = Some(Document::new(path.clone(), &bytes, engine));
+                    loaded = true;
                 }
                 Err(e) => error = Some(format!("Can't read \"{path}\": {e}")),
             }
@@ -225,7 +275,11 @@ impl App {
         if let Some(e) = error {
             self.say(Level::Error, e);
         }
-        Task::none()
+        if !loaded {
+            return Task::none();
+        }
+        self.apply_pending_jump();
+        self.load_ambiguous(path)
     }
 
     /// Whether the active note's Vim engine waits for a timeout (`j` of an
@@ -289,6 +343,15 @@ impl App {
 
     /// A save finished.
     pub(super) fn saved(&mut self, done: SaveDone) -> Task<Message> {
+        let reindex = if done.result.is_ok() {
+            self.refresh_index(done.path.clone())
+        } else {
+            Task::none()
+        };
+        Task::batch([reindex, self.save_landed(done)])
+    }
+
+    fn save_landed(&mut self, done: SaveDone) -> Task<Message> {
         let now = Instant::now();
         let mut message = None;
         if let Some(w) = self.workspace_mut() {
@@ -355,11 +418,16 @@ impl App {
         })
     }
 
-    /// A click moves the cursor there.
-    pub(super) fn click(&mut self, line: usize, col: usize) {
+    /// A click moves the cursor there; Ctrl+click also follows the link
+    /// under it (F-08).
+    pub(super) fn click(&mut self, line: usize, col: usize, ctrl: bool) -> Task<Message> {
         if let Some(doc) = self.active_document_mut() {
             doc.buffer.set_cursor(vim::Pos { line, col });
         }
+        if ctrl {
+            return self.follow_link();
+        }
+        Task::none()
     }
 
     /// After the wheel scrolled, the cursor stays inside the visible lines.
@@ -410,7 +478,7 @@ impl App {
             (cursor.line, cursor.col),
             shape,
         )
-        .on_click(|(line, col)| Message::Click(line, col))
+        .on_click(|(line, col), ctrl| Message::Click(line, col, ctrl))
         .on_scroll(Message::Scrolled);
         editor.selection = doc.vim.selection(&doc.buffer).map(|(a, z)| {
             if mode == vim::Mode::VisualLine {
@@ -420,7 +488,11 @@ impl App {
             }
         });
         editor.search = doc.vim.last_search();
-        editor.into()
+        editor.ambiguous = self.workspace().and_then(|w| w.ambiguous.get(&doc.path));
+        match self.popup() {
+            Some((col, popup)) => editor.popup(col, popup).into(),
+            None => editor.into(),
+        }
     }
 
     /// The banner of the active note, if it needs one (0003 section 3.7).

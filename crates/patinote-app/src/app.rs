@@ -4,8 +4,10 @@
 //! in [`App::update`] so tests can drive it without a window.
 
 mod editing;
+mod linking;
 mod switching;
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -72,6 +74,12 @@ pub struct App {
     modifiers: Modifiers,
     /// The leader key (Space) was pressed and waits for the next key (F-28).
     leader: bool,
+    /// Link suggestions after `[[` (F-08).
+    autocomplete: Option<linking::Autocomplete>,
+    /// The picker for an ambiguous link (F-08, mockup 12).
+    picker: Option<linking::Picker>,
+    /// A heading or block to show once its note has loaded: (path, subpath).
+    pending_jump: Option<(String, String)>,
 }
 
 /// The screen shown.
@@ -102,7 +110,11 @@ pub struct Workspace {
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
     candidates: Vec<Candidate>,
+    /// Attachments, suggested after `![[` (F-08).
+    attachments: Vec<Candidate>,
     finder: Finder,
+    /// Link targets (lowercase) that match several notes, per open note.
+    ambiguous: HashMap<String, HashSet<String>>,
 }
 
 /// Where the opening index update is.
@@ -163,12 +175,26 @@ pub enum Message {
     /// Autosave and retry timer.
     Tick(Instant),
     Saved(SaveDone),
-    /// A click in the editor at a line and character.
-    Click(usize, usize),
+    /// A click in the editor at a line and character; `true` with Ctrl.
+    Click(usize, usize, bool),
     /// The wheel scrolled the editor: first and last visible line.
     Scrolled(usize, usize),
-    /// Notes for the quick switcher, loaded from the index.
-    Candidates(Vec<Candidate>),
+    /// Notes and attachments for finding and linking, from the index.
+    Candidates(Vec<Candidate>, Vec<Candidate>),
+    /// A link was resolved: its name, the column it starts at, and where it
+    /// leads.
+    Followed(String, usize, linking::Followed),
+    /// Heading or block suggestions: the link's start column, what was
+    /// typed, and (level, text); level 0 is a block.
+    Headings(usize, String, Vec<(u8, String)>),
+    /// A link suggestion was clicked.
+    Suggest(usize),
+    /// A note was picked for an ambiguous link.
+    Pick(usize),
+    /// Ambiguous link targets of a note.
+    Ambiguous(String, HashSet<String>),
+    /// The index was refreshed after saving this note.
+    Reindexed(String),
     SwitcherInput(String),
     SwitcherSubmit,
     SwitcherPick(usize),
@@ -197,6 +223,9 @@ impl App {
             switcher: None,
             modifiers: Modifiers::default(),
             leader: false,
+            autocomplete: None,
+            picker: None,
+            pending_jump: None,
         };
         let vault = launch
             .vault
@@ -309,7 +338,9 @@ impl App {
             closing: Vec::new(),
             selected: 0,
             candidates: Vec::new(),
+            attachments: Vec::new(),
             finder: Finder::new(),
+            ambiguous: HashMap::new(),
         }));
         Task::batch(tasks)
     }
@@ -367,21 +398,27 @@ impl App {
                 Message::NoteLoaded(path, bytes)
             })
         };
-        let backlinks = {
-            let p = path.clone();
-            Task::perform(
-                w.session.query(move |store| {
-                    store
-                        .note_by_path(&p)
-                        .ok()
-                        .flatten()
-                        .and_then(|row| store.backlinks(row.id).ok())
-                        .map_or(0, |b| b.len())
-                }),
-                move |count| Message::Backlinks(path.clone(), count.unwrap_or(0)),
-            )
-        };
+        let backlinks = self.load_backlinks(path.clone());
         Task::batch([leave, read, backlinks, self.save_vault_state()])
+    }
+
+    /// How many links point at the note at `path` (status line).
+    fn load_backlinks(&self, path: String) -> Task<Message> {
+        let Some(w) = self.workspace() else {
+            return Task::none();
+        };
+        let p = path.clone();
+        Task::perform(
+            w.session.query(move |store| {
+                store
+                    .note_by_path(&p)
+                    .ok()
+                    .flatten()
+                    .and_then(|row| store.backlinks(row.id).ok())
+                    .map_or(0, |b| b.len())
+            }),
+            move |count| Message::Backlinks(path.clone(), count.unwrap_or(0)),
+        )
     }
 
     fn choose_folder() -> Task<Message> {
@@ -628,20 +665,35 @@ impl App {
                 Task::batch([pending, self.autosave_at(now, false)])
             }
             Message::Saved(done) => self.saved(done),
-            Message::Click(line, col) => {
-                self.click(line, col);
-                Task::none()
-            }
+            Message::Click(line, col, ctrl) => self.click(line, col, ctrl),
             Message::Scrolled(first, last) => {
                 self.scrolled(first, last);
                 Task::none()
             }
-            Message::Candidates(candidates) => {
+            Message::Candidates(candidates, attachments) => {
                 if let Some(w) = self.workspace_mut() {
                     w.candidates = candidates;
+                    w.attachments = attachments;
                 }
                 self.refresh_switcher();
                 Task::none()
+            }
+            Message::Followed(name, col, followed) => self.followed(name, col, followed),
+            Message::Headings(start, typed, found) => {
+                self.headings_loaded(start, typed, found);
+                Task::none()
+            }
+            Message::Suggest(i) => self.accept_suggestion(i),
+            Message::Pick(i) => self.pick(i),
+            Message::Ambiguous(path, set) => {
+                if let Some(w) = self.workspace_mut() {
+                    w.ambiguous.insert(path, set);
+                }
+                Task::none()
+            }
+            Message::Reindexed(path) => {
+                let backlinks = self.load_backlinks(path.clone());
+                Task::batch([self.load_candidates(), backlinks, self.load_ambiguous(path)])
             }
             Message::SwitcherInput(query) => {
                 self.switcher_input(query);
@@ -696,6 +748,9 @@ impl App {
         }
         if captured {
             return Task::none();
+        }
+        if let Some(task) = self.picker_key(&key, text.as_deref(), modifiers) {
+            return task;
         }
         // `Ctrl+Shift+O` opens the quick switcher anywhere (F-07).
         if modifiers.control()
