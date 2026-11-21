@@ -60,7 +60,7 @@ tiny-skia gagal F-06.6 (menahan `j` < 16 ms): merasterisasi satu layar penuh di 
 - C. Keduanya ikut dalam binary, dipilih lewat konfigurasi (`renderer = "tiny-skia" | "wgpu"`), dengan default A, sehingga pengguna yang lebih mementingkan gulir mulus bisa beralih.
 
 Rekomendasi agent: C dengan default tiny-skia. Target RAM dan waktu buka adalah alasan utama Patinote dibuat; yang tidak tercapai hanya gulir layar penuh, dan itu masih bisa dioptimasi. Iced memilih renderer saat start tanpa kode tambahan, dan wgpu tetap dibutuhkan untuk graf di Fase 7.
-**Jawaban:** (diisi pemilik)
+**Jawaban:** C dengan default tiny-skia, disetujui pemilik (20 November 2026). Kedua renderer ikut dalam binary; optimasi gulir layar penuh dikejar di Fase 2.
 
 ## Q-005 · Tempat menyimpan peringatan per file di indeks (langkah 1.3, 20 November 2026)
 
@@ -134,4 +134,26 @@ Rekomendasi agent: A, dan benchmark dijalankan di laptop pemilik untuk setiap PR
 - C. Kunci `cargo-deny` di CI ke 0.22, yang tidak menandai advisory ini untuk dependensi transitif.
 
 Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (20 November 2026).
+
+## Q-011 · Mencegah Iced memindai font sistem (langkah 2.1, 20 November 2026)
+
+**Konteks:** Iced 0.14 selalu memanggil `fontdb::Database::load_system_fonts()` saat membuat database font; di laptop pemilik itu 513 font (183 MB). PRD (anggaran memori butir 3) meminta font sistem tidak dipindai. `fontdb` membaca folder dari `FONTCONFIG_FILE` bila variabel itu ada, dan kembali memindai `/usr/share/fonts` bila file itu tidak menyebut satu folder pun. Mengisi variabel dari dalam proses butuh `unsafe` di edition 2024 (`CLAUDE.md` bagian 9). Rinciannya di `docs/design/0002-editor-dan-renderer.md` bagian 5.1.
+**Pilihan:**
+- A. Saat start, `patinote-app` menulis file fontconfig yang hanya menyebut satu folder kosong di `$XDG_CACHE_HOME/patinote/fontconfig/`, lalu menjalankan ulang dirinya sekali (`exec`) dengan `FONTCONFIG_FILE` menunjuk file itu. Berlaku dari peluncur mana pun. Program luar yang dibuka aplikasi mendapat kembali `FONTCONFIG_FILE` milik pengguna. Huruf yang tidak ada di Inter dan JetBrains Mono (CJK, emoji) tampil sebagai kotak untuk sementara.
+- B. Peluncur (`.desktop` dan `patinote open`) yang mengisi variabel itu. Menjalankan `patinote-app` langsung tetap memindai semua font.
+- C. Pemindaian dibiarkan; aturan anggaran memori butir 3 dilonggarkan.
+
+Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (20 November 2026). Font cadangan untuk CJK atau emoji ditambahkan bila nanti dibutuhkan.
+
+## Q-012 · Tiga dependensi Iced dinyatakan tidak dipelihara lagi (langkah 2.1, 20 November 2026)
+
+**Konteks:** `cargo deny` di CI PR #19 gagal karena tiga advisory "unmaintained" (informasional, bukan celah keamanan, tanpa versi perbaikan): RUSTSEC-2026-0206 (`rustybuzz`), RUSTSEC-2026-0192 (`ttf-parser`), dan RUSTSEC-2024-0436 (`paste`). Ketiganya dependensi transitif `iced` 0.14: `ttf-parser` dipakai `cosmic-text`, `fontdb`, dan `winit` (inti render teks), `paste` lewat renderer, dan `rustybuzz` lewat `usvg`/`resvg` (fitur `svg` untuk ikon banner, juga dipakai `iced_tiny_skia`). Tidak ada yang bisa dihilangkan tanpa mengganti versi Iced. Di laptop pemilik `cargo-deny` 0.22 tidak menandainya; CI memakai versi lebih baru.
+**Pilihan:**
+- A. Abaikan ketiga advisory di `deny.toml` dengan alasan tertulis, seperti Q-010. Ditinjau ulang saat Iced naik versi.
+- B. Ubah `unmaintained` di `deny.toml` menjadi `workspace` (hanya dependensi langsung yang diperiksa). Advisory serupa di masa depan tidak lagi menggagalkan CI, tetapi juga tidak terlihat.
+- C. Kunci `cargo-deny` di CI ke 0.22, sama seperti laptop pemilik.
+
+Rekomendasi agent: A. Pemeriksaan tetap ketat, dan setiap pengecualian punya alasan.
 **Jawaban:** A, disetujui pemilik (20 November 2026).

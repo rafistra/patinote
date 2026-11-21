@@ -49,6 +49,14 @@ jobs:
       - name: Check the parser golden corpus is up to date
         run: python3 scripts/golden-corpus.py --check
       - run: cargo test --workspace
+        env:
+          # UI snapshots (CLAUDE.md section 6) render headless with tiny-skia.
+          ICED_TEST_BACKEND: tiny-skia
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ui-snapshots
+          path: target/ui-snapshots/
       - name: Build benchmarks
         run: cargo bench --workspace --no-run
 

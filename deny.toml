@@ -18,6 +18,13 @@ allow = [
     "CC0-1.0",
     # inotify (via notify) is ISC, equivalent to MIT; Iced also needs it (design 0002).
     "ISC",
+    # tiny-skia (the default renderer, Q-004) and arrayref (via tiny-skia) are
+    # BSD-3-Clause and BSD-2-Clause; permissive, design 0002 section 5.3.
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    # clipboard-win and error-code (Iced's clipboard; Windows only but in the
+    # graph) are BSL-1.0, permissive; design 0002 section 5.3.
+    "BSL-1.0",
 ]
 confidence-threshold = 0.9
 
@@ -26,6 +33,11 @@ ignore = [
     # chrono is unmaintained (informational, no vulnerability, no fix). rmcp
     # (MCP server, A-04) requires it; remove this when rmcp drops chrono. Q-010.
     { id = "RUSTSEC-2026-0543", reason = "unmaintained chrono, required by rmcp; Q-010" },
+    # Unmaintained crates that iced 0.14 requires (informational, no fix).
+    # Review them when iced is upgraded. Q-012.
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser, required by iced text rendering; Q-012" },
+    { id = "RUSTSEC-2026-0206", reason = "unmaintained rustybuzz, required by iced svg via usvg; Q-012" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained paste, required by the iced renderer; Q-012" },
 ]
 
 [licenses.private]

@@ -204,6 +204,7 @@ Semua ukuran adalah piksel logis pada skala 100% dan ikut skala HiDPI dari GNOME
 | `size.welcome.w` | 480 px | Kartu layar awal |
 | `size.control.h` | 36–40 px | Tombol dan kolom input |
 | `size.list.row` | 34–40 px | Baris di explorer, switcher, autocomplete |
+| `size.icon` | 18 px | Ikon garis di banner (`crates/patinote-app/assets/icons/`) |
 
 Jarak dalam yang sering dipakai: area editor 28 px atas dan 32 px samping; panel 16 px; overlay 14–16 px; dialog 22–24 px.
 
@@ -247,6 +248,21 @@ Keadaan berikut mengikuti pola yang sudah ada di mockup:
 ## 9. Perbedaan dengan mockup
 
 Per 20 November 2026 semua mockup sudah memakai nilai di dokumen ini (nomor baris `#7A8882`, link ke catatan yang belum ada `#9A8878`, popup leader dengan `l`). Bila nanti mockup dan dokumen ini berbeda, catat perbedaannya di sini; dokumen ini tetap yang benar.
+
+Ditemukan di langkah 2.1 (mockup 17). Aplikasi memakai nilai dokumen ini:
+
+| Elemen di mockup 17 | Mockup | Dipakai aplikasi |
+| --- | --- | --- |
+| Tepi tombol sekunder banner peringatan | `#5A4A38` | `banner.warning.border` (bagian 3.7 menyebutnya untuk tepi tombol sekunder banner) |
+| Tepi tombol sekunder banner info | `#34506A` | `banner.info.border` |
+| Teks tombol utama banner peringatan dan error | `#1A140D`, `#1F0F0E` | `text.on-accent` (kontras 8,4:1 dan 7,5:1) |
+| Latar kotak perintah di banner info | `#0F1412`, sudut 4 px | `bg.chrome`, sudut 3 px |
+| Kalimat pertama banner | tebal 700 | 600, batas `type.ui` |
+| Tinggi baris teks banner | 1,5 | 1,4 (`type.ui`) |
+| Jarak huruf `type.label` | 0,8 px | Belum diterapkan: Iced 0.14 tidak bisa mengatur jarak huruf |
+| Teks keterangan di bawah contoh | 12,5 px / 1,5 | `type.ui.small` (13 px / 1,5) |
+| Latar lembar komponen | `#0E1210` | `bg.chrome`. Hanya lembar, bukan bagian aplikasi |
+
 
 ## 10. Cadangan bila editor tidak mendukung
 
