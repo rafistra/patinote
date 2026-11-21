@@ -194,8 +194,9 @@ fn io_err(path: &Path) -> impl Fn(io::Error) -> WriteError + '_ {
 // ---------------------------------------------------------------------------
 // Paths
 
-/// Checks that a vault-relative path may be written.
-fn check_path(path: &str) -> Result<(), WriteError> {
+/// Checks that a vault-relative path may be written: relative, inside the
+/// vault, not hidden (no `..`, no `.obsidian/`).
+pub fn check_path(path: &str) -> Result<(), WriteError> {
     let bad = |reason| {
         Err(WriteError::InvalidPath {
             path: path.to_owned(),

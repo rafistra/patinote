@@ -9,8 +9,10 @@
 //! leaves the old or the new file, never half of one. A missing or unreadable
 //! file is the default state.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use patinote_core::config::Layout;
@@ -104,9 +106,33 @@ pub fn save<T: Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
     let dir = path.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
     std::fs::create_dir_all(dir)?;
     let json = serde_json::to_vec_pretty(value).map_err(std::io::Error::other)?;
-    let tmp = path.with_extension("json.tmp");
+    // Its own temporary file, so another process saving too cannot
+    // truncate it under us.
+    let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
     std::fs::write(&tmp, json)?;
     std::fs::rename(&tmp, path)
+}
+
+/// Orders state saves: take one when the state is copied, on the UI
+/// thread, and pass it to [`save_newest`].
+pub fn ticket() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Saves a state copied when `ticket` was taken, unless a newer copy has
+/// been saved already. Saves run on a thread pool, at the same time and in
+/// any order; one at a time is written, and an older copy never lands on
+/// a newer one.
+pub fn save_newest<T: Serialize>(path: &Path, value: &T, ticket: u64) -> std::io::Result<()> {
+    static SAVED: Mutex<BTreeMap<PathBuf, u64>> = Mutex::new(BTreeMap::new());
+    let mut saved = SAVED.lock().unwrap_or_else(|e| e.into_inner());
+    if saved.get(path).is_some_and(|&t| t > ticket) {
+        return Ok(());
+    }
+    save(path, value)?;
+    saved.insert(path.to_path_buf(), ticket);
+    Ok(())
 }
 
 /// Seconds since the Unix epoch.
@@ -148,5 +174,31 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{not json").unwrap();
         assert_eq!(load::<AppState>(&path), AppState::default());
+    }
+
+    /// Saves run on a thread pool: at the same time, and in any order.
+    #[test]
+    fn saves_at_the_same_time_leave_the_newest_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = vault_state_path(dir.path(), "abc");
+        let states: Vec<(u64, VaultState)> = (0..16)
+            .map(|n| {
+                let state = VaultState {
+                    buffers: (0..200).map(|i| format!("{n}/{i}.md")).collect(),
+                    ..VaultState::default()
+                };
+                (ticket(), state)
+            })
+            .collect();
+        let newest = states.last().unwrap().1.clone();
+        std::thread::scope(|s| {
+            // Oldest last, so a stale state would land on top.
+            for (t, state) in states.iter().rev() {
+                let path = &path;
+                s.spawn(move || save_newest(path, state, *t).unwrap());
+            }
+        });
+        let back: VaultState = load(&path);
+        assert_eq!(back, newest);
     }
 }

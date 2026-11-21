@@ -2,8 +2,11 @@
 //!
 //! The editor sees text with `\n` line endings and no BOM. Saving puts back
 //! what the file had: a BOM, CRLF endings (the first line ending decides),
-//! and the trailing newline (kept by the Vim buffer). Notes over 5 MB and
+//! and the trailing newline (kept by the Vim buffer). In a file that mixes
+//! CRLF and LF, every unchanged line keeps its own ending. Notes over 5 MB and
 //! files that are not UTF-8 open read-only (F-05.8).
+
+use std::sync::Arc;
 
 use patinote_core::MAX_PARSE_BYTES;
 use patinote_core::store::Hash;
@@ -12,10 +15,14 @@ use patinote_core::write::content_hash;
 const BOM: &[u8] = b"\xEF\xBB\xBF";
 
 /// How the file writes its text.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Format {
     pub bom: bool,
+    /// The ending of the first line, used for new and changed lines.
     pub crlf: bool,
+    /// When the file mixes CRLF and LF: each line as read (without its
+    /// ending) and whether it ended in CRLF.
+    pub mixed: Option<Arc<Vec<(String, bool)>>>,
 }
 
 /// Why a note is read-only.
@@ -62,6 +69,18 @@ pub fn open(bytes: &[u8]) -> Opened {
     let crlf = decoded
         .find('\n')
         .is_some_and(|i| i > 0 && decoded.as_bytes()[i - 1] == b'\r');
+    let crlf_count = decoded.matches("\r\n").count();
+    let mixed = (crlf_count > 0 && crlf_count < decoded.matches('\n').count()).then(|| {
+        Arc::new(
+            decoded
+                .split_inclusive('\n')
+                .map(|l| match l.strip_suffix("\r\n") {
+                    Some(t) => (t.to_owned(), true),
+                    None => (l.strip_suffix('\n').unwrap_or(l).to_owned(), false),
+                })
+                .collect(),
+        )
+    });
     let text = if decoded.contains('\r') {
         decoded.replace("\r\n", "\n")
     } else {
@@ -69,19 +88,49 @@ pub fn open(bytes: &[u8]) -> Opened {
     };
     Opened {
         text,
-        format: Format { bom, crlf },
+        format: Format { bom, crlf, mixed },
         read_only,
         hash,
     }
 }
 
 /// The bytes to write for `text` in `format`.
-pub fn encode(text: &str, format: Format) -> Vec<u8> {
+pub fn encode(text: &str, format: &Format) -> Vec<u8> {
     let mut out = Vec::with_capacity(text.len() + 3);
     if format.bom {
         out.extend_from_slice(BOM);
     }
-    if format.crlf {
+    if let Some(old) = &format.mixed {
+        // Unchanged lines (as a line diff finds them) keep their ending.
+        let new: Vec<&str> = text.split_inclusive('\n').collect();
+        let bare: Vec<&str> = new
+            .iter()
+            .map(|l| l.strip_suffix('\n').unwrap_or(l))
+            .collect();
+        let was: Vec<&str> = old.iter().map(|(t, _)| t.as_str()).collect();
+        let mut crlf = vec![format.crlf; new.len()];
+        for op in similar::capture_diff_slices(similar::Algorithm::Myers, &was, &bare) {
+            if let similar::DiffOp::Equal {
+                old_index,
+                new_index,
+                len,
+            } = op
+            {
+                for k in 0..len {
+                    crlf[new_index + k] = old[old_index + k].1;
+                }
+            }
+        }
+        for (line, crlf) in new.iter().zip(crlf) {
+            match line.strip_suffix('\n') {
+                Some(t) if crlf => {
+                    out.extend_from_slice(t.as_bytes());
+                    out.extend_from_slice(b"\r\n");
+                }
+                _ => out.extend_from_slice(line.as_bytes()),
+            }
+        }
+    } else if format.crlf {
         out.extend_from_slice(text.replace('\n', "\r\n").as_bytes());
     } else {
         out.extend_from_slice(text.as_bytes());
@@ -106,9 +155,25 @@ mod tests {
             let o = open(bytes);
             assert!(!o.text.contains('\r'));
             assert!(!o.text.starts_with('\u{feff}'));
-            assert_eq!(encode(&o.text, o.format), bytes, "{bytes:?}");
+            assert_eq!(encode(&o.text, &o.format), bytes, "{bytes:?}");
             assert_eq!(o.hash, content_hash(bytes));
         }
+    }
+
+    /// Mixed endings: every line keeps its own; a changed or new line takes
+    /// the first line's.
+    #[test]
+    fn f05_4_mixed_line_endings_are_kept_per_line() {
+        let bytes = b"a\r\nb\nc\r\nd";
+        let o = open(bytes);
+        assert_eq!(o.text, "a\nb\nc\nd");
+        assert_eq!(encode(&o.text, &o.format), bytes);
+        assert_eq!(
+            encode("a!\nb\nbaru\nc\nd", &o.format),
+            b"a!\r\nb\nbaru\r\nc\r\nd"
+        );
+        let o = open(b"a\nb\r\n");
+        assert_eq!(encode("a\nb\n", &o.format), b"a\nb\r\n");
     }
 
     #[test]

@@ -236,3 +236,23 @@ fn f09_6_notes_from_the_last_session_show_their_backlinks() {
     assert_eq!(title(&app), "Desain indeks Patinote");
     assert_eq!(app.active_backlinks(), before);
 }
+
+#[test]
+fn f09_6_the_active_note_comes_back_when_an_earlier_one_is_gone() {
+    let env = Env::new();
+    let vault = env.vault();
+    let launch = || env.start(env.launch(Some(vault.clone()), Config::default()));
+    {
+        let mut app = launch();
+        open(&mut app, "Inbox/Ide cepat.md");
+        open(&mut app, "Proyek/Rapat.md");
+        open(&mut app, "Referensi/Daftar bacaan.md");
+        command(&mut app, "b Rapat");
+        assert_eq!(title(&app), "Rapat");
+    }
+    // Deleted between sessions.
+    std::fs::remove_file(vault.join("Inbox/Ide cepat.md")).unwrap();
+    let app = launch();
+    assert_eq!(app.buffer_titles(), ["Rapat", "Daftar bacaan"]);
+    assert_eq!(title(&app), "Rapat");
+}

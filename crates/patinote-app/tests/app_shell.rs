@@ -263,3 +263,50 @@ fn open_with_a_note_opens_it_while_the_watcher_and_socket_run() {
     assert!(opened, "the note did not open");
     assert_eq!(open_paths(&app), ["Proyek/Patinote.md"]);
 }
+
+#[test]
+fn an_open_request_only_opens_notes_of_the_vault() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(env.path("luar.md"), "di luar vault\n").unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    for path in ["../luar.md", "/etc/hostname", "Tidak ada.md"] {
+        send(
+            &mut app,
+            Message::Remote(patinote_core::ipc::Request::Open { path: path.into() }),
+        );
+        assert_eq!(open_paths(&app), Vec::<String>::new(), "{path}");
+        assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error), "{path}");
+    }
+    // A name, as `--open Patinote` gives it, is looked up like `:e`.
+    send(
+        &mut app,
+        Message::Remote(patinote_core::ipc::Request::Open {
+            path: "Daftar bacaan".into(),
+        }),
+    );
+    assert_eq!(open_paths(&app), ["Referensi/Daftar bacaan.md"]);
+}
+
+#[test]
+fn a_second_app_for_an_open_vault_hands_over_instead_of_opening_it() {
+    let env = Env::new();
+    let vault = env.vault();
+    let runtime = env.path("run");
+    let launch = || patinote_app::app::Launch {
+        runtime_dir: Some(runtime.clone()),
+        ..env.launch(Some(vault.clone()), Config::default())
+    };
+    // The socket listener never ends, so the first app's tasks are not run.
+    let (first, _task) = App::new(launch());
+    assert!(matches!(first.screen(), Screen::Vault(_)));
+    // As when the vault is picked on the welcome screen of a second app.
+    let (second, task) = App::new(launch());
+    assert!(
+        !matches!(second.screen(), Screen::Vault(_)),
+        "two apps would autosave the same notes"
+    );
+    let mut second = second;
+    common::run(&mut second, task);
+    drop(first);
+}
