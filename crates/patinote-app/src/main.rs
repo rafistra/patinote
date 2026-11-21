@@ -91,6 +91,7 @@ fn main() -> std::process::ExitCode {
         cache_home,
         state_home,
         runtime_dir,
+        watch: true,
     };
     let mut app = iced::application(move || App::new(launch.clone()), App::update, App::view)
         .title(App::title)

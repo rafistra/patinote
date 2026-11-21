@@ -50,6 +50,7 @@ impl Env {
             cache_home: self.path("cache"),
             state_home: self.path("state"),
             runtime_dir: None,
+            watch: false,
         }
     }
 

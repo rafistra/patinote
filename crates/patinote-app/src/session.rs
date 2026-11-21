@@ -27,6 +27,10 @@ pub enum IndexEvent {
     Ready { notes: usize },
     /// The index could not be opened or updated.
     Failed(String),
+    /// How the watcher detects changes from outside (F-04).
+    Watching(patinote_core::WatchMode),
+    /// The vault needs more inotify watches than the system allows (F-04).
+    WatchLimit { command: String },
 }
 
 /// Where a vault's files and data are.
@@ -78,15 +82,31 @@ impl Session {
     /// Starts the index thread for `paths`. The stream reports the opening
     /// index update and ends once the index is ready or has failed.
     pub fn open(paths: VaultPaths) -> (Self, impl Stream<Item = IndexEvent>) {
+        let (session, events, _) = Self::open_watching(paths, false);
+        (session, events)
+    }
+
+    /// Like [`Session::open`], and with `watch` also starts the file watcher
+    /// once the index is ready (F-04). The second stream gives each group of
+    /// changes from outside; it never ends while the session lives.
+    pub fn open_watching(
+        paths: VaultPaths,
+        watch: bool,
+    ) -> (
+        Self,
+        impl Stream<Item = IndexEvent>,
+        impl Stream<Item = patinote_core::Change>,
+    ) {
         let (jobs, rx) = mpsc::channel::<Job>();
         let (events, stream) = async_mpsc::unbounded();
+        let (changes, change_stream) = async_mpsc::unbounded();
         let worker = paths.clone();
         std::thread::Builder::new()
             .name("patinote-index".into())
-            .spawn(move || run(&worker, &rx, &events))
+            .spawn(move || run(&worker, &rx, &events, watch.then_some(changes)))
             .map_err(|e| tracing::error!("cannot start the index thread: {e}"))
             .ok();
-        (Self { paths, jobs }, stream)
+        (Self { paths, jobs }, stream, change_stream)
     }
 
     /// Runs `f` on the index thread. `None` when the index is not available.
@@ -112,6 +132,7 @@ fn run(
     paths: &VaultPaths,
     jobs: &mpsc::Receiver<Job>,
     events: &async_mpsc::UnboundedSender<IndexEvent>,
+    changes: Option<async_mpsc::UnboundedSender<patinote_core::Change>>,
 ) {
     let send = |e| {
         let _ = events.unbounded_send(e);
@@ -157,6 +178,35 @@ fn run(
         }
         Err(e) => send(IndexEvent::Failed(format!("cannot index the vault: {e}"))),
     }
+    // The watcher lives as long as this thread; changes go to the app, which
+    // asks this thread to update the index.
+    let _watcher = changes.and_then(|tx| {
+        let dirs = patinote_core::watch::watched_dirs(&paths.root).len() as u64;
+        if let Some(limit) = patinote_core::watch::inotify_watch_limit()
+            && let Some(w) = patinote_core::watch::check_watch_limit(dirs, limit)
+        {
+            send(IndexEvent::WatchLimit {
+                command: w.sysctl_command(),
+            });
+        }
+        let watcher = patinote_core::watch(
+            &paths.root,
+            patinote_core::WatchOptions::default(),
+            move |c| {
+                let _ = tx.unbounded_send(c);
+            },
+        );
+        match watcher {
+            Ok(w) => {
+                send(IndexEvent::Watching(w.mode()));
+                Some(w)
+            }
+            Err(e) => {
+                tracing::warn!("cannot watch the vault: {e}");
+                None
+            }
+        }
+    });
     events.close_channel();
     while let Ok(job) = jobs.recv() {
         job(&mut store);

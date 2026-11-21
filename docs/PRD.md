@@ -513,12 +513,12 @@ Perubahan file dari luar Patinote (Neovim, Syncthing, `git checkout`) tercermin 
 
 **Kriteria penerimaan**
 
-- [ ] F-04.1 Catatan yang disimpan dengan `:w` di Neovim tercermin di indeks dan UI di bawah 1 detik.
-- [ ] F-04.2 Catatan baru dari `echo "..." > baru.md` muncul di quick switcher di bawah 1 detik.
+- [x] F-04.1 Catatan yang disimpan dengan `:w` di Neovim tercermin di indeks dan UI di bawah 1 detik. `f04_1_the_watcher_reports_a_change_within_a_second`, `f11_1_an_unchanged_note_reloads_and_keeps_the_cursor_line`
+- [x] F-04.2 Catatan baru dari `echo "..." > baru.md` muncul di quick switcher di bawah 1 detik. `f04_2_a_note_made_outside_is_in_the_switcher_after_the_change`
 - [x] F-04.3 Catatan yang dihapus dari terminal hilang dari indeks; link ke sana menjadi link ke catatan yang belum ada. `f04_3_deleted_note_leaves_the_index_and_its_links_dangle`
 - [x] F-04.4 Folder berisi 50 catatan yang dipindah dari terminal tercermin seluruhnya dalam satu batch. `f04_4_moved_folder_of_50_notes_is_one_change`
 - [x] F-04.5 `git checkout` yang mengubah 100 file diproses dalam satu transaksi tanpa error. `f04_5_checkout_of_100_files_is_one_change_and_one_transaction`
-- [ ] F-04.6 Menyimpan dari Patinote tidak memicu parse ulang kedua.
+- [x] F-04.6 Menyimpan dari Patinote tidak memicu parse ulang kedua. `f04_6_our_own_save_is_not_reloaded`
 - [ ] F-04.7 Dengan `max_user_watches` diturunkan sampai watcher gagal, muncul peringatan dan perubahan tetap terdeteksi dalam 30 detik.
 
 ### F-05 · Editor Markdown
@@ -644,7 +644,7 @@ Kotak kosong menampilkan catatan yang terakhir dibuka.
 - [x] F-07.3 "cafe" menemukan "Café Bandung"; "PATI" menemukan "Patinote". `f07_3_case_and_diacritics_are_ignored`
 - [x] F-07.4 Kotak kosong menampilkan catatan terakhir dibuka, terbaru di atas. `f07_4_an_empty_query_lists_recent_notes_newest_first`, `f07_4_the_empty_box_lists_recent_notes_newest_first`
 - [x] F-07.5 `Shift+Enter` dengan nama baru membuat catatan dan langsung membukanya dalam mode insert. `f07_5_shift_enter_creates_the_note_and_opens_it_in_insert_mode`
-- [ ] F-07.6 Catatan baru dari luar Patinote muncul di switcher di bawah 1 detik.
+- [x] F-07.6 Catatan baru dari luar Patinote muncul di switcher di bawah 1 detik. `f04_2_a_note_made_outside_is_in_the_switcher_after_the_change`
 - [x] F-07.7 Semua aksi switcher bisa dilakukan tanpa mouse. `f07_7_every_switcher_action_works_from_the_keyboard`
 
 ### F-08 · Autocomplete link dan mengikuti link
@@ -799,12 +799,12 @@ Sebelum setiap simpan, hash file di disk dibandingkan dengan hash saat terakhir 
 
 **Kriteria penerimaan**
 
-- [ ] F-11.1 Catatan terbuka tanpa perubahan belum tersimpan diedit dari Neovim: isi baru tampil di bawah 1 detik, kursor di baris yang sama.
-- [ ] F-11.2 Catatan dengan ketikan belum tersimpan diedit dari luar: banner muncul, isi disk tidak ditimpa, ketikan tidak hilang.
-- [ ] F-11.3 Dengan watcher yang disimulasikan melewatkan event, simpan tetap dibatalkan karena hash berbeda dan banner muncul.
-- [ ] F-11.4 "Bandingkan" menampilkan diff yang benar antara versi disk dan versi editor.
-- [ ] F-11.5 Salinan `.sync-conflict-*` tidak muncul di quick switcher, tetapi muncul di daftar konflik di bawah 1 detik.
-- [ ] F-11.6 "Pakai salinan" mengganti isi catatan asli dengan isi salinan, lalu salinan pindah ke `.trash/`.
+- [x] F-11.1 Catatan terbuka tanpa perubahan belum tersimpan diedit dari Neovim: isi baru tampil di bawah 1 detik, kursor di baris yang sama. `f11_1_an_unchanged_note_reloads_and_keeps_the_cursor_line`
+- [x] F-11.2 Catatan dengan ketikan belum tersimpan diedit dari luar: banner muncul, isi disk tidak ditimpa, ketikan tidak hilang. `f11_2_unsaved_text_and_the_disk_are_both_kept`
+- [x] F-11.3 Dengan watcher yang disimulasikan melewatkan event, simpan tetap dibatalkan karena hash berbeda dan banner muncul. `f11_3_a_missed_event_still_stops_the_save`
+- [x] F-11.4 "Bandingkan" menampilkan diff yang benar antara versi disk dan versi editor. `f11_4_lines_only_on_one_side_are_marked`, `f11_4_compare_shows_the_lines_that_differ`
+- [x] F-11.5 Salinan `.sync-conflict-*` tidak muncul di quick switcher, tetapi muncul di daftar konflik di bawah 1 detik. `f11_5_conflict_copies_are_listed_but_not_in_the_switcher`
+- [x] F-11.6 "Pakai salinan" mengganti isi catatan asli dengan isi salinan, lalu salinan pindah ke `.trash/`. `f11_6_use_copy_replaces_the_original_and_trashes_the_copy`
 - [ ] F-11.7 Dengan dua folder yang disinkronkan Syncthing sungguhan, konflik yang dibuat sengaja terdeteksi dan bisa diselesaikan tanpa kehilangan teks dari kedua sisi.
 
 ### F-27 · Mode baca

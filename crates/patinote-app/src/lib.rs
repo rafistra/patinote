@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod args;
+pub mod diff;
 pub mod editor;
 pub mod explorer;
 pub mod fonts;

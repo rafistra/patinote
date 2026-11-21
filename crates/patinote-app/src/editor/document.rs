@@ -34,6 +34,18 @@ pub enum Save {
     Changed,
 }
 
+/// What happened on disk to an open note with unsaved text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum External {
+    /// Changed by another app: the text on disk and its hash.
+    Changed {
+        text: String,
+        hash: patinote_core::store::Hash,
+    },
+    /// Deleted (or moved away) by another app.
+    Deleted,
+}
+
 /// An open note.
 pub struct Document {
     pub path: String,
@@ -49,6 +61,8 @@ pub struct Document {
     pub save: Save,
     /// The Vim engine of this note (mode, pending keys, undo, last search).
     pub vim: vim::Vim,
+    /// Changed or deleted on disk while it had unsaved text (F-11).
+    pub external: Option<External>,
     kinds: Vec<LineKind>,
     kinds_rev: u64,
 }
@@ -70,6 +84,7 @@ impl Document {
             last_edit: None,
             save: Save::Idle,
             vim,
+            external: None,
             kinds,
             kinds_rev: rev,
         }

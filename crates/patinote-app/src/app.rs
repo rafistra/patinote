@@ -4,6 +4,8 @@
 //! in [`App::update`] so tests can drive it without a window.
 
 mod editing;
+mod external;
+pub use external::Choice;
 mod files;
 mod linking;
 mod panels;
@@ -53,6 +55,9 @@ pub struct Launch {
     pub state_home: PathBuf,
     /// `$XDG_RUNTIME_DIR`; `None` runs without the single-instance socket.
     pub runtime_dir: Option<PathBuf>,
+    /// Watch the vault for changes from outside (F-04). Tests leave it off
+    /// and send the changes themselves.
+    pub watch: bool,
 }
 
 /// The app.
@@ -107,6 +112,11 @@ pub struct App {
     explorer_focus: bool,
     /// An open dialog (new note, rename, delete, move).
     dialog: Option<files::Dialog>,
+    /// Two versions side by side, in place of the editor (F-11).
+    comparing: Option<external::Comparing>,
+    /// The Syncthing conflict list, with its selected row (F-11).
+    conflict_list: Option<usize>,
+    watch: bool,
 }
 
 /// The screen shown.
@@ -142,6 +152,12 @@ pub struct Workspace {
     finder: Finder,
     /// The explorer's tree, selection and input (F-10).
     explorer: files::ExplorerState,
+    /// Syncthing conflict copies (F-11).
+    conflicts: Vec<patinote_core::SyncConflict>,
+    /// How the watcher detects changes (F-04).
+    watch_mode: Option<patinote_core::WatchMode>,
+    /// The `sysctl` command of the watch limit banner, until dismissed.
+    watch_limit: Option<String>,
     /// Link targets (lowercase) that match several notes, per open note.
     ambiguous: HashMap<String, HashSet<String>>,
 }
@@ -251,6 +267,19 @@ pub enum Message {
     FilesChanged(Vec<String>, Result<(), String>),
     /// What a rename or move will change, for its dialog.
     RenamePreview(renaming::Preview),
+    /// Changes from outside, from the watcher.
+    External(patinote_core::Change),
+    /// An open note as it is on disk now; `None` when it is gone.
+    DiskState(String, Option<Vec<u8>>),
+    /// A banner or comparison action (F-11).
+    Choose(external::Choice),
+    Conflicts(Vec<patinote_core::SyncConflict>),
+    OpenConflict(usize),
+    /// A conflict's original and copy, compared.
+    SyncLoaded(String, String, crate::diff::Sides),
+    /// The watch limit banner's buttons.
+    DismissLimit,
+    CopyCommand,
     /// A rename or move finished: from, to, and the files whose links changed.
     Moved(String, String, Result<Vec<String>, String>),
     SwitcherInput(String),
@@ -296,6 +325,9 @@ impl App {
             explorer_open: false,
             explorer_focus: false,
             dialog: None,
+            comparing: None,
+            conflict_list: None,
+            watch: launch.watch,
         };
         let vault = launch
             .vault
@@ -394,8 +426,11 @@ impl App {
         tasks.push(self.save_app_state());
         let journal = Journal::for_vault(&paths.state_home, &paths.id);
         let root = paths.root.clone();
-        let (session, events) = Session::open(paths);
+        let (session, events, changes) = Session::open_watching(paths, self.watch);
         tasks.push(Task::stream(events).map(Message::Index));
+        if self.watch {
+            tasks.push(Task::stream(changes).map(Message::External));
+        }
         self.panel_open = state.panel_open;
         // The last session's buffers and cursors come back (F-09.6).
         let mut buffers = Vec::new();
@@ -440,6 +475,9 @@ impl App {
             attachments: Vec::new(),
             finder: Finder::new(),
             explorer: files::ExplorerState::default(),
+            conflicts: Vec::new(),
+            watch_mode: None,
+            watch_limit: None,
             ambiguous: HashMap::new(),
         }));
         Task::batch(tasks)
@@ -602,6 +640,7 @@ impl App {
                 },
             },
             "bd" | "bdelete" => self.close_or_quit(false),
+            "conflicts" => self.open_conflicts(),
             other => {
                 self.say(Level::Error, format!("Not an editor command: {other}"));
                 Task::none()
@@ -716,13 +755,15 @@ impl App {
                             w.index = IndexStatus::Failed;
                             failed = Some(why);
                         }
+                        IndexEvent::Watching(mode) => w.watch_mode = Some(mode),
+                        IndexEvent::WatchLimit { command } => w.watch_limit = Some(command),
                     }
                 }
                 if let Some(why) = failed {
                     self.say(Level::Error, why);
                 }
                 if ready {
-                    self.load_candidates()
+                    Task::batch([self.load_candidates(), self.load_conflicts()])
                 } else {
                     Task::none()
                 }
@@ -849,6 +890,31 @@ impl App {
             }
             Message::FilesChanged(gone, result) => self.files_changed(gone, result),
             Message::Moved(from, to, result) => self.moved(from, to, result),
+            Message::External(change) => self.external_change(change),
+            Message::DiskState(path, bytes) => {
+                self.disk_state(path, bytes);
+                Task::none()
+            }
+            Message::Choose(choice) => self.choose(choice),
+            Message::Conflicts(c) => {
+                self.conflicts_loaded(c);
+                Task::none()
+            }
+            Message::OpenConflict(i) => self.open_conflict(i),
+            Message::SyncLoaded(original, copy, sides) => {
+                self.sync_loaded(original, copy, sides);
+                Task::none()
+            }
+            Message::DismissLimit => {
+                if let Some(w) = self.workspace_mut() {
+                    w.watch_limit = None;
+                }
+                Task::none()
+            }
+            Message::CopyCommand => match self.workspace().and_then(|w| w.watch_limit.clone()) {
+                Some(cmd) => iced::clipboard::write(cmd),
+                None => Task::none(),
+            },
             Message::RenamePreview(preview) => {
                 self.rename_preview(preview);
                 Task::none()
@@ -874,6 +940,7 @@ impl App {
                     .unwrap_or_default();
                 let mut tasks: Vec<_> = open.into_iter().map(|p| self.load_backlinks(p)).collect();
                 tasks.push(self.load_candidates());
+                tasks.push(self.load_conflicts());
                 tasks.push(self.load_ambiguous(path));
                 Task::batch(tasks)
             }
@@ -921,6 +988,13 @@ impl App {
         }
         if self.dialog.is_some() {
             return self.dialog_key(&key, modifiers, captured);
+        }
+        if let Some(task) = self.conflicts_key(&key, text.as_deref(), modifiers) {
+            return task;
+        }
+        if self.comparing.is_some() && key == Key::Named(Named::Escape) {
+            self.comparing = None;
+            return Task::none();
         }
         let editing_inline = self
             .workspace()
@@ -981,6 +1055,7 @@ impl App {
                 Some("f") => self.open_switcher(),
                 Some("b") => self.toggle_panel(true),
                 Some("e") => self.toggle_explorer(),
+                Some("c") => self.open_conflicts(),
                 Some("n") => self.open_new_note_dialog(),
                 Some("o") => self.toggle_panel(false),
                 Some("x") if self.active_document().is_some() => self.close_or_quit(false),
@@ -1109,12 +1184,15 @@ impl App {
                 },
                 &welcome_actions(),
             ),
-            Screen::Vault(w) => match w.active_buffer() {
-                Some(b) => self.editor_view(b),
-                None => w.start().view(Message::OpenRecent),
+            Screen::Vault(w) => match (self.comparison(), w.active_buffer()) {
+                (Some(c), _) => c,
+                (None, Some(b)) => self.editor_view(b),
+                (None, None) => w.start().view(Message::OpenRecent),
             },
         };
-        let body = self.with_dialog(self.with_switcher(self.with_explorer(self.with_panel(body))));
+        let body = self.with_dialog(
+            self.with_conflicts(self.with_switcher(self.with_explorer(self.with_panel(body)))),
+        );
         // Before a vault is open the status line is an empty bar (mockup 10).
         let status: Element<'_, Message> = if self.workspace().is_some() {
             self.status_line().view_with(|_| None)
@@ -1126,8 +1204,33 @@ impl App {
                 .into()
         };
         let mut page = Column::new().push(bufferline::view(&tabs, active, Message::SelectBuffer));
-        if let Some(banner) = self.banner() {
+        if let Some(banner) = self.external_banner().or_else(|| self.banner()) {
             page = page.push(banner);
+        }
+        if let Some(cmd) = self.workspace().and_then(|w| w.watch_limit.clone()) {
+            page = page.push(
+                crate::widgets::banner::Banner {
+                    kind: styles::BannerKind::Info,
+                    icon: crate::widgets::banner::Icon::Info,
+                    title: "File watching is limited on this system.".into(),
+                    body: "Changes made in other apps show up within 30 s instead of instantly. To fix it, run:"
+                        .into(),
+                    code: Some(cmd),
+                    actions: vec![
+                        crate::widgets::banner::Action {
+                            label: "Copy command".into(),
+                            primary: false,
+                            on_press: Message::CopyCommand,
+                        },
+                        crate::widgets::banner::Action {
+                            label: "Dismiss".into(),
+                            primary: false,
+                            on_press: Message::DismissLimit,
+                        },
+                    ],
+                }
+                .into_element(),
+            );
         }
         page.push(
             container(body)
@@ -1168,6 +1271,9 @@ impl App {
         }
         if let Some((level, text, _)) = &self.cmdline.message {
             return cmdline::message(*level, text);
+        }
+        if let Some(summary) = self.comparison_summary() {
+            return cmdline::message(Level::Info, &summary);
         }
         // `-- INSERT --` and friends, as Vim shows them.
         let mode = self.active_document().map(|d| d.vim.mode());
