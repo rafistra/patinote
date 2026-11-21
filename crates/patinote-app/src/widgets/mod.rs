@@ -4,6 +4,7 @@ pub mod banner;
 pub mod bufferline;
 pub mod cmdline;
 pub mod statusline;
+pub mod tabbar;
 
 use iced::Color;
 use iced::widget::{Svg, Text, svg, text};

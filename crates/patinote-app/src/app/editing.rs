@@ -542,6 +542,16 @@ impl App {
             }
         });
         editor.search = doc.vim.last_search();
+        match self.layout() {
+            patinote_core::config::Layout::Classic => editor.max_width = SIZE_EDITOR_MAXW_CLASSIC,
+            patinote_core::config::Layout::Focus => {
+                editor.max_width = SIZE_EDITOR_MAXW_FOCUS;
+                editor.ty = TYPE_FOCUS;
+                editor.gutter = false;
+                editor.top_pad = SPACE_48 + SPACE_48;
+            }
+            patinote_core::config::Layout::Minimal => {}
+        }
         editor.ambiguous = self.workspace().and_then(|w| w.ambiguous.get(&doc.path));
         if let Some(footer) = self.inline_backlinks() {
             editor = editor.footer(footer);
@@ -656,6 +666,11 @@ impl App {
             } else {
                 format!("⇠ {n} backlinks")
             });
+        }
+        if self.layout() == patinote_core::config::Layout::Classic {
+            // Classic keeps its panels open; the status line names the layout.
+            line.right_note = Some("layout: classic".into());
+            return line;
         }
         line.buttons = vec![
             StatusButton {

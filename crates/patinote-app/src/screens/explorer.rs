@@ -41,6 +41,9 @@ pub struct View<Message> {
     pub on_select: fn(usize) -> Message,
     pub on_input: fn(String) -> Message,
     pub on_submit: Message,
+    pub width: f32,
+    /// Classic mode's "Find note…" button (mockup 03).
+    pub find: Option<Message>,
 }
 
 impl<Message: Clone> View<Message> {
@@ -176,14 +179,35 @@ impl<Message: Clone> View<Message> {
             );
         }
 
-        let body = column![
+        let mut body = column![];
+        if let Some(find) = &self.find {
+            body = body.push(
+                button(
+                    row![
+                        typed("Find note…", TYPE_UI_SMALL)
+                            .color(TEXT_MUTED)
+                            .width(Length::Fill),
+                        typed("␣f", TYPE_LABEL).font(FONT_MONO).color(TEXT_SUBTLE),
+                    ]
+                    .height(Length::Fill)
+                    .align_y(iced::Alignment::Center),
+                )
+                .width(Length::Fill)
+                .height(SIZE_CONTROL_H)
+                .padding(Padding::from([0.0, SPACE_10]))
+                .on_press(find.clone())
+                .style(styles::button_secondary(false)),
+            );
+            body = body.push(Space::new().height(SPACE_10));
+        }
+        let body = body.push(column![
             container(label(&self.vault).color(TEXT_SUBTLE))
                 .padding(Padding::from([SPACE_6, SPACE_10])),
             tree,
             Space::new().height(SPACE_16),
             container(label("Tags").color(TEXT_SUBTLE)).padding(Padding::from([SPACE_6, SPACE_10])),
             tags,
-        ];
+        ]);
         container(column![
             iced::widget::scrollable(body).height(Length::Fill),
             container(
@@ -196,7 +220,7 @@ impl<Message: Clone> View<Message> {
             )
             .padding(Padding::from([SPACE_8, SPACE_10])),
         ])
-        .width(SIZE_EXPLORER_W)
+        .width(self.width)
         .height(Length::Fill)
         .padding(Padding::from([SPACE_16, SPACE_10]))
         .style(styles::side_panel)

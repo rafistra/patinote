@@ -7,6 +7,8 @@ mod editing;
 mod external;
 pub use external::Choice;
 mod files;
+mod layout;
+pub use layout::Edge;
 mod linking;
 mod panels;
 mod reading;
@@ -123,6 +125,18 @@ pub struct App {
     properties_open: bool,
     /// The window's scale factor, for decoding images at the size they show.
     scale: f32,
+    /// Counts leader presses, so a late timer does not open the popup.
+    leader_seq: u64,
+    /// The leader popup shows (F-28).
+    leader_popup: bool,
+    /// Text size (F-28).
+    zoom: f32,
+    /// The panel edge being dragged, and the one the mouse is on (F-28.7).
+    dragging: Option<layout::Edge>,
+    hover_edge: Option<layout::Edge>,
+    window_width: f32,
+    /// Classic mode's side panel shows Outline instead of Backlinks.
+    panel_outline: bool,
 }
 
 /// The screen shown.
@@ -295,6 +309,19 @@ pub enum Message {
     Picture(String, String, Option<iced::widget::image::Handle>),
     /// The window's scale factor.
     Scale(f32),
+    /// 300 ms after a leader press (F-28).
+    LeaderTimeout(u64),
+    /// Dragging a panel edge (F-28.7).
+    DragStart(layout::Edge),
+    DragMove(f32),
+    DragEnd,
+    HoverEdge(Option<layout::Edge>),
+    /// Classic mode's side panel tabs: `true` for Outline.
+    PanelTab(bool),
+    /// A tab's close button in classic mode.
+    CloseTab(usize),
+    /// Classic mode's "Find note…" button.
+    FindNote,
     /// The watch limit banner's buttons.
     DismissLimit,
     CopyCommand,
@@ -348,7 +375,18 @@ impl App {
             watch: launch.watch,
             properties_open: true,
             scale: 1.0,
+            leader_seq: 0,
+            leader_popup: false,
+            zoom: 1.0,
+            dragging: None,
+            hover_edge: None,
+            window_width: SIZE_WINDOW.0,
+            panel_outline: false,
         };
+        app.zoom = app.app_state.zoom.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX);
+        if let Some((w, _)) = app.app_state.window {
+            app.window_width = w;
+        }
         let vault = launch
             .vault
             .or_else(|| app.app_state.last_vault.clone())
@@ -454,7 +492,8 @@ impl App {
         if self.watch {
             tasks.push(Task::stream(changes).map(Message::External));
         }
-        self.panel_open = state.panel_open;
+        self.panel_open = state.panel_open || layout == Layout::Classic;
+        self.explorer_open = state.explorer_open || layout == Layout::Classic;
         // The last session's buffers and cursors come back (F-09.6).
         let mut buffers = Vec::new();
         for (id, path) in state.buffers.iter().enumerate() {
@@ -666,6 +705,7 @@ impl App {
             },
             "bd" | "bdelete" => self.close_or_quit(false),
             "conflicts" => self.open_conflicts(),
+            "layout" => self.layout_command(arg),
             other => {
                 self.say(Level::Error, format!("Not an editor command: {other}"));
                 Task::none()
@@ -858,6 +898,7 @@ impl App {
             Message::Resized(size) => {
                 self.app_state.window = Some((size.width, size.height));
                 self.window_height = size.height;
+                self.window_width = size.width;
                 Task::none()
             }
             Message::CloseRequested(_) => self.quit(false),
@@ -947,6 +988,32 @@ impl App {
                 self.picture(path, target, handle);
                 Task::none()
             }
+            Message::LeaderTimeout(seq) => {
+                self.leader_timeout(seq);
+                Task::none()
+            }
+            Message::DragStart(edge) => {
+                self.drag_start(edge);
+                Task::none()
+            }
+            Message::DragMove(x) => {
+                self.drag_move(x);
+                Task::none()
+            }
+            Message::DragEnd => self.drag_end(),
+            Message::HoverEdge(edge) => {
+                self.hover_edge = edge;
+                Task::none()
+            }
+            Message::PanelTab(outline) => {
+                self.panel_outline = outline;
+                Task::none()
+            }
+            Message::CloseTab(i) => {
+                let select = self.select_buffer(i);
+                Task::batch([select, self.close_or_quit(false)])
+            }
+            Message::FindNote => self.open_switcher(),
             Message::Scale(s) => {
                 self.scale = s;
                 Task::none()
@@ -1019,6 +1086,13 @@ impl App {
         else {
             return Task::none();
         };
+        // Text size works everywhere (F-28).
+        if modifiers.control()
+            && !modifiers.alt()
+            && let Some(task) = self.zoom_key(&key)
+        {
+            return task;
+        }
         // Messages go away on the next key; errors stay at least 5 s (0003
         // section 6).
         if let Some((level, _, at)) = &self.cmdline.message
@@ -1097,7 +1171,12 @@ impl App {
         // The leader key (Space) in normal mode, then one key (F-28). The
         // popup after 300 ms comes with step 2.9.
         if std::mem::take(&mut self.leader) {
+            self.leader_popup = false;
             return match text.as_deref() {
+                Some("l") => {
+                    let next = self.layout().next();
+                    self.set_layout(next)
+                }
                 Some("f") => self.open_switcher(),
                 Some("b") => self.toggle_panel(true),
                 Some("e") => self.toggle_explorer(),
@@ -1130,14 +1209,12 @@ impl App {
             && !modifiers.control()
             && !modifiers.alt()
         {
-            self.leader = true;
-            return Task::none();
+            return self.start_leader();
         }
         // Reading mode has its own keys (F-27).
         if self.read_state().is_some() {
             if key == Key::Named(Named::Space) && !modifiers.control() {
-                self.leader = true;
-                return Task::none();
+                return self.start_leader();
             }
             return self.reading_key(&key, text.as_deref(), modifiers);
         }
@@ -1205,6 +1282,18 @@ impl App {
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             window::close_requests().map(Message::CloseRequested),
         ];
+        // While an edge is dragged, the mouse moves it (F-28.7).
+        if self.dragging.is_some() {
+            subs.push(event::listen_with(|event, _, _| match event {
+                Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                    Some(Message::DragMove(position.x))
+                }
+                Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+                    Some(Message::DragEnd)
+                }
+                _ => None,
+            }));
+        }
         // The timer runs only while something waits for it.
         if self.unsaved() || self.waiting_on_vim() {
             subs.push(Subscription::run(ticks).map(Message::Tick));
@@ -1248,9 +1337,10 @@ impl App {
                 (None, None) => w.start().view(Message::OpenRecent),
             },
         };
-        let body = self.with_dialog(
-            self.with_conflicts(self.with_switcher(self.with_explorer(self.with_panel(body)))),
-        );
+        let body = self.with_dialog(self.with_conflicts(
+            self.with_switcher(self.with_leader(self.with_explorer(self.with_panel(body)))),
+        ));
+        let layout = self.layout();
         // Before a vault is open the status line is an empty bar (mockup 10).
         let status: Element<'_, Message> = if self.workspace().is_some() {
             self.status_line().view_with(|_| None)
@@ -1261,7 +1351,21 @@ impl App {
                 .style(styles::statusline)
                 .into()
         };
-        let mut page = Column::new().push(bufferline::view(&tabs, active, Message::SelectBuffer));
+        let top: Option<Element<'_, Message>> = match (layout, self.workspace()) {
+            (Layout::Focus, Some(_)) => None,
+            (Layout::Classic, Some(w)) => Some(crate::widgets::tabbar::view(
+                &w.session.paths.name,
+                &tabs,
+                active,
+                Message::SelectBuffer,
+                Message::CloseTab,
+            )),
+            _ => Some(bufferline::view(&tabs, active, Message::SelectBuffer)),
+        };
+        let mut page = Column::new();
+        if let Some(top) = top {
+            page = page.push(top);
+        }
         if let Some(banner) = self.external_banner().or_else(|| self.banner()) {
             page = page.push(banner);
         }
@@ -1290,15 +1394,21 @@ impl App {
                 .into_element(),
             );
         }
-        page.push(
+        page = page.push(
             container(body)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(styles::app),
-        )
-        .push(status)
-        .push(self.cmdline_view())
-        .into()
+        );
+        // Focus mode keeps only the words and mode at the bottom; the
+        // command line shows when it is used (mockup 04).
+        if layout == Layout::Focus && self.workspace().is_some() {
+            if self.cmdline.input.is_some() || self.cmdline.message.is_some() {
+                page = page.push(self.cmdline_view());
+            }
+            return page.push(self.focus_footer()).into();
+        }
+        page.push(status).push(self.cmdline_view()).into()
     }
 
     fn cmdline_view(&self) -> Element<'_, Message> {

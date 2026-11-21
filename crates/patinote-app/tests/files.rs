@@ -22,6 +22,16 @@ fn read(env: &Env, rel: &str) -> String {
 fn explorer_key(app: &mut App, path: &str, key: &str) {
     if !app.explorer_is_open() {
         leader(app, "e");
+    } else {
+        // Open from the last session: give it the focus.
+        common::press_with(
+            app,
+            iced::keyboard::Key::Character("w".into()),
+            iced::keyboard::Modifiers::CTRL,
+            None,
+            false,
+        );
+        press(app, "h");
     }
     app.select_in_explorer(path);
     press(app, key);

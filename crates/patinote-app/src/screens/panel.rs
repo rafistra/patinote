@@ -167,6 +167,10 @@ pub struct Panel<Message> {
     pub focused: Option<Focused>,
     pub on_outline: fn(usize) -> Message,
     pub on_backlink: fn(usize) -> Message,
+    pub width: f32,
+    /// Classic mode (mockup 03): one section at a time behind tabs, with
+    /// whether Outline is chosen and the two tabs' messages.
+    pub tabs: Option<(bool, Message, Message)>,
 }
 
 impl<Message: Clone> Panel<Message> {
@@ -211,8 +215,8 @@ impl<Message: Clone> Panel<Message> {
         } else {
             format!("{count} backlinks")
         };
-        container(
-            iced::widget::scrollable(column![
+        let content = match self.tabs {
+            None => column![
                 label("Outline").color(TEXT_SUBTLE),
                 Space::new().height(SPACE_8),
                 outline,
@@ -220,14 +224,56 @@ impl<Message: Clone> Panel<Message> {
                 label(&heading).color(TEXT_SUBTLE),
                 Space::new().height(SPACE_10),
                 links,
-            ])
-            .height(Length::Fill),
-        )
-        .width(SIZE_SIDEPANEL_W)
-        .height(Length::Fill)
-        .padding(PAD_PANEL)
-        .style(styles::side_panel)
-        .into()
+            ],
+            Some((show_outline, on_backlinks, on_outline)) => {
+                let tab = |text: &'static str, on: bool, msg: Message| {
+                    button(
+                        container(typed(text, TYPE_UI_SMALL).color(if on {
+                            TEXT_STRONG
+                        } else {
+                            TEXT_MUTED
+                        }))
+                        .center_x(Length::Fill),
+                    )
+                    .width(Length::Fill)
+                    .height(SIZE_BUFFERLINE_H)
+                    .on_press(msg)
+                    .style(styles::segment(on))
+                };
+                let tabs = container(
+                    row![
+                        tab("Backlinks", !show_outline, on_backlinks),
+                        tab("Outline", show_outline, on_outline)
+                    ]
+                    .spacing(SPACE_4),
+                )
+                .padding(SPACE_2)
+                .style(styles::segments);
+                if show_outline {
+                    column![
+                        tabs,
+                        Space::new().height(SPACE_16),
+                        label("Outline").color(TEXT_SUBTLE),
+                        Space::new().height(SPACE_8),
+                        outline
+                    ]
+                } else {
+                    column![
+                        tabs,
+                        Space::new().height(SPACE_16),
+                        label(&heading).color(TEXT_SUBTLE),
+                        Space::new().height(SPACE_10),
+                        links
+                    ]
+                }
+            }
+        };
+        container(iced::widget::scrollable(content).height(Length::Fill))
+            .width(self.width)
+            .height(Length::Fill)
+            .padding(PAD_PANEL)
+            .style(styles::side_panel)
+            .into()
     }
 }
 

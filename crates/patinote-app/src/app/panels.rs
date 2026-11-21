@@ -338,7 +338,10 @@ impl App {
 
     /// The body with the side panel at its right, when open.
     pub(super) fn with_panel<'a>(&'a self, body: Element<'a, Message>) -> Element<'a, Message> {
-        if !self.panel_open || self.workspace().is_none() {
+        if !self.panel_open
+            || self.workspace().is_none()
+            || self.layout() == patinote_core::config::Layout::Focus
+        {
             return body;
         }
         let outline = self.outline();
@@ -353,9 +356,15 @@ impl App {
             focused: self.focus,
             on_outline: Message::OutlineJump,
             on_backlink: Message::OpenBacklink,
+            width: self.panel_width(),
+            tabs: (self.layout() == patinote_core::config::Layout::Classic).then_some((
+                self.panel_outline,
+                Message::PanelTab(false),
+                Message::PanelTab(true),
+            )),
         }
         .view();
-        row![body, view].into()
+        row![body, self.edge(super::layout::Edge::Panel), view].into()
     }
 
     /// The backlinks under the note, when the panel is closed (mockup 01).

@@ -59,6 +59,12 @@ pub struct Editor<'a, Message, Theme = iced::Theme, R = iced::Renderer> {
     pub relative_numbers: bool,
     /// The widest the text column gets (920 px in minimal mode).
     pub max_width: f32,
+    /// Text size and line height (`type.editor`, or `type.focus`).
+    pub ty: Type,
+    /// Show line numbers (hidden in focus mode, F-28).
+    pub gutter: bool,
+    /// Space above the first line.
+    pub top_pad: f32,
     popup: Option<(usize, Element<'a, Message, Theme, R>)>,
     footer: Option<Element<'a, Message, Theme, R>>,
     on_click: Option<Box<dyn Fn(At, bool) -> Message + 'a>>,
@@ -85,6 +91,9 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             ambiguous: None,
             relative_numbers: true,
             max_width: SIZE_EDITOR_MAXW,
+            ty: TYPE_EDITOR,
+            gutter: true,
+            top_pad: PAD_EDITOR_TOP,
             popup: None,
             footer: None,
             on_click: None,
@@ -127,14 +136,18 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             .collect()
     }
 
+    fn gutter_w(&self) -> f32 {
+        if self.gutter { SIZE_GUTTER_W } else { 0.0 }
+    }
+
     fn column(&self, bounds: Rectangle) -> Rectangle {
         let width = (bounds.width - PAD_EDITOR_SIDE - PAD_EDITOR_SIDE)
             .clamp(SIZE_GUTTER_W + SIZE_GUTTER_W, self.max_width);
         Rectangle {
             x: f32::midpoint(bounds.x, bounds.x + bounds.width - width),
-            y: bounds.y + PAD_EDITOR_TOP,
+            y: bounds.y + self.top_pad,
             width,
-            height: (bounds.height - PAD_EDITOR_TOP).max(0.0),
+            height: (bounds.height - self.top_pad).max(0.0),
         }
     }
 
@@ -243,19 +256,15 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
         let key = h.finish();
         let entry = cache.entry(i).or_insert_with(|| Cached {
             key: !key,
-            paragraph: paragraph(&[], width),
+            paragraph: paragraph(&[], width, self.ty),
             decos: Vec::new(),
         });
         if entry.key != key {
-            entry.paragraph = paragraph(&spans, width);
+            entry.paragraph = paragraph(&spans, width, self.ty);
             entry.decos = decos;
             entry.key = key;
         }
-        entry
-            .paragraph
-            .min_bounds()
-            .height
-            .max(TYPE_EDITOR.line_height)
+        entry.paragraph.min_bounds().height.max(self.ty.line_height)
     }
 
     /// Scrolls to keep the cursor visible (unless the wheel moved the view)
@@ -278,7 +287,7 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             return;
         }
         let col = self.column(Rectangle::new(Point::ORIGIN, size));
-        let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
+        let text_w = (col.width - self.gutter_w()).max(SIZE_EDITOR_CELL_W);
         let cur = self.cursor.0.min(count - 1);
         if state.follow.get() {
             let mut top = state.top.get().min(cur);
@@ -307,12 +316,12 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
         let n = self.lines[cur].chars().count();
         let pos = at(self.cursor.1.min(n));
         let anchor_pos = at(anchor.min(n));
-        let text_x = col.x + SIZE_GUTTER_W;
+        let text_x = col.x + self.gutter_w();
         state.cursor_rect.set(Some(Rectangle {
             x: text_x + pos.x,
             y: y + pos.y,
             width: SIZE_EDITOR_CELL_W,
-            height: TYPE_EDITOR.line_height,
+            height: self.ty.line_height,
         }));
         // Where the note ends, if that is on screen: the footer goes there.
         let mut end = col.y;
@@ -328,7 +337,7 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
         // The popup hangs under the cursor's visual row, from the anchor.
         state.anchor.set(Some(Point::new(
             text_x + anchor_pos.x,
-            y + pos.y.max(anchor_pos.y) + TYPE_EDITOR.line_height,
+            y + pos.y.max(anchor_pos.y) + self.ty.line_height,
         )));
     }
 }
@@ -401,7 +410,11 @@ fn editor_font(bold: bool) -> Font {
     if bold { FONT_MONO_BOLD } else { FONT_MONO }
 }
 
-fn paragraph<P: text::Paragraph<Font = Font>>(spans: &[(String, Color, bool)], width: f32) -> P {
+fn paragraph<P: text::Paragraph<Font = Font>>(
+    spans: &[(String, Color, bool)],
+    width: f32,
+    ty: Type,
+) -> P {
     let spans: Vec<Span<'_, (), Font>> = spans
         .iter()
         .map(|(t, c, bold)| Span::new(t.as_str()).color(*c).font(editor_font(*bold)))
@@ -409,8 +422,8 @@ fn paragraph<P: text::Paragraph<Font = Font>>(spans: &[(String, Color, bool)], w
     P::with_spans(Text {
         content: spans.as_slice(),
         bounds: Size::new(width, f32::INFINITY),
-        size: Pixels(TYPE_EDITOR.size),
-        line_height: LineHeight::Absolute(Pixels(TYPE_EDITOR.line_height)),
+        size: Pixels(ty.size),
+        line_height: LineHeight::Absolute(Pixels(ty.line_height)),
         font: FONT_MONO,
         align_x: Alignment::Left,
         align_y: Vertical::Top,
@@ -419,12 +432,18 @@ fn paragraph<P: text::Paragraph<Font = Font>>(spans: &[(String, Color, bool)], w
     })
 }
 
-fn cell_text(content: String, bounds: Size, align_x: Alignment, bold: bool) -> Text<String, Font> {
+fn cell_text(
+    content: String,
+    bounds: Size,
+    align_x: Alignment,
+    bold: bool,
+    ty: Type,
+) -> Text<String, Font> {
     Text {
         content,
         bounds,
-        size: Pixels(TYPE_EDITOR.size),
-        line_height: LineHeight::Absolute(Pixels(TYPE_EDITOR.line_height)),
+        size: Pixels(ty.size),
+        line_height: LineHeight::Absolute(Pixels(ty.line_height)),
         font: editor_font(bold),
         align_x,
         align_y: Vertical::Top,
@@ -505,7 +524,7 @@ where
         self.prepare(state, size);
         let footer_y = state.footer_y.get();
         let col = self.column(Rectangle::new(Point::ORIGIN, size));
-        let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
+        let text_w = (col.width - self.gutter_w()).max(SIZE_EDITOR_CELL_W);
         let Some(footer) = &mut self.footer else {
             return layout::Node::new(size);
         };
@@ -517,7 +536,7 @@ where
         let y = footer_y.map_or(size.height + size.height, |y| y + SPACE_32);
         layout::Node::with_children(
             size,
-            vec![node.move_to(Point::new(col.x + SIZE_GUTTER_W, y))],
+            vec![node.move_to(Point::new(col.x + self.gutter_w(), y))],
         )
     }
 
@@ -567,7 +586,7 @@ where
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let lines = match delta {
                     mouse::ScrollDelta::Lines { y, .. } => -*y * SCROLL_LINES_PER_NOTCH,
-                    mouse::ScrollDelta::Pixels { y, .. } => -*y / TYPE_EDITOR.line_height,
+                    mouse::ScrollDelta::Pixels { y, .. } => -*y / self.ty.line_height,
                 };
                 let steps = lines.round() as isize;
                 if steps == 0 {
@@ -589,18 +608,14 @@ where
                 let Some(f) = &self.on_click else { return };
                 let ctrl = state.modifiers.get().control();
                 let col = self.column(bounds);
-                let text_x = col.x + SIZE_GUTTER_W;
+                let text_x = col.x + self.gutter_w();
                 let point = Point::new(bounds.x + at.x, bounds.y + at.y);
                 let cache = state.lines.borrow();
                 let mut y = col.y;
                 let (first, last) = state.visible.get();
                 for i in first..=last.min(self.lines.len().saturating_sub(1)) {
                     let Some(entry) = cache.get(&i) else { break };
-                    let h = entry
-                        .paragraph
-                        .min_bounds()
-                        .height
-                        .max(TYPE_EDITOR.line_height);
+                    let h = entry.paragraph.min_bounds().height.max(self.ty.line_height);
                     if point.y < y + h {
                         let local = Point::new((point.x - text_x).max(0.0), point.y - y);
                         let col = entry
@@ -661,11 +676,11 @@ where
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         let mut cache = state.lines.borrow_mut();
         let col = self.column(bounds);
-        let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
-        let text_x = col.x + SIZE_GUTTER_W;
+        let text_w = (col.width - self.gutter_w()).max(SIZE_EDITOR_CELL_W);
+        let text_x = col.x + self.gutter_w();
         let clip = bounds.intersection(viewport).unwrap_or(bounds);
         let bottom = bounds.y + bounds.height;
-        let line_h = TYPE_EDITOR.line_height;
+        let line_h = self.ty.line_height;
         let count = self.lines.len();
         let cur = (self.cursor.0.min(count.saturating_sub(1)), self.cursor.1);
 
@@ -683,6 +698,12 @@ where
         let mut cursor_paint: Option<(Rectangle, Option<char>, Color)> = None;
         while i < count && y < bottom {
             let height = self.entry(i, text_w, &mut cache);
+            // Only whole lines, as in Vim: a cut line's text would draw
+            // past the editor (tiny-skia does not clip it). A line taller
+            // than the editor still shows from its top.
+            if i != top && y + height > bottom {
+                break;
+            }
             let Some(entry) = cache.get(&i) else { break };
             let p = &entry.paragraph;
             let origin = Point::new(text_x, y);
@@ -744,17 +765,20 @@ where
             } else {
                 i.abs_diff(cur.0)
             };
-            renderer.fill_text(
-                cell_text(
-                    number.to_string(),
-                    Size::new(SIZE_GUTTER_W - SPACE_14, line_h),
-                    Alignment::Right,
-                    i == cur.0,
-                ),
-                Point::new(col.x + SIZE_GUTTER_W - SPACE_14, y),
-                if i == cur.0 { TEXT_STRONG } else { TEXT_GUTTER },
-                clip,
-            );
+            if self.gutter {
+                renderer.fill_text(
+                    cell_text(
+                        number.to_string(),
+                        Size::new(SIZE_GUTTER_W - SPACE_14, line_h),
+                        Alignment::Right,
+                        i == cur.0,
+                        self.ty,
+                    ),
+                    Point::new(col.x + SIZE_GUTTER_W - SPACE_14, y),
+                    if i == cur.0 { TEXT_STRONG } else { TEXT_GUTTER },
+                    clip,
+                );
+            }
 
             renderer.fill_paragraph(p, origin, TEXT_PRIMARY, clip);
 
@@ -830,6 +854,7 @@ where
                             Size::new(rect.width + rect.width, rect.height),
                             Alignment::Left,
                             false,
+                            self.ty,
                         ),
                         rect.position(),
                         TEXT_ON_ACCENT,
@@ -858,7 +883,7 @@ where
             content,
             tree: child,
             position: Point::new(bounds.x + anchor.x, bounds.y + anchor.y) + translation,
-            line_height: TYPE_EDITOR.line_height,
+            line_height: self.ty.line_height,
             viewport: *viewport,
         })))
     }
