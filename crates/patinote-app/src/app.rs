@@ -261,6 +261,11 @@ pub enum Message {
     Saved(SaveDone),
     /// A click in the editor at a line and character; `true` with Ctrl.
     Click(usize, usize, bool),
+    /// The vault was open in another app, which was asked to come to the
+    /// front: this one closes when it answered.
+    HandedOver(bool),
+    /// Undoing writes left half-done by a crash failed.
+    RecoverFailed(String),
     /// The wheel scrolled the editor: first and last visible line.
     Scrolled(usize, usize),
     /// Notes and attachments for finding and linking, from the index.
@@ -490,8 +495,13 @@ impl App {
                     Some(server)
                 }
                 Err(ipc::BindError::AlreadyRunning) => {
-                    self.say(Level::Warning, "Patinote is already running for this vault");
-                    None
+                    // One app per vault: two would autosave over each
+                    // other. The running one comes to the front instead.
+                    let socket = ipc::socket_path(dir, &paths.id);
+                    return Task::future(async move {
+                        let sent = ipc::send(&socket, &Request::Activate);
+                        Message::HandedOver(sent.is_ok_and(|a| a.ok))
+                    });
                 }
                 Err(e) => {
                     tracing::warn!("{e}");
@@ -506,16 +516,6 @@ impl App {
         tasks.push(self.save_app_state());
         let journal = Journal::for_vault(&paths.state_home, &paths.id);
         let root = paths.root.clone();
-        // Writes left half-done by a crash are undone before the last
-        // session's notes are read, so no note opens with half-written text.
-        // (The session thread runs it again, finding nothing to do.)
-        if let Err(e) = patinote_core::write::recover(&root, &journal) {
-            tracing::warn!("cannot recover interrupted writes: {e}");
-            self.say(
-                Level::Error,
-                format!("Can't undo an interrupted write: {e}"),
-            );
-        }
         let (session, events, changes) = Session::open_watching(paths, self.watch);
         tasks.push(Task::stream(events).map(Message::Index));
         if self.watch {
@@ -525,16 +525,22 @@ impl App {
         self.explorer_open = state.explorer_open || layout == Layout::Classic;
         // The last session's buffers and cursors come back (F-09.6).
         let mut buffers = Vec::new();
+        let mut reads = Vec::new();
+        let mut active = None;
         for (id, path) in state.buffers.iter().enumerate() {
             if !root.join(path).is_file() {
                 continue;
+            }
+            // Positions move down past a note that is gone.
+            if state.active == Some(id) {
+                active = Some(buffers.len());
             }
             if let Some(c) = state.cursors.get(path) {
                 self.pending_cursor.insert(path.clone(), *c);
             }
             let file = root.join(path);
             let p = path.clone();
-            tasks.push(Task::future(async move {
+            reads.push(Task::future(async move {
                 let bytes = std::fs::read(&file).map_err(|e| e.to_string());
                 Message::NoteLoaded(p, bytes)
             }));
@@ -547,10 +553,29 @@ impl App {
                 read: None,
             });
         }
-        let active = state
-            .active
-            .filter(|_| !buffers.is_empty())
-            .map(|a| a.min(buffers.len() - 1));
+        // Writes left half-done by a crash are undone, off the UI thread,
+        // before the last session's notes are read, so no note opens with
+        // half-written text. (The session thread runs it again, finding
+        // nothing to do.)
+        let (r, j) = (root.clone(), journal.clone());
+        let mut reads = Some(reads);
+        tasks.push(
+            Task::future(async move {
+                patinote_core::write::recover(&r, &j)
+                    .err()
+                    .map(|e| e.to_string())
+            })
+            .then(move |failed| {
+                let reads = reads.take().unwrap_or_default();
+                Task::batch(failed.map(|e| Task::done(Message::RecoverFailed(e))))
+                    .chain(Task::batch(reads))
+            }),
+        );
+        // The active note itself gone: its neighbour.
+        let active = active.or_else(|| {
+            let last = buffers.len().checked_sub(1)?;
+            state.active.map(|a| a.min(last))
+        });
         self.screen = Screen::Vault(Box::new(Workspace {
             session,
             journal,
@@ -579,8 +604,9 @@ impl App {
     fn save_app_state(&self) -> Task<Message> {
         let path = state::app_state_path(&self.state_home);
         let value = self.app_state.clone();
+        let ticket = state::ticket();
         Task::future(async move {
-            if let Err(e) = state::save(&path, &value) {
+            if let Err(e) = state::save_newest(&path, &value, ticket) {
                 tracing::warn!("cannot save the app state: {e}");
             }
             Message::Done
@@ -603,8 +629,9 @@ impl App {
                 value.cursors.insert(b.path.clone(), (c.line, c.col));
             }
         }
+        let ticket = state::ticket();
         Task::future(async move {
-            if let Err(e) = state::save(&path, &value) {
+            if let Err(e) = state::save_newest(&path, &value, ticket) {
                 tracing::warn!("cannot save the vault state: {e}");
             }
             Message::Done
@@ -726,17 +753,7 @@ impl App {
                 self.say(Level::Error, "Argument required");
                 Task::none()
             }
-            "e" | "edit" => {
-                let Some(w) = self.workspace() else {
-                    self.say(Level::Error, "No vault is open");
-                    return Task::none();
-                };
-                let name = arg.to_owned();
-                let n = name.clone();
-                Task::perform(w.session.query(move |s| lookup(s, &n)), move |found| {
-                    Message::Looked(name.clone(), found.unwrap_or(Lookup::NotFound))
-                })
-            }
+            "e" | "edit" => self.look_up(arg.to_owned()),
             "bn" | "bnext" => self.cycle_buffer(1),
             "bp" | "bprevious" | "bN" => self.cycle_buffer(-1),
             "b" | "buffer" => match arg.parse::<usize>() {
@@ -757,6 +774,32 @@ impl App {
                 self.say(Level::Error, format!("Not an editor command: {other}"));
                 Task::none()
             }
+        }
+    }
+
+    /// Opens the note named `name` (a name, alias or path), as `:e` does.
+    fn look_up(&mut self, name: String) -> Task<Message> {
+        let Some(w) = self.workspace() else {
+            self.say(Level::Error, "No vault is open");
+            return Task::none();
+        };
+        let n = name.clone();
+        Task::perform(w.session.query(move |s| lookup(s, &n)), move |found| {
+            Message::Looked(name.clone(), found.unwrap_or(Lookup::NotFound))
+        })
+    }
+
+    /// An open request from the socket or `--open`: a note of the vault by
+    /// its path, or else by name like `:e`. Nothing outside the vault opens.
+    fn remote_open(&mut self, path: String) -> Task<Message> {
+        let is_note = self.workspace().is_some_and(|w| {
+            patinote_core::write::check_path(&path).is_ok()
+                && w.session.paths.root.join(&path).is_file()
+        });
+        if is_note {
+            self.open_note(path)
+        } else {
+            self.look_up(path)
         }
     }
 
@@ -922,7 +965,7 @@ impl App {
                 let focus = window::latest().and_then(window::gain_focus);
                 match request {
                     Request::Activate => focus,
-                    Request::Open { path } => self.open_note(path).chain(focus),
+                    Request::Open { path } => self.remote_open(path).chain(focus),
                 }
             }
             Message::Key(event, captured) => self.on_key(event, captured),
@@ -987,6 +1030,19 @@ impl App {
                 Task::none()
             }
             Message::CloseRequested(_) => self.quit(false),
+            Message::HandedOver(true) => iced::exit(),
+            Message::RecoverFailed(e) => {
+                tracing::warn!("cannot recover interrupted writes: {e}");
+                self.say(
+                    Level::Error,
+                    format!("Can't undo an interrupted write: {e}"),
+                );
+                Task::none()
+            }
+            Message::HandedOver(false) => {
+                self.say(Level::Error, "Patinote is already running for this vault");
+                Task::none()
+            }
             Message::Focus(true) => iced::clipboard::read().map(Message::Clipboard),
             Message::Focus(false) => self.autosave(true),
             Message::Clipboard(text) => {

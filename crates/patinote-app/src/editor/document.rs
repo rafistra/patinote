@@ -157,7 +157,7 @@ impl Document {
             root: root.to_path_buf(),
             journal: journal.clone(),
             path: self.path.clone(),
-            bytes: file::encode(&self.buffer.text(), self.format),
+            bytes: file::encode(&self.buffer.text(), &self.format),
             expect: self.disk_hash,
             rev,
         }
