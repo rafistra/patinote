@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 pub const CONFIG_VERSION: i64 = 1;
 
 /// Sections known to this version, including those read in later steps.
-const SECTIONS: &[&str] = &["editor", "notes", "vault", "keys", "theme"];
+const SECTIONS: &[&str] = &["notes", "vault", "keys", "theme"];
 
 /// How the app arranges its parts (F-28).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -87,6 +87,8 @@ pub struct Config {
     pub layout: Option<Layout>,
     /// `renderer = "tiny-skia" | "wgpu"`.
     pub renderer: Option<Renderer>,
+    /// `[editor] insert_escape = "jk"`: keys that leave insert mode (F-06).
+    pub insert_escape: Option<String>,
     /// Unknown keys and other problems that did not stop reading.
     pub warnings: Vec<String>,
 }
@@ -173,6 +175,24 @@ pub fn parse(text: &str) -> Result<Config, String> {
                     .warnings
                     .push("layout must be \"minimal\", \"classic\" or \"focus\"".into()),
             },
+            "editor" => {
+                let Some(editor) = value.as_table() else {
+                    config.warnings.push("[editor] must be a table".into());
+                    continue;
+                };
+                for (k, v) in editor {
+                    match (k.as_str(), v.as_str()) {
+                        ("insert_escape", Some(keys)) if keys.chars().count() == 2 => {
+                            config.insert_escape = Some(keys.to_owned());
+                        }
+                        ("insert_escape", _) => config.warnings.push(
+                            "[editor] insert_escape must be two characters, like \"jk\"".into(),
+                        ),
+                        // Read by later steps.
+                        _ => {}
+                    }
+                }
+            }
             "renderer" => match value.as_str() {
                 Some("tiny-skia") => config.renderer = Some(Renderer::TinySkia),
                 Some("wgpu") => config.renderer = Some(Renderer::Wgpu),
@@ -217,5 +237,14 @@ mod tests {
         assert_eq!((c.layout, c.renderer), (None, None));
         assert_eq!(c.warnings.len(), 2);
         assert_eq!(Layout::Focus.next(), Layout::Minimal);
+        let c = parse("[editor]\ninsert_escape = \"jk\"\n").unwrap();
+        assert_eq!(c.insert_escape.as_deref(), Some("jk"));
+        assert_eq!(
+            parse("[editor]\ninsert_escape = \"j\"\n")
+                .unwrap()
+                .warnings
+                .len(),
+            1
+        );
     }
 }

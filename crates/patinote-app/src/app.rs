@@ -1,29 +1,31 @@
-//! The app shell (step 2.2): which screen shows, the bufferline, status line
-//! and command line, the vault session, and what is remembered between
-//! sessions. Logic lives in [`App::update`] so tests can drive it without a
-//! window.
+//! The app: which screen shows, the bufferline, status line and command line,
+//! the vault session, and what is remembered between sessions. Editing
+//! (keys to the Vim engine, saving, banners) is in [`editing`]. Logic lives
+//! in [`App::update`] so tests can drive it without a window.
+
+mod editing;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use iced::keyboard::{self, Key, key::Named};
-use iced::widget::{column, container, text_input};
+use iced::widget::{Column, container, text_input};
 use iced::{Element, Event, Length, Padding, Size, Subscription, Task, event, window};
 use patinote_core::config::{Config, Layout};
 use patinote_core::ipc::{self, Request, Response};
 use patinote_core::names::stem;
+use patinote_core::write::Journal;
 
-use crate::mode::Mode;
+use crate::editor::document::{Document, SaveDone};
 use crate::screens::start::{RECENT_SHOWN, RecentRow, Start, relative_time};
-use crate::screens::{note, welcome};
+use crate::screens::welcome;
 use crate::session::{IndexEvent, Lookup, Session, VaultPaths, lookup};
 use crate::state::{self, AppState, VaultState};
 use crate::theme::styles::{self, Level};
 use crate::theme::tokens::*;
 use crate::widgets::bufferline::{self, Tab};
 use crate::widgets::cmdline::{self, ERROR_MIN_SECONDS};
-use crate::widgets::statusline::{Indicator, StatusButton, StatusLine};
 use crate::widgets::typed;
 
 /// The id of the command line input.
@@ -33,7 +35,7 @@ const CMDLINE: &str = "cmdline";
 #[derive(Debug, Clone, Default)]
 pub struct Launch {
     /// The vault to open: `--vault`, `$PATINOTE_VAULT`, the last vault, then
-    /// `[vault] default`, in that order (F-01).
+    /// `[vault] default`, in that order (F-01, Q-014).
     pub vault: Option<PathBuf>,
     /// A note to open once the vault is open (`--open`).
     pub note: Option<String>,
@@ -55,6 +57,13 @@ pub struct App {
     app_state: AppState,
     screen: Screen,
     cmdline: Cmdline,
+    /// The window's height, for Ctrl+d / Ctrl+u.
+    window_height: f32,
+    /// Quitting once every note is saved.
+    quitting: bool,
+    /// The clipboard text last seen, so focus changes only reload the
+    /// register when the clipboard changed.
+    clipboard: Option<String>,
 }
 
 /// The screen shown.
@@ -70,6 +79,7 @@ pub enum Screen {
 /// An open vault and what the user has open in it.
 pub struct Workspace {
     session: Session,
+    journal: Journal,
     /// Keeps the socket listening; removed when the app quits.
     server: Option<Arc<ipc::Server>>,
     state: VaultState,
@@ -78,6 +88,8 @@ pub struct Workspace {
     notes: Option<usize>,
     buffers: Vec<Buffer>,
     active: Option<usize>,
+    /// Notes closed with unsaved changes, kept until their save lands.
+    closing: Vec<Document>,
     /// The highlighted recent note on the start screen.
     selected: usize,
 }
@@ -90,18 +102,28 @@ pub enum IndexStatus {
     Failed,
 }
 
-/// An open note.
-#[derive(Debug, Clone)]
+/// An open note in the bufferline.
 pub struct Buffer {
     pub path: String,
-    pub text: Option<String>,
+    /// `None` while the file is being read.
+    pub doc: Option<Document>,
     pub backlinks: Option<usize>,
+    /// Identifies the buffer to the editor widget.
+    pub id: u64,
 }
 
-/// The command line: typing a `:` command, or showing a message.
+/// What the command line is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Prompt {
+    /// `:` commands.
+    Command,
+    /// `/` (forward) or `?` (backward) search.
+    Search { forward: bool },
+}
+
 #[derive(Debug, Default)]
 struct Cmdline {
-    input: Option<String>,
+    input: Option<(Prompt, String)>,
     message: Option<(Level, String, Instant)>,
 }
 
@@ -118,11 +140,25 @@ pub enum Message {
     CmdSubmit,
     OpenRecent(usize),
     SelectBuffer(usize),
-    NoteLoaded(String, Result<String, String>),
+    NoteLoaded(String, Result<Vec<u8>, String>),
     Backlinks(String, usize),
     Looked(String, Lookup),
     Resized(Size),
     CloseRequested(window::Id),
+    /// The window gained (`true`) or lost focus.
+    Focus(bool),
+    /// Clipboard text, read when the window gains focus.
+    Clipboard(Option<String>),
+    /// Autosave and retry timer.
+    Tick(Instant),
+    Saved(SaveDone),
+    /// A click in the editor at a line and character.
+    Click(usize, usize),
+    /// The wheel scrolled the editor: first and last visible line.
+    Scrolled(usize, usize),
+    /// A banner button of the active note.
+    RetrySave,
+    OpenExternally,
     Done,
 }
 
@@ -130,6 +166,7 @@ impl App {
     /// Starts the app.
     pub fn new(launch: Launch) -> (Self, Task<Message>) {
         let app_state: AppState = state::load(&state::app_state_path(&launch.state_home));
+        let window_height = app_state.window.map_or(SIZE_WINDOW.1, |(_, h)| h);
         let mut app = Self {
             config: launch.config,
             cache_home: launch.cache_home,
@@ -138,6 +175,9 @@ impl App {
             app_state,
             screen: Screen::Welcome,
             cmdline: Cmdline::default(),
+            window_height,
+            quitting: false,
+            clipboard: None,
         };
         let vault = launch
             .vault
@@ -171,7 +211,7 @@ impl App {
             .map(|(level, text, _)| (*level, text.as_str()))
     }
 
-    /// Whether the `:` input is open, for tests.
+    /// Whether a prompt (`:`, `/`, `?`) is open, for tests.
     pub fn typing_command(&self) -> bool {
         self.cmdline.input.is_some()
     }
@@ -234,10 +274,12 @@ impl App {
         let layout = state.layout.or(self.config.layout).unwrap_or_default();
         self.app_state.last_vault = Some(paths.root.clone());
         tasks.push(self.save_app_state());
+        let journal = Journal::for_vault(&paths.state_home, &paths.id);
         let (session, events) = Session::open(paths);
         tasks.push(Task::stream(events).map(Message::Index));
         self.screen = Screen::Vault(Box::new(Workspace {
             session,
+            journal,
             server,
             state,
             layout,
@@ -245,6 +287,7 @@ impl App {
             notes: None,
             buffers: Vec::new(),
             active: None,
+            closing: Vec::new(),
             selected: 0,
         }));
         Task::batch(tasks)
@@ -275,31 +318,32 @@ impl App {
         })
     }
 
-    /// Opens the note at `path` (relative to the vault) in a buffer.
+    /// Opens the note at `path` (relative to the vault) in a buffer. The
+    /// note being left is saved first (F-05).
     fn open_note(&mut self, path: String) -> Task<Message> {
+        let leave = self.autosave(true);
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
+        w.state.touch(&path, state::now());
         if let Some(i) = w.buffers.iter().position(|b| b.path == path) {
             w.active = Some(i);
-            w.state.touch(&path, state::now());
-            return self.save_vault_state();
+            return Task::batch([leave, self.save_vault_state()]);
         }
+        let id = w.buffers.iter().map(|b| b.id).max().map_or(0, |m| m + 1);
         w.buffers.push(Buffer {
             path: path.clone(),
-            text: None,
+            doc: None,
             backlinks: None,
+            id,
         });
         w.active = Some(w.buffers.len() - 1);
-        w.state.touch(&path, state::now());
         let file = w.session.paths.root.join(&path);
         let read = {
             let path = path.clone();
             Task::future(async move {
-                let text = std::fs::read(&file)
-                    .map(|b| String::from_utf8_lossy(&b).into_owned())
-                    .map_err(|e| e.to_string());
-                Message::NoteLoaded(path, text)
+                let bytes = std::fs::read(&file).map_err(|e| e.to_string());
+                Message::NoteLoaded(path, bytes)
             })
         };
         let backlinks = {
@@ -316,7 +360,7 @@ impl App {
                 move |count| Message::Backlinks(path.clone(), count.unwrap_or(0)),
             )
         };
-        Task::batch([read, backlinks, self.save_vault_state()])
+        Task::batch([leave, read, backlinks, self.save_vault_state()])
     }
 
     fn choose_folder() -> Task<Message> {
@@ -330,7 +374,7 @@ impl App {
         })
     }
 
-    /// Runs a `:` command.
+    /// Runs a `:` command (F-06).
     fn run_command(&mut self, line: &str) -> Task<Message> {
         let line = line.trim();
         let (cmd, arg) = line
@@ -338,7 +382,18 @@ impl App {
             .map_or((line, ""), |(c, a)| (c, a.trim()));
         match cmd {
             "" => Task::none(),
-            "q" | "q!" | "qa" | "qa!" | "quit" | "wq" | "x" => self.quit(),
+            // `:q` closes the note, and quits only when none is open
+            // (F-06.4). `:q!` drops changes since the last save.
+            "q" | "quit" => self.close_or_quit(false),
+            "q!" | "quit!" => self.close_or_quit(true),
+            "w" | "write" => self.autosave(true),
+            "wq" | "x" | "xit" => {
+                let save = self.autosave(true);
+                save.chain(Task::done(Message::Done))
+                    .chain(self.close_or_quit(false))
+            }
+            "qa" | "qall" | "wqa" | "xa" => self.quit(false),
+            "qa!" | "qall!" => self.quit(true),
             "e" | "edit" if arg.is_empty() => {
                 self.say(Level::Error, "Argument required");
                 Task::none()
@@ -363,7 +418,7 @@ impl App {
                     Task::none()
                 }
             },
-            "bd" | "bdelete" => self.close_buffer(),
+            "bd" | "bdelete" => self.close_or_quit(false),
             other => {
                 self.say(Level::Error, format!("Not an editor command: {other}"));
                 Task::none()
@@ -372,17 +427,19 @@ impl App {
     }
 
     fn select_buffer(&mut self, i: usize) -> Task<Message> {
-        let Some(w) = self.workspace_mut() else {
-            return Task::none();
-        };
-        if i >= w.buffers.len() {
+        let count = self.workspace().map_or(0, |w| w.buffers.len());
+        if i >= count {
             self.say(Level::Error, format!("No such buffer: {}", i + 1));
             return Task::none();
         }
+        let leave = self.autosave(true);
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
         w.active = Some(i);
         let path = w.buffers[i].path.clone();
         w.state.touch(&path, state::now());
-        self.save_vault_state()
+        Task::batch([leave, self.save_vault_state()])
     }
 
     fn cycle_buffer(&mut self, step: isize) -> Task<Message> {
@@ -397,23 +454,42 @@ impl App {
         self.select_buffer(next)
     }
 
-    fn close_buffer(&mut self) -> Task<Message> {
+    /// Closes the active note, or quits when no note is open.
+    fn close_or_quit(&mut self, discard: bool) -> Task<Message> {
         let Some(w) = self.workspace_mut() else {
+            return self.quit(discard);
+        };
+        let Some(i) = w.active else {
+            return self.quit(discard);
+        };
+        let buffer = w.buffers.remove(i);
+        w.active = if w.buffers.is_empty() {
+            None
+        } else {
+            Some(i.min(w.buffers.len() - 1))
+        };
+        w.selected = 0;
+        let Some(mut doc) = buffer.doc else {
             return Task::none();
         };
-        if let Some(i) = w.active {
-            w.buffers.remove(i);
-            w.active = if w.buffers.is_empty() {
-                None
-            } else {
-                Some(i.min(w.buffers.len() - 1))
-            };
-            w.selected = 0;
+        if discard || !doc.dirty() || doc.read_only.is_some() {
+            return Task::none();
         }
-        Task::none()
+        // Unsaved text is kept until it is on disk.
+        let job = doc.start_save(&w.session.paths.root, &w.journal);
+        w.closing.push(doc);
+        Task::future(async move { Message::Saved(job.run()) })
     }
 
-    fn quit(&mut self) -> Task<Message> {
+    /// Quits once every note is saved; `discard` quits right away.
+    fn quit(&mut self, discard: bool) -> Task<Message> {
+        if !discard {
+            let pending = self.autosave(true);
+            if self.unsaved() || self.waiting_on_vim() {
+                self.quitting = true;
+                return pending;
+            }
+        }
         if let Some(server) = self.workspace().and_then(|w| w.server.as_ref()) {
             let _ = std::fs::remove_file(server.path());
         }
@@ -465,13 +541,16 @@ impl App {
             }
             Message::Key(event, captured) => self.on_key(event, captured),
             Message::CmdInput(text) => {
-                self.cmdline.input = Some(text);
+                if let Some((_, input)) = &mut self.cmdline.input {
+                    *input = text;
+                }
                 Task::none()
             }
-            Message::CmdSubmit => {
-                let line = self.cmdline.input.take().unwrap_or_default();
-                self.run_command(&line)
-            }
+            Message::CmdSubmit => match self.cmdline.input.take() {
+                Some((Prompt::Command, line)) => self.run_command(&line),
+                Some((Prompt::Search { forward }, pattern)) => self.search(&pattern, forward),
+                None => Task::none(),
+            },
             Message::OpenRecent(i) => {
                 let path = self
                     .workspace()
@@ -483,21 +562,7 @@ impl App {
                 }
             }
             Message::SelectBuffer(i) => self.select_buffer(i),
-            Message::NoteLoaded(path, result) => {
-                let mut error = None;
-                if let Some(w) = self.workspace_mut()
-                    && let Some(b) = w.buffers.iter_mut().find(|b| b.path == path)
-                {
-                    match result {
-                        Ok(text) => b.text = Some(text),
-                        Err(e) => error = Some(format!("Can't read \"{path}\": {e}")),
-                    }
-                }
-                if let Some(e) = error {
-                    self.say(Level::Error, e);
-                }
-                Task::none()
-            }
+            Message::NoteLoaded(path, result) => self.note_loaded(path, result),
             Message::Backlinks(path, count) => {
                 if let Some(w) = self.workspace_mut()
                     && let Some(b) = w.buffers.iter_mut().find(|b| b.path == path)
@@ -522,9 +587,34 @@ impl App {
             },
             Message::Resized(size) => {
                 self.app_state.window = Some((size.width, size.height));
+                self.window_height = size.height;
                 Task::none()
             }
-            Message::CloseRequested(_) => self.quit(),
+            Message::CloseRequested(_) => self.quit(false),
+            Message::Focus(true) => iced::clipboard::read().map(Message::Clipboard),
+            Message::Focus(false) => self.autosave(true),
+            Message::Clipboard(text) => {
+                self.clipboard_changed(text);
+                Task::none()
+            }
+            Message::Tick(now) => {
+                let pending = self.vim_deadlines(now);
+                Task::batch([pending, self.autosave_at(now, false)])
+            }
+            Message::Saved(done) => self.saved(done),
+            Message::Click(line, col) => {
+                self.click(line, col);
+                Task::none()
+            }
+            Message::Scrolled(first, last) => {
+                self.scrolled(first, last);
+                Task::none()
+            }
+            Message::RetrySave => self.autosave(true),
+            Message::OpenExternally => {
+                self.open_externally();
+                Task::none()
+            }
             Message::Done => Task::none(),
         }
     }
@@ -552,12 +642,18 @@ impl App {
             }
             return Task::none();
         }
-        if captured || modifiers.control() || modifiers.alt() || modifiers.logo() {
+        if captured {
+            return Task::none();
+        }
+        // An open note gets every key: Vim decides what it means.
+        if self.active_document().is_some() {
+            return self.edit_key(&key, text.as_deref(), modifiers);
+        }
+        if modifiers.control() || modifiers.alt() || modifiers.logo() {
             return Task::none();
         }
         if text.as_deref() == Some(":") {
-            self.cmdline.input = Some(String::new());
-            return iced::widget::operation::focus(CMDLINE);
+            return self.open_prompt(Prompt::Command);
         }
         let ch = text.as_deref().unwrap_or_default();
         let enter = key == Key::Named(Named::Enter);
@@ -596,27 +692,43 @@ impl App {
         Task::none()
     }
 
+    fn open_prompt(&mut self, prompt: Prompt) -> Task<Message> {
+        self.cmdline.input = Some((prompt, String::new()));
+        iced::widget::operation::focus(CMDLINE)
+    }
+
     /// Background work the app listens to.
     pub fn subscription(&self) -> Subscription<Message> {
-        Subscription::batch([
+        let mut subs = vec![
             event::listen_with(|event, status, _| match event {
                 Event::Keyboard(k) => Some(Message::Key(k, status == event::Status::Captured)),
+                Event::Window(window::Event::Focused) => Some(Message::Focus(true)),
+                Event::Window(window::Event::Unfocused) => Some(Message::Focus(false)),
                 _ => None,
             }),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             window::close_requests().map(Message::CloseRequested),
-        ])
+        ];
+        // The timer runs only while something waits for it.
+        if self.unsaved() || self.waiting_on_vim() {
+            subs.push(Subscription::run(ticks).map(Message::Tick));
+        }
+        Subscription::batch(subs)
     }
 
     /// Draws the window.
     pub fn view(&self) -> Element<'_, Message> {
+        let insert = self
+            .active_document()
+            .is_some_and(|d| d.vim.mode() == crate::vim::Mode::Insert);
         let (tabs, active): (Vec<Tab>, Option<usize>) = match self.workspace() {
             Some(w) => (
                 w.buffers
                     .iter()
                     .map(|b| Tab {
                         title: stem(&b.path).to_owned(),
-                        modified: false,
+                        modified: b.doc.as_ref().is_some_and(Document::dirty),
+                        insert,
                     })
                     .collect(),
                 w.active,
@@ -632,10 +744,7 @@ impl App {
                 &welcome_actions(),
             ),
             Screen::Vault(w) => match w.active_buffer() {
-                Some(b) => match &b.text {
-                    Some(text) => note::view(text),
-                    None => container("").into(),
-                },
+                Some(b) => self.editor_view(b),
                 None => w.start().view(Message::OpenRecent),
             },
         };
@@ -649,68 +758,28 @@ impl App {
                 .style(styles::statusline)
                 .into()
         };
-        column![
-            bufferline::view(&tabs, active, Message::SelectBuffer),
+        let mut page = Column::new().push(bufferline::view(&tabs, active, Message::SelectBuffer));
+        if let Some(banner) = self.banner() {
+            page = page.push(banner);
+        }
+        page.push(
             container(body)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(styles::app),
-            status,
-            self.cmdline_view(),
-        ]
+        )
+        .push(status)
+        .push(self.cmdline_view())
         .into()
     }
 
-    fn status_line(&self) -> StatusLine {
-        let Some(w) = self.workspace() else {
-            return StatusLine::default();
-        };
-        let indicator = match &w.index {
-            IndexStatus::Indexing { done, total } => Some(Indicator::Indexing {
-                done: *done,
-                total: *total,
-            }),
-            IndexStatus::Ready => Some(Indicator::Indexed),
-            IndexStatus::Failed => None,
-        };
-        let mut line = StatusLine {
-            mode: Mode::Normal,
-            indicator,
-            ..StatusLine::default()
-        };
-        if let Some(b) = w.active_buffer() {
-            line.path = b.path.clone();
-            if let Some(text) = &b.text {
-                line.notes.push(word_count(text));
-            }
-            if let Some(n) = b.backlinks {
-                line.notes.push(if n == 1 {
-                    "⇠ 1 backlink".into()
-                } else {
-                    format!("⇠ {n} backlinks")
-                });
-            }
-            line.buttons = vec![
-                StatusButton {
-                    label: "␣e explorer",
-                    on: false,
-                },
-                StatusButton {
-                    label: "␣b panel",
-                    on: false,
-                },
-                StatusButton {
-                    label: "␣ leader",
-                    on: false,
-                },
-            ];
-            line.position = Some("1:1".into());
-        }
-        line
-    }
-
     fn cmdline_view(&self) -> Element<'_, Message> {
-        if let Some(input) = &self.cmdline.input {
+        if let Some((prompt, input)) = &self.cmdline.input {
+            let lead = match prompt {
+                Prompt::Command => ":",
+                Prompt::Search { forward: true } => "/",
+                Prompt::Search { forward: false } => "?",
+            };
             let field = text_input("", input)
                 .id(CMDLINE)
                 .on_input(Message::CmdInput)
@@ -720,7 +789,7 @@ impl App {
                 .padding(0)
                 .style(styles::cmdline_input);
             return container(
-                iced::widget::row![typed(":", TYPE_MONO_UI), field]
+                iced::widget::row![typed(lead, TYPE_MONO_UI), field]
                     .align_y(iced::Alignment::Center),
             )
             .width(Length::Fill)
@@ -730,14 +799,28 @@ impl App {
             .style(styles::cmdline)
             .into();
         }
-        match &self.cmdline.message {
-            Some((level, text, _)) => cmdline::message(*level, text),
-            None => container("")
-                .width(Length::Fill)
-                .height(SIZE_CMDLINE_H)
-                .style(styles::cmdline)
-                .into(),
+        if let Some((level, text, _)) = &self.cmdline.message {
+            return cmdline::message(*level, text);
         }
+        // `-- INSERT --` and friends, as Vim shows them.
+        let mode = self.active_document().map(|d| d.vim.mode());
+        let shown = match mode {
+            Some(crate::vim::Mode::Insert) => Some(("-- INSERT --", MODE_INSERT)),
+            Some(crate::vim::Mode::Visual) => Some(("-- VISUAL --", MODE_VISUAL)),
+            Some(crate::vim::Mode::VisualLine) => Some(("-- VISUAL LINE --", MODE_VISUAL)),
+            _ => None,
+        };
+        let content: Element<'_, Message> = match shown {
+            Some((text, color)) => typed(text, TYPE_MONO_UI).color(color).into(),
+            None => container("").into(),
+        };
+        container(content)
+            .width(Length::Fill)
+            .height(SIZE_CMDLINE_H)
+            .padding(Padding::from([0.0, SPACE_12]))
+            .center_y(SIZE_CMDLINE_H)
+            .style(styles::cmdline)
+            .into()
     }
 }
 
@@ -798,16 +881,6 @@ pub fn window_size(state_home: &Path) -> Size {
         })
 }
 
-/// `186 words`.
-fn word_count(text: &str) -> String {
-    let n = text.split_whitespace().count();
-    if n == 1 {
-        "1 word".into()
-    } else {
-        format!("{n} words")
-    }
-}
-
 /// A path with the home folder shown as `~`.
 pub fn display_path(path: &Path) -> String {
     if let Some(home) = std::env::var_os("HOME")
@@ -840,6 +913,27 @@ fn listen(server: Arc<ipc::Server>) -> Task<Message> {
         .map_err(|e| tracing::warn!("cannot start the socket thread: {e}"))
         .ok();
     Task::stream(rx).map(Message::Remote)
+}
+
+/// How often the autosave timer ticks.
+const TICK: Duration = Duration::from_millis(250);
+
+/// A tick every [`TICK`], from a thread that stops when nobody listens.
+fn ticks() -> impl iced::futures::Stream<Item = Instant> {
+    let (tx, rx) = iced::futures::channel::mpsc::unbounded();
+    std::thread::Builder::new()
+        .name("patinote-timer".into())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(TICK);
+                if tx.unbounded_send(Instant::now()).is_err() {
+                    break;
+                }
+            }
+        })
+        .map_err(|e| tracing::warn!("cannot start the timer thread: {e}"))
+        .ok();
+    rx
 }
 
 fn welcome_actions() -> welcome::Actions<Message> {

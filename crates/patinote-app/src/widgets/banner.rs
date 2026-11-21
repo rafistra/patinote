@@ -54,20 +54,25 @@ pub struct Banner<Message> {
 }
 
 impl<Message: Clone + 'static> Banner<Message> {
-    /// Draws the banner at full width.
-    pub fn view(&self) -> Element<'_, Message> {
+    /// Draws the banner at full width, consuming it.
+    pub fn into_element(self) -> Element<'static, Message> {
+        self.view()
+    }
+
+    /// Draws the banner at full width. The element owns copies of the text.
+    pub fn view<'a>(&self) -> Element<'a, Message> {
         let c = self.kind.colors();
         let icon = svg(svg::Handle::from_memory(self.icon.bytes()))
             .width(SIZE_ICON)
             .height(SIZE_ICON)
             .style(styles::icon(c.icon));
 
-        let message: iced::widget::text::Rich<'_, (), Message> = rich_text![
-            span(self.title.as_str())
+        let message: iced::widget::text::Rich<'a, (), Message> = rich_text![
+            span(self.title.clone())
                 .font(FONT_UI_SEMIBOLD)
                 .color(c.text),
             span(" "),
-            span(self.body.as_str()).color(c.muted),
+            span(self.body.clone()).color(c.muted),
         ]
         .font(TYPE_UI.font)
         .size(TYPE_UI.size)
@@ -78,7 +83,7 @@ impl<Message: Clone + 'static> Banner<Message> {
         let mut text_col = column![message].spacing(SPACE_8);
         if let Some(code) = &self.code {
             text_col = text_col.push(
-                container(typed(code.as_str(), TYPE_MONO_UI).color(TEXT_STRONG))
+                container(typed(code.clone(), TYPE_MONO_UI).color(TEXT_STRONG))
                     .padding(Padding::from([SPACE_2, SPACE_8]))
                     .style(styles::banner_code(self.kind)),
             );
@@ -92,7 +97,7 @@ impl<Message: Clone + 'static> Banner<Message> {
             .filter(|a| !a.primary)
             .chain(self.actions.iter().filter(|a| a.primary));
         for a in ordered {
-            let label = typed(a.label.as_str(), TYPE_UI).font(if a.primary {
+            let label = typed(a.label.clone(), TYPE_UI).font(if a.primary {
                 FONT_UI_SEMIBOLD
             } else {
                 FONT_UI

@@ -209,6 +209,8 @@ Semua ukuran adalah piksel logis pada skala 100% dan ikut skala HiDPI dari GNOME
 | `size.logo` / `size.logo.large` | 16 px / 28 px | Tanda Patinote di bufferline / di kartu layar awal |
 | `size.shortcut.key.w` | 64 px | Kolom tombol di daftar pintasan layar tanpa catatan terbuka |
 | `size.recent.time.w` | 84 px | Kolom waktu di daftar catatan terakhir |
+| `size.cursor.insert.w` | 2 px | Kursor garis di mode insert |
+| `size.editor.cell.w` | 9 px | Lebar satu sel JetBrains Mono 15 px; kursor blok di baris kosong |
 
 Jarak dalam yang sering dipakai: area editor 28 px atas dan 32 px samping; panel 16 px; overlay 14–16 px; dialog 22–24 px.
 

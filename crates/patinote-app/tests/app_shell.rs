@@ -195,7 +195,8 @@ fn recent_notes_and_window_size_are_remembered() {
     command(&mut app, "e Patinote");
     command(&mut app, "e Ide cepat");
     send(&mut app, Message::Resized(Size::new(1200.0, 700.0)));
-    command(&mut app, "q");
+    // `:q` closes a note (F-06.4); `:qa` quits and saves the window size.
+    command(&mut app, "qa");
 
     // Next start: no vault given, the last one opens with the start screen
     // listing recent notes, newest first; j and Enter open the second.
@@ -228,9 +229,9 @@ fn the_socket_hands_requests_to_the_running_app() {
         patinote_core::ipc::Server::bind(&socket),
         Err(patinote_core::ipc::BindError::AlreadyRunning)
     ));
-    let task = app.update(Message::CmdInput("q".into()));
-    drop(task);
-    let quit = app.update(Message::CmdSubmit);
-    drop(quit);
+    // No note is open, so `:q` quits.
+    press(&mut app, ":");
+    drop(app.update(Message::CmdInput("q".into())));
+    drop(app.update(Message::CmdSubmit));
     assert!(!socket.exists(), "quitting removes the socket");
 }

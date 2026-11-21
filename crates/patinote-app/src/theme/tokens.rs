@@ -255,6 +255,13 @@ pub const SIZE_LOGO_LARGE: f32 = 28.0;
 pub const SIZE_SHORTCUT_KEY_W: f32 = 64.0;
 /// Time column of the recent notes list on the start screen.
 pub const SIZE_RECENT_TIME_W: f32 = 84.0;
+/// Lines the editor scrolls per mouse wheel notch.
+pub const SCROLL_LINES_PER_NOTCH: f32 = 3.0;
+/// `size.cursor.insert.w`: the line cursor in insert mode (0003 section 6).
+pub const SIZE_CURSOR_INSERT_W: f32 = 2.0;
+/// `size.editor.cell.w`: one JetBrains Mono cell at `type.editor`, for the
+/// block cursor where there is no character (an empty line).
+pub const SIZE_EDITOR_CELL_W: f32 = 9.0;
 /// Borders, and the active tab and focus outlines.
 pub const SIZE_BORDER: f32 = 1.0;
 pub const SIZE_FOCUS_OUTLINE: f32 = 2.0;

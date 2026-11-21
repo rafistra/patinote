@@ -229,7 +229,8 @@ fn has_hex_color(code: &str) -> bool {
 }
 
 /// A float literal like `14.0` (sizes); `0.0` and `1.0` stay allowed for
-/// "none" and "full", and strings are skipped.
+/// "none" and "full", and strings are skipped. Ranges (`1..=6`) and tuple
+/// fields (`a.1`) are not floats.
 fn has_bare_float(code: &str) -> bool {
     let mut in_str = false;
     let b = code.as_bytes();
@@ -239,15 +240,26 @@ fn has_bare_float(code: &str) -> bool {
             b'"' => in_str = !in_str,
             c if !in_str
                 && c.is_ascii_digit()
-                && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_')) =>
+                && (i == 0
+                    || !(b[i - 1].is_ascii_alphanumeric()
+                        || b[i - 1] == b'_'
+                        || b[i - 1] == b'.')) =>
             {
                 let mut j = i;
-                while j < b.len() && (b[j].is_ascii_digit() || b[j] == b'.') {
+                while j < b.len() && b[j].is_ascii_digit() {
                     j += 1;
                 }
-                let lit = &code[i..j];
-                if lit.contains('.') && lit != "0.0" && lit != "1.0" {
-                    return true;
+                // Digits, a dot, digits: a float literal.
+                if j + 1 < b.len() && b[j] == b'.' && b[j + 1].is_ascii_digit() {
+                    let mut k = j + 1;
+                    while k < b.len() && b[k].is_ascii_digit() {
+                        k += 1;
+                    }
+                    let lit = &code[i..k];
+                    if lit != "0.0" && lit != "1.0" {
+                        return true;
+                    }
+                    j = k;
                 }
                 i = j;
                 continue;
@@ -266,4 +278,9 @@ fn the_literal_checks_catch_what_they_should() {
     assert!(!has_hex_color("let issue = \"#12\";"));
     assert!(has_bare_float(".size(14.0)"));
     assert!(!has_bare_float("width: 0.0, \"v1.25\""));
+    assert!(!has_bare_float(
+        "(1..=6).contains(&n) && a.1.min(n) && x[i + 1..]"
+    ));
+    assert!(has_bare_float("let w = 2.5;"));
+    assert!(has_bare_float("(b.x - a) / 2.0"));
 }

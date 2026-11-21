@@ -127,3 +127,27 @@ pub fn command(app: &mut App, line: &str) {
     send(app, Message::CmdInput(line.into()));
     send(app, Message::CmdSubmit);
 }
+
+/// Types each character of `keys` as its own key press; `<Esc>` and `<CR>`
+/// stand for Escape and Enter.
+pub fn keys(app: &mut App, keys: &str) {
+    let mut rest = keys;
+    while !rest.is_empty() {
+        if let Some(r) = rest.strip_prefix("<Esc>") {
+            press(app, "Escape");
+            rest = r;
+        } else if let Some(r) = rest.strip_prefix("<CR>") {
+            press(app, "Enter");
+            rest = r;
+        } else {
+            let c = rest.chars().next().unwrap();
+            press(app, &c.to_string());
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+}
+
+/// Runs the autosave timer as if `after` had passed.
+pub fn wait(app: &mut App, after: std::time::Duration) {
+    send(app, Message::Tick(std::time::Instant::now() + after));
+}
