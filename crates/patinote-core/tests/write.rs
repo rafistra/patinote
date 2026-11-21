@@ -335,6 +335,36 @@ fn mark_pending(journal: &Journal, id: &str) {
 }
 
 #[test]
+fn recover_goes_past_a_damaged_journal_entry() {
+    let v = vault();
+    v.write("a.md", "a lama\n");
+    v.write("b.md", "b lama\n");
+    let old = v
+        .commit(vec![write_op("a.md", "a baru\n", v.expect("a.md"))])
+        .unwrap();
+    let crashed = v
+        .commit(vec![write_op("b.md", "b baru\n", v.expect("b.md"))])
+        .unwrap();
+    // An older entry damaged outside Patinote, a later one left by a crash.
+    fs::write(
+        v.journal.dir().join(&old.id).join("manifest.json"),
+        "{rusak",
+    )
+    .unwrap();
+    mark_pending(&v.journal, &crashed.id);
+
+    assert!(
+        recover(&v.root, &v.journal).is_err(),
+        "the damage is reported"
+    );
+    assert_eq!(fs::read_to_string(v.root.join("b.md")).unwrap(), "b lama\n");
+    assert_eq!(
+        v.journal.entry(&crashed.id).unwrap().status,
+        EntryStatus::RolledBack
+    );
+}
+
+#[test]
 fn recover_undoes_a_transaction_interrupted_by_a_crash() {
     let v = vault();
     v.write("a.md", "a lama\n");
@@ -589,6 +619,30 @@ fn a_note_linked_outside_the_vault_is_never_written() {
     assert_eq!(fs::read_to_string(&outside).unwrap(), "di luar\n");
     assert!(
         fs::symlink_metadata(v.root.join("Luar.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[test]
+fn a_symlinked_note_is_never_turned_into_a_copy_by_a_move() {
+    let v = vault();
+    v.write("Arsip/Rapat asli.md", "[[Rapat]]\n");
+    std::os::unix::fs::symlink("Arsip/Rapat asli.md", v.root.join("Rapat.md")).unwrap();
+    let before = v.snapshot();
+    let err = v
+        .commit(vec![Op::Move {
+            from: "Rapat.md".into(),
+            to: "Rapat baru.md".into(),
+            content: Some(b"[[Rapat baru]]\n".to_vec()),
+            expect: v.expect("Rapat.md"),
+        }])
+        .unwrap_err();
+    assert!(matches!(err, WriteError::InvalidPath { .. }), "{err:?}");
+    assert_eq!(v.snapshot(), before, "nothing changed");
+    assert!(
+        fs::symlink_metadata(v.root.join("Rapat.md"))
             .unwrap()
             .file_type()
             .is_symlink()

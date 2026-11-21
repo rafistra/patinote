@@ -6,7 +6,7 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::{Env, keys, leader, press, send, wait};
+use common::{Env, command, keys, leader, press, send, wait};
 use patinote_app::app::{App, Message};
 use patinote_core::config::Config;
 
@@ -307,4 +307,51 @@ fn f10_7_renaming_a_folder_keeps_links_to_its_attachments() {
         read(&env, "luar.md"),
         "![b](Sasaran/img/foto.png) ![[Sasaran/img/foto.png]]\n"
     );
+}
+
+#[test]
+fn f10_1_creating_a_note_that_exists_opens_it_instead() {
+    let env = Env::new();
+    let vault = env.vault();
+    // Excluded notes are not among the switcher's candidates either.
+    std::fs::create_dir_all(vault.join(".patinote")).unwrap();
+    std::fs::write(vault.join(".patinote/ignore"), "Proyek/Rahasia.md\n").unwrap();
+    std::fs::write(vault.join("Proyek/Rahasia.md"), "isi lama\n").unwrap();
+    let before = read(&env, "Proyek/Rapat.md");
+    let mut app = start(&env);
+    explorer_key(&mut app, "Proyek", "a");
+    send(&mut app, Message::InlineInput("Rapat".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert_eq!(app.active_text().as_deref(), Some(before.as_str()));
+
+    command(&mut app, "q");
+    leader(&mut app, "n");
+    send(&mut app, Message::DialogInput("Rahasia".into()));
+    send(&mut app, Message::DialogSubmit);
+    assert_eq!(app.active_text().as_deref(), Some("isi lama\n"));
+    keys(&mut app, "ggOtambah<Esc>");
+    command(&mut app, "w");
+    assert_eq!(read(&env, "Proyek/Rahasia.md"), "tambah\nisi lama\n");
+}
+
+#[test]
+fn f10_5_deleting_a_note_left_of_the_active_one_keeps_the_active_one() {
+    let env = Env::new();
+    let mut app = start(&env);
+    for p in [
+        "Inbox/Ide cepat.md",
+        "Proyek/Rapat.md",
+        "Referensi/Daftar bacaan.md",
+    ] {
+        send(
+            &mut app,
+            Message::Remote(patinote_core::ipc::Request::Open { path: p.into() }),
+        );
+    }
+    command(&mut app, "b Rapat");
+    assert_eq!(app.title(), "Rapat — Patinote");
+    explorer_key(&mut app, "Inbox/Ide cepat.md", "d");
+    press(&mut app, "Enter");
+    assert!(!env.path("Vault/Inbox/Ide cepat.md").exists());
+    assert_eq!(app.title(), "Rapat — Patinote");
 }

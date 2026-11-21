@@ -772,17 +772,22 @@ impl App {
             return Task::none();
         }
         if let Some(w) = self.workspace_mut() {
+            let (shown, was) = (w.active_buffer().map(|b| b.id), w.active);
             for g in &gone {
                 let prefix = format!("{g}/");
                 w.buffers
                     .retain(|b| b.path != *g && !b.path.starts_with(&prefix));
                 w.new_folders_remove(g);
             }
-            w.active = if w.buffers.is_empty() {
-                None
-            } else {
-                w.active.map(|a| a.min(w.buffers.len() - 1))
-            };
+            // The note shown stays shown; when it went, its neighbour.
+            w.active = w
+                .buffers
+                .iter()
+                .position(|b| Some(b.id) == shown)
+                .or_else(|| {
+                    let last = w.buffers.len().checked_sub(1)?;
+                    was.map(|a| a.min(last))
+                });
         }
         let path = gone.first().cloned().unwrap_or_default();
         Task::batch([self.refresh_index(path), self.save_vault_state()])

@@ -511,6 +511,10 @@ impl App {
         // (The session thread runs it again, finding nothing to do.)
         if let Err(e) = patinote_core::write::recover(&root, &journal) {
             tracing::warn!("cannot recover interrupted writes: {e}");
+            self.say(
+                Level::Error,
+                format!("Can't undo an interrupted write: {e}"),
+            );
         }
         let (session, events, changes) = Session::open_watching(paths, self.watch);
         tasks.push(Task::stream(events).map(Message::Index));
