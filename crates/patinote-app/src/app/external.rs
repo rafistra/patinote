@@ -112,10 +112,11 @@ impl App {
         else {
             return;
         };
-        // While a save runs, the disk may already hold what it writes. A
-        // real change from outside makes that save fail its hash check,
-        // which reads the disk again once the save has landed.
+        // While a save runs, the disk may already hold what it writes: the
+        // disk is read again once the save has landed. (A change from
+        // outside that lands after the save's hash check lets it succeed.)
         if matches!(doc.save, Save::Running(_)) {
+            doc.recheck = true;
             return;
         }
         match bytes {
@@ -440,6 +441,16 @@ impl App {
         let Some(Comparing::Sync(pair)) = self.comparing.take() else {
             return Task::none();
         };
+        if choice == Choice::KeepOriginal && pair.original_hash.is_none() {
+            // Trashing the copy would leave no version at all.
+            let msg = format!(
+                "Can't keep the original: \"{}\" no longer exists. Use the copy instead.",
+                pair.original
+            );
+            self.comparing = Some(Comparing::Sync(pair));
+            self.say(Level::Error, msg);
+            return Task::none();
+        }
         let SyncPair {
             original,
             copy,

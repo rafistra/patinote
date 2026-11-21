@@ -541,8 +541,10 @@ impl App {
             {
                 doc.finish_save(&done, now);
                 message = landed_message(doc);
-                if doc.save == Save::Changed {
-                    // The hash on disk differs (F-11.3): read it for the banner.
+                let recheck = std::mem::take(&mut doc.recheck);
+                if doc.save == Save::Changed || recheck {
+                    // The hash on disk differs (F-11.3), or the disk changed
+                    // while the save ran: read it for the banner.
                     reread = Some(doc.path.clone());
                 }
             }

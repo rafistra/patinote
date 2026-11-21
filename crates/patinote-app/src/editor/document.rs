@@ -64,6 +64,8 @@ pub struct Document {
     pub vim: vim::Vim,
     /// Changed or deleted on disk while it had unsaved text (F-11).
     pub external: Option<External>,
+    /// The disk changed while a save ran: read it again once the save lands.
+    pub recheck: bool,
     kinds: Vec<LineKind>,
     kinds_rev: u64,
 }
@@ -86,6 +88,7 @@ impl Document {
             save: Save::Idle,
             vim,
             external: None,
+            recheck: false,
             kinds,
             kinds_rev: rev,
         }

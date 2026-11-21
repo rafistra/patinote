@@ -270,6 +270,14 @@ impl App {
 
     /// Opens a note that is not on disk (`insert`: in insert mode).
     pub(super) fn open_new_note(&mut self, path: String, insert: bool) -> Task<Message> {
+        // A note by that name already on disk (excluded ones included)
+        // opens as it is; an empty buffer over it would overwrite it.
+        if self
+            .workspace()
+            .is_some_and(|w| w.session.paths.root.join(&path).is_file())
+        {
+            return self.open_note(path);
+        }
         if let Some(i) = self
             .workspace()
             .and_then(|w| w.buffers.iter().position(|b| b.path == path))

@@ -308,3 +308,47 @@ fn notes_from_the_last_session_load_after_interrupted_writes_are_undone() {
     assert_eq!(disk(&env, NOTE), before, "recovered");
     assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
 }
+
+#[test]
+fn keep_original_is_refused_when_the_original_is_gone() {
+    let env = Env::new();
+    let original = "Rapat/Rapat 19 Nov.md";
+    let copy = "Rapat/Rapat 19 Nov.sync-conflict-20261119-162104-ABCDEFG.md";
+    // Deleted on another device: only Syncthing's copy is left.
+    let vault = env.vault();
+    std::fs::remove_file(vault.join(original)).unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    command(&mut app, "conflicts");
+    let i = app.conflict_index(original).expect("listed");
+    send(&mut app, Message::OpenConflict(i));
+    assert!(app.compare_summary().is_some());
+    send(
+        &mut app,
+        Message::Choose(patinote_app::app::Choice::KeepOriginal),
+    );
+    assert!(
+        env.path("Vault").join(copy).exists(),
+        "the only version stays"
+    );
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error));
+}
+
+#[test]
+fn a_change_from_outside_while_a_save_runs_is_read_once_it_lands() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsebelas<Esc>");
+    let save = start_autosave(&mut app);
+    // The watcher reports a change while the save is still running.
+    send(
+        &mut app,
+        Message::DiskState(NOTE.into(), Some(b"dari luar\n".to_vec())),
+    );
+    let landed = common::outputs(save);
+    // Syncthing's write landed right after ours.
+    std::fs::write(env.path("Vault").join(NOTE), "dari luar\n").unwrap();
+    for m in landed {
+        send(&mut app, m);
+    }
+    assert_eq!(app.active_text().as_deref(), Some("dari luar\n"));
+}

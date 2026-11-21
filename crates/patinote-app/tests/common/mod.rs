@@ -94,6 +94,21 @@ pub fn run(app: &mut App, task: Task<Message>) {
     }
 }
 
+/// Runs a task and returns its messages without handling them, so a test
+/// can change the disk before the app sees what the task did.
+pub fn outputs(task: Task<Message>) -> Vec<Message> {
+    let Some(mut stream) = iced_runtime::task::into_stream(task) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    while let Some(action) = block_on(stream.next()) {
+        if let iced_runtime::Action::Output(message) = action {
+            out.push(message);
+        }
+    }
+    out
+}
+
 /// Like [`run`], for tasks that never end (the watcher, the socket): every
 /// stream is polled in turn until `done` holds, or for at most `limit`.
 /// Returns whether `done` held.

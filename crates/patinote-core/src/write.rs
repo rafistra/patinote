@@ -418,6 +418,17 @@ pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
                 content,
                 expect,
             } => {
+                // New bytes would land in a plain file at `to` and the link
+                // would go: the note would silently become a copy.
+                if content.is_some()
+                    && fs::symlink_metadata(root.join(from))
+                        .is_ok_and(|m| m.file_type().is_symlink())
+                {
+                    return Err(WriteError::InvalidPath {
+                        path: from.clone(),
+                        reason: "the note is a link; its own links can't change while it moves",
+                    });
+                }
                 let ok = matches(root, from, expect).map_err(io_err(&root.join(from)))?;
                 let taken = fs::symlink_metadata(root.join(to)).is_ok();
                 let diff = content
@@ -936,21 +947,39 @@ fn undo(root: &Path, journal: &Journal, entry: &Entry) -> io::Result<()> {
 }
 
 /// Undoes journal entries left pending by a crash. Run it when a vault is
-/// opened for writing. Returns the ids it rolled back.
+/// opened for writing. Returns the ids it rolled back. An entry that cannot
+/// be read or undone does not stop the others; the error names it.
 pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
     let _lock = WriteLock::acquire(journal)?;
     let mut done = Vec::new();
+    let mut failed = Vec::new();
+    // Each entry on its own: one damaged entry must not leave the ones
+    // after it half-applied.
     for id in journal.ids()? {
-        let mut entry = journal.entry(&id)?;
-        if entry.status != EntryStatus::Pending {
-            continue;
+        let undone = (|| {
+            let mut entry = journal.entry(&id)?;
+            if entry.status != EntryStatus::Pending {
+                return Ok(false);
+            }
+            undo(root, journal, &entry)?;
+            entry.status = EntryStatus::RolledBack;
+            journal.write_manifest(&entry)?;
+            Ok::<_, io::Error>(true)
+        })();
+        match undone {
+            Ok(true) => done.push(id),
+            Ok(false) => {}
+            Err(e) => failed.push(format!("{id}: {e}")),
         }
-        undo(root, journal, &entry)?;
-        entry.status = EntryStatus::RolledBack;
-        journal.write_manifest(&entry)?;
-        done.push(id);
     }
-    Ok(done)
+    if failed.is_empty() {
+        Ok(done)
+    } else {
+        Err(io::Error::other(format!(
+            "cannot recover journal entries {}",
+            failed.join("; ")
+        )))
+    }
 }
 
 #[cfg(test)]
