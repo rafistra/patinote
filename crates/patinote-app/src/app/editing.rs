@@ -404,6 +404,7 @@ impl App {
     fn save_landed(&mut self, done: SaveDone) -> Task<Message> {
         let now = Instant::now();
         let mut message = None;
+        let mut reread = None;
         if let Some(w) = self.workspace_mut() {
             if let Some(i) = w.closing.iter().position(|d| d.path == done.path) {
                 let mut doc = w.closing.remove(i);
@@ -435,10 +436,8 @@ impl App {
                         ));
                     }
                     Save::Changed => {
-                        message = Some((
-                            Level::Warning,
-                            format!("\"{}\" changed on disk; autosave is paused", doc.path),
-                        ));
+                        // The hash on disk differs (F-11.3): read it for the banner.
+                        reread = Some(doc.path.clone());
                     }
                     _ => {}
                 }
@@ -446,6 +445,9 @@ impl App {
         }
         if let Some((level, text)) = message {
             self.say(level, text);
+        }
+        if let Some(path) = reread {
+            return self.read_disk(path);
         }
         if self.quitting {
             if self.save_failed() {
@@ -601,9 +603,17 @@ impl App {
             super::IndexStatus::Ready => Some(Indicator::Indexed),
             super::IndexStatus::Failed => None,
         };
+        let indicator = if super::external::polling(w.watch_mode.as_ref())
+            && indicator == Some(Indicator::Indexed)
+        {
+            Some(Indicator::Polling { seconds: 30 })
+        } else {
+            indicator
+        };
         let mut line = StatusLine {
             mode: Mode::Normal,
             indicator,
+            conflicts: w.conflicts.len(),
             ..StatusLine::default()
         };
         let Some(b) = w.active_buffer() else {
@@ -612,6 +622,7 @@ impl App {
         line.path = b.path.clone();
         if let Some(doc) = &b.doc {
             line.mode = match doc.vim.mode() {
+                _ if doc.external.is_some() || self.comparing.is_some() => Mode::Conflict,
                 _ if doc.read_only.is_some() => Mode::Read,
                 vim::Mode::Normal => Mode::Normal,
                 vim::Mode::Insert => Mode::Insert,

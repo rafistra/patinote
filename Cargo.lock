@@ -2613,6 +2613,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "similar 3.2.1",
  "tempfile",
  "tracing",
  "tracing-subscriber",

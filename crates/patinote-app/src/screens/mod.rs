@@ -1,5 +1,7 @@
 //! Whole screens, built from [`crate::widgets`].
 
+pub mod compare;
+pub mod conflicts;
 pub mod dialogs;
 pub mod explorer;
 pub mod panel;

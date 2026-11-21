@@ -227,6 +227,19 @@ pub fn side_panel(_: &Theme) -> container::Style {
     }
 }
 
+/// A line that is only on one side of a diff (0003 3.7).
+pub fn diff_line(bg: Color) -> impl Fn(&Theme) -> container::Style {
+    move |_| filled(bg, TEXT_PRIMARY)
+}
+
+/// A legend square under a diff: the side's background with its marker.
+pub fn legend(bg: Color, marker: Color) -> impl Fn(&Theme) -> container::Style {
+    move |_| container::Style {
+        border: border(marker, SIZE_BORDER, RADIUS_CURSORLINE),
+        ..filled(bg, TEXT_PRIMARY)
+    }
+}
+
 // --- Buttons ------------------------------------------------------------------
 
 fn button_style(bg: Option<Color>, text: Color, edge: Option<Color>) -> button::Style {

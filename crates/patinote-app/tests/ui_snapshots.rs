@@ -621,3 +621,52 @@ fn mockup_14_create_move_delete_folder() {
         "orange Move to trash button"
     );
 }
+
+/// Mockups 08, 15 and 16: a note changed on disk while edited, compared;
+/// the Syncthing conflict list; and one conflict compared.
+#[test]
+fn mockups_08_15_16_external_changes_and_conflicts() {
+    use patinote_app::app::{Choice, Message};
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    let mut h = Harness::new();
+    let note = "Rapat/Rapat 19 Nov.md";
+    common::send(
+        &mut app,
+        Message::Remote(patinote_core::ipc::Request::Open { path: note.into() }),
+    );
+    common::keys(&mut app, "GoPrototipe editor minggu depan<Esc>");
+    let disk = std::fs::read_to_string(env.path("Vault").join(note)).unwrap()
+        + "- Cek ulang angka benchmark\n";
+    std::fs::write(env.path("Vault").join(note), disk).unwrap();
+    common::send(
+        &mut app,
+        Message::External(patinote_core::Change {
+            paths: vec![note.into()],
+            rescan: false,
+            mode: patinote_core::WatchMode::Events,
+        }),
+    );
+    common::send(&mut app, Message::Choose(Choice::Compare));
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("08-external-change-conflict.png"));
+    assert!(frame.count(BANNER_WARNING_BG) >= 40_000, "warning banner");
+    assert!(frame.count(DIFF_DISK_BG) >= 10_000, "a line only on disk");
+    assert!(
+        frame.count(DIFF_MINE_BG) >= 10_000,
+        "a line only in my version"
+    );
+    assert!(frame.count(MODE_CONFLICT) >= 1_000, "CONFLICT badge");
+
+    common::send(&mut app, Message::Choose(Choice::KeepMine));
+    command(&mut app, "conflicts");
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("15-sync-conflict-list.png"));
+    assert!(frame.count(BG_OVERLAY) >= 40_000, "conflict list");
+
+    let i = app.conflict_index(note).unwrap();
+    common::send(&mut app, Message::OpenConflict(i));
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("16-sync-conflict-diff.png"));
+    assert!(frame.count(BANNER_WARNING_BG) >= 40_000, "warning banner");
+}
