@@ -60,6 +60,7 @@ pub struct Editor<'a, Message, Theme = iced::Theme, R = iced::Renderer> {
     /// The widest the text column gets (920 px in minimal mode).
     pub max_width: f32,
     popup: Option<(usize, Element<'a, Message, Theme, R>)>,
+    footer: Option<Element<'a, Message, Theme, R>>,
     on_click: Option<Box<dyn Fn(At, bool) -> Message + 'a>>,
     on_scroll: Option<Box<dyn Fn(usize, usize) -> Message + 'a>>,
 }
@@ -85,6 +86,7 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             relative_numbers: true,
             max_width: SIZE_EDITOR_MAXW,
             popup: None,
+            footer: None,
             on_click: None,
             on_scroll: None,
         }
@@ -108,6 +110,21 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
     pub fn popup(mut self, col: usize, content: impl Into<Element<'a, Message, Theme, R>>) -> Self {
         self.popup = Some((col, content.into()));
         self
+    }
+
+    /// Shows `content` under the note's last line, in the text column (the
+    /// backlinks of mockup 01).
+    pub fn footer(mut self, content: impl Into<Element<'a, Message, Theme, R>>) -> Self {
+        self.footer = Some(content.into());
+        self
+    }
+
+    /// The children in tree order: footer, then popup.
+    fn kids(&self) -> Vec<&Element<'a, Message, Theme, R>> {
+        self.footer
+            .iter()
+            .chain(self.popup.iter().map(|(_, p)| p))
+            .collect()
     }
 
     fn column(&self, bounds: Rectangle) -> Rectangle {
@@ -297,6 +314,17 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             width: SIZE_EDITOR_CELL_W,
             height: TYPE_EDITOR.line_height,
         }));
+        // Where the note ends, if that is on screen: the footer goes there.
+        let mut end = col.y;
+        let mut last_visible = true;
+        for i in top..count {
+            end += self.entry(i, text_w, &mut cache);
+            if end > size.height {
+                last_visible = false;
+                break;
+            }
+        }
+        state.footer_y.set(last_visible.then_some(end));
         // The popup hangs under the cursor's visual row, from the anchor.
         state.anchor.set(Some(Point::new(
             text_x + anchor_pos.x,
@@ -363,6 +391,9 @@ pub struct State<P> {
     /// The cursor cell and the popup's top-left, relative to the widget.
     cursor_rect: Cell<Option<Rectangle>>,
     anchor: Cell<Option<Point>>,
+    /// Where the note's last line ends, relative to the widget, when it is
+    /// on screen.
+    footer_y: Cell<Option<f32>>,
     modifiers: Cell<Modifiers>,
 }
 
@@ -452,29 +483,42 @@ where
             visible: Cell::new((0, 0)),
             cursor_rect: Cell::new(None),
             anchor: Cell::new(None),
+            footer_y: Cell::new(None),
             modifiers: Cell::new(Modifiers::default()),
         })
     }
 
     fn children(&self) -> Vec<Tree> {
-        self.popup
-            .iter()
-            .map(|(_, p)| Tree::new(p.as_widget()))
+        self.kids()
+            .into_iter()
+            .map(|k| Tree::new(k.as_widget()))
             .collect()
     }
 
     fn diff(&self, tree: &mut Tree) {
-        match &self.popup {
-            Some((_, p)) => tree.diff_children(std::slice::from_ref(p)),
-            None => tree.children.clear(),
-        }
+        tree.diff_children(&self.kids());
     }
 
-    fn layout(&mut self, tree: &mut Tree, _renderer: &R, limits: &layout::Limits) -> layout::Node {
+    fn layout(&mut self, tree: &mut Tree, renderer: &R, limits: &layout::Limits) -> layout::Node {
         let size = limits.max();
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         self.prepare(state, size);
-        layout::Node::new(size)
+        let footer_y = state.footer_y.get();
+        let col = self.column(Rectangle::new(Point::ORIGIN, size));
+        let text_w = (col.width - SIZE_GUTTER_W).max(SIZE_EDITOR_CELL_W);
+        let Some(footer) = &mut self.footer else {
+            return layout::Node::new(size);
+        };
+        let child_limits = layout::Limits::new(Size::ZERO, Size::new(text_w, f32::INFINITY));
+        let node = footer
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, &child_limits);
+        // Off the screen when the note's end is not visible.
+        let y = footer_y.map_or(size.height + size.height, |y| y + SPACE_32);
+        layout::Node::with_children(
+            size,
+            vec![node.move_to(Point::new(col.x + SIZE_GUTTER_W, y))],
+        )
     }
 
     fn update(
@@ -488,6 +532,28 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
+        if let (Some(footer), Some(child)) = (&mut self.footer, layout.children().next())
+            && tree
+                .state
+                .downcast_ref::<State<R::Paragraph>>()
+                .footer_y
+                .get()
+                .is_some()
+        {
+            footer.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                child,
+                cursor,
+                _renderer,
+                _clipboard,
+                shell,
+                _viewport,
+            );
+            if shell.is_event_captured() {
+                return;
+            }
+        }
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         if let Event::Keyboard(keyboard::Event::ModifiersChanged(m)) = event {
             state.modifiers.set(*m);
@@ -557,12 +623,23 @@ where
 
     fn mouse_interaction(
         &self,
-        _tree: &Tree,
+        tree: &Tree,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _viewport: &Rectangle,
-        _renderer: &R,
+        viewport: &Rectangle,
+        renderer: &R,
     ) -> mouse::Interaction {
+        if let (Some(footer), Some(child)) = (&self.footer, layout.children().next())
+            && cursor.is_over(child.bounds())
+        {
+            return footer.as_widget().mouse_interaction(
+                &tree.children[0],
+                child,
+                cursor,
+                viewport,
+                renderer,
+            );
+        }
         if cursor.is_over(layout.bounds()) {
             mouse::Interaction::Text
         } else {
@@ -720,6 +797,19 @@ where
             i += 1;
         }
         state.visible.set((top, i.saturating_sub(1)));
+        if let (Some(footer), Some(child)) = (&self.footer, layout.children().next())
+            && state.footer_y.get().is_some()
+        {
+            footer.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                _theme,
+                _style,
+                child,
+                _cursor,
+                &clip,
+            );
+        }
         // Lines far from the screen are dropped, so memory stays bounded.
         cache.retain(|&k, _| k + count.min(256) >= top && k <= i + 256);
 
@@ -758,11 +848,12 @@ where
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, R>> {
+        let index = usize::from(self.footer.is_some());
         let (_, content) = self.popup.as_mut()?;
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         let anchor = state.anchor.get()?;
         let bounds = layout.bounds();
-        let child = tree.children.first_mut()?;
+        let child = tree.children.get_mut(index)?;
         Some(overlay::Element::new(Box::new(Popup {
             content,
             tree: child,

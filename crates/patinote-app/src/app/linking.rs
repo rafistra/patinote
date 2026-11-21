@@ -109,6 +109,7 @@ impl App {
             Link::Url(url) => self.open_externally_path(&url),
             Link::Wiki { target, subpath } if target.is_empty() => {
                 // `[[#Heading]]` points inside this note.
+                self.record_jump();
                 self.jump_to(subpath.as_deref());
                 Task::none()
             }
@@ -297,8 +298,9 @@ impl App {
         w.buffers.push(super::Buffer {
             path: path.clone(),
             doc: Some(doc),
-            backlinks: Some(0),
+            backlinks: Some(Vec::new()),
             id,
+            used: 0,
         });
         w.active = Some(w.buffers.len() - 1);
         w.state.touch(&path, state::now());

@@ -5,6 +5,7 @@
 
 mod editing;
 mod linking;
+mod panels;
 mod switching;
 
 use std::collections::{HashMap, HashSet};
@@ -80,6 +81,25 @@ pub struct App {
     picker: Option<linking::Picker>,
     /// A heading or block to show once its note has loaded: (path, subpath).
     pending_jump: Option<(String, String)>,
+    /// Cursors to set once their notes have loaded (session restore,
+    /// backlinks, the jump list).
+    pending_cursor: HashMap<String, (usize, usize)>,
+    /// The side panel is open (F-09).
+    panel_open: bool,
+    /// The item of the side panel with the keyboard focus; `None` when the
+    /// editor has it.
+    focus: Option<crate::screens::panel::Focused>,
+    /// `Ctrl+w` was pressed and waits for `h` or `l`.
+    window_prefix: bool,
+    /// `]` or `[` was pressed in normal mode and waits for `b`.
+    bracket: Option<char>,
+    /// The jump list (F-09.5) and where `Ctrl+O`/`Ctrl+I` are in it.
+    jumps: Vec<panels::Jump>,
+    jump_at: usize,
+    /// Moving through the jump list, which must not record jumps.
+    navigating: bool,
+    /// Counts buffer activations, to find the least recently used one.
+    use_counter: u64,
 }
 
 /// The screen shown.
@@ -130,9 +150,12 @@ pub struct Buffer {
     pub path: String,
     /// `None` while the file is being read.
     pub doc: Option<Document>,
-    pub backlinks: Option<usize>,
+    /// Links into this note with their lines (F-09).
+    pub backlinks: Option<Vec<patinote_core::commands::Backlink>>,
     /// Identifies the buffer to the editor widget.
     pub id: u64,
+    /// When it was last made active, for closing the oldest (F-09.7).
+    pub used: u64,
 }
 
 /// What the command line is doing.
@@ -164,7 +187,11 @@ pub enum Message {
     OpenRecent(usize),
     SelectBuffer(usize),
     NoteLoaded(String, Result<Vec<u8>, String>),
-    Backlinks(String, usize),
+    Backlinks(String, Vec<patinote_core::commands::Backlink>),
+    /// `Enter` (or a click) on an outline item.
+    OutlineJump(usize),
+    /// `Enter` (or a click) on a backlink.
+    OpenBacklink(usize),
     Looked(String, Lookup),
     Resized(Size),
     CloseRequested(window::Id),
@@ -226,6 +253,15 @@ impl App {
             autocomplete: None,
             picker: None,
             pending_jump: None,
+            pending_cursor: HashMap::new(),
+            panel_open: false,
+            focus: None,
+            window_prefix: false,
+            bracket: None,
+            jumps: Vec::new(),
+            jump_at: 0,
+            navigating: false,
+            use_counter: 0,
         };
         let vault = launch
             .vault
@@ -323,8 +359,37 @@ impl App {
         self.app_state.last_vault = Some(paths.root.clone());
         tasks.push(self.save_app_state());
         let journal = Journal::for_vault(&paths.state_home, &paths.id);
+        let root = paths.root.clone();
         let (session, events) = Session::open(paths);
         tasks.push(Task::stream(events).map(Message::Index));
+        self.panel_open = state.panel_open;
+        // The last session's buffers and cursors come back (F-09.6).
+        let mut buffers = Vec::new();
+        for (id, path) in state.buffers.iter().enumerate() {
+            if !root.join(path).is_file() {
+                continue;
+            }
+            if let Some(c) = state.cursors.get(path) {
+                self.pending_cursor.insert(path.clone(), *c);
+            }
+            let file = root.join(path);
+            let p = path.clone();
+            tasks.push(Task::future(async move {
+                let bytes = std::fs::read(&file).map_err(|e| e.to_string());
+                Message::NoteLoaded(p, bytes)
+            }));
+            buffers.push(Buffer {
+                path: path.clone(),
+                doc: None,
+                backlinks: None,
+                id: id as u64,
+                used: 0,
+            });
+        }
+        let active = state
+            .active
+            .filter(|_| !buffers.is_empty())
+            .map(|a| a.min(buffers.len() - 1));
         self.screen = Screen::Vault(Box::new(Workspace {
             session,
             journal,
@@ -333,8 +398,8 @@ impl App {
             layout,
             index: IndexStatus::Indexing { done: 0, total: 0 },
             notes: None,
-            buffers: Vec::new(),
-            active: None,
+            buffers,
+            active,
             closing: Vec::new(),
             selected: 0,
             candidates: Vec::new(),
@@ -361,7 +426,17 @@ impl App {
             return Task::none();
         };
         let path = state::vault_state_path(&self.state_home, &w.session.paths.id);
-        let value = w.state.clone();
+        let mut value = w.state.clone();
+        // The session as it is now: open buffers and their cursors.
+        value.buffers = w.buffers.iter().map(|b| b.path.clone()).collect();
+        value.active = w.active;
+        value.cursors.retain(|p, _| value.buffers.contains(p));
+        for b in &w.buffers {
+            if let Some(d) = &b.doc {
+                let c = d.buffer.cursor();
+                value.cursors.insert(b.path.clone(), (c.line, c.col));
+            }
+        }
         Task::future(async move {
             if let Err(e) = state::save(&path, &value) {
                 tracing::warn!("cannot save the vault state: {e}");
@@ -373,13 +448,20 @@ impl App {
     /// Opens the note at `path` (relative to the vault) in a buffer. The
     /// note being left is saved first (F-05).
     fn open_note(&mut self, path: String) -> Task<Message> {
+        if self.active_document().is_some_and(|d| d.path != path) {
+            self.record_jump();
+        }
         let leave = self.autosave(true);
+        self.use_counter += 1;
+        let used = self.use_counter;
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
         w.state.touch(&path, state::now());
         if let Some(i) = w.buffers.iter().position(|b| b.path == path) {
             w.active = Some(i);
+            w.buffers[i].used = used;
+            self.apply_pending_cursor();
             return Task::batch([leave, self.save_vault_state()]);
         }
         let id = w.buffers.iter().map(|b| b.id).max().map_or(0, |m| m + 1);
@@ -388,8 +470,13 @@ impl App {
             doc: None,
             backlinks: None,
             id,
+            used,
         });
         w.active = Some(w.buffers.len() - 1);
+        self.enforce_buffer_limit();
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
         let file = w.session.paths.root.join(&path);
         let read = {
             let path = path.clone();
@@ -414,10 +501,10 @@ impl App {
                     .note_by_path(&p)
                     .ok()
                     .flatten()
-                    .and_then(|row| store.backlinks(row.id).ok())
-                    .map_or(0, |b| b.len())
+                    .and_then(|row| store.backlinks_with_context(row.id).ok())
+                    .unwrap_or_default()
             }),
-            move |count| Message::Backlinks(path.clone(), count.unwrap_or(0)),
+            move |links| Message::Backlinks(path.clone(), links.unwrap_or_default()),
         )
     }
 
@@ -471,10 +558,13 @@ impl App {
             "bp" | "bprevious" | "bN" => self.cycle_buffer(-1),
             "b" | "buffer" => match arg.parse::<usize>() {
                 Ok(n) if n >= 1 => self.select_buffer(n - 1),
-                _ => {
-                    self.say(Level::Error, format!("No such buffer: {arg}"));
-                    Task::none()
-                }
+                _ => match self.buffer_by_name(arg) {
+                    Some(i) => self.select_buffer(i),
+                    None => {
+                        self.say(Level::Error, format!("No such buffer: {arg}"));
+                        Task::none()
+                    }
+                },
             },
             "bd" | "bdelete" => self.close_or_quit(false),
             other => {
@@ -490,13 +580,20 @@ impl App {
             self.say(Level::Error, format!("No such buffer: {}", i + 1));
             return Task::none();
         }
+        if self.workspace().and_then(|w| w.active) != Some(i) {
+            self.record_jump();
+        }
         let leave = self.autosave(true);
+        self.use_counter += 1;
+        let used = self.use_counter;
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
         w.active = Some(i);
+        w.buffers[i].used = used;
         let path = w.buffers[i].path.clone();
         w.state.touch(&path, state::now());
+        self.apply_pending_cursor();
         Task::batch([leave, self.save_vault_state()])
     }
 
@@ -625,12 +722,21 @@ impl App {
                 }
             }
             Message::SelectBuffer(i) => self.select_buffer(i),
+            Message::OutlineJump(i) => {
+                self.focus = None;
+                self.outline_jump(i);
+                Task::none()
+            }
+            Message::OpenBacklink(i) => {
+                self.focus = None;
+                self.open_backlink(i)
+            }
             Message::NoteLoaded(path, result) => self.note_loaded(path, result),
-            Message::Backlinks(path, count) => {
+            Message::Backlinks(path, links) => {
                 if let Some(w) = self.workspace_mut()
                     && let Some(b) = w.buffers.iter_mut().find(|b| b.path == path)
                 {
-                    b.backlinks = Some(count);
+                    b.backlinks = Some(links);
                 }
                 Task::none()
             }
@@ -692,8 +798,15 @@ impl App {
                 Task::none()
             }
             Message::Reindexed(path) => {
-                let backlinks = self.load_backlinks(path.clone());
-                Task::batch([self.load_candidates(), backlinks, self.load_ambiguous(path)])
+                // A save can add links to any open note (F-09.1).
+                let open: Vec<String> = self
+                    .workspace()
+                    .map(|w| w.buffers.iter().map(|b| b.path.clone()).collect())
+                    .unwrap_or_default();
+                let mut tasks: Vec<_> = open.into_iter().map(|p| self.load_backlinks(p)).collect();
+                tasks.push(self.load_candidates());
+                tasks.push(self.load_ambiguous(path));
+                Task::batch(tasks)
             }
             Message::SwitcherInput(query) => {
                 self.switcher_input(query);
@@ -752,6 +865,12 @@ impl App {
         if let Some(task) = self.picker_key(&key, text.as_deref(), modifiers) {
             return task;
         }
+        if std::mem::take(&mut self.window_prefix) {
+            return self.window_key(text.as_deref());
+        }
+        if self.focus.is_some() {
+            return self.panel_key(&key, text.as_deref(), modifiers);
+        }
         // `Ctrl+Shift+O` opens the quick switcher anywhere (F-07).
         if modifiers.control()
             && modifiers.shift()
@@ -764,8 +883,23 @@ impl App {
         if std::mem::take(&mut self.leader) {
             return match text.as_deref() {
                 Some("f") => self.open_switcher(),
+                Some("b") => self.toggle_panel(true),
+                Some("o") => self.toggle_panel(false),
+                Some("x") if self.active_document().is_some() => self.close_or_quit(false),
                 _ => Task::none(),
             };
+        }
+        let normal_mode = self
+            .active_document()
+            .is_none_or(|d| d.vim.mode() == crate::vim::Mode::Normal);
+        if normal_mode
+            && self.workspace().is_some()
+            && modifiers.control()
+            && key == Key::Character("w".into())
+        {
+            // `Ctrl+w h/l`: focus between editor and panel (F-28).
+            self.window_prefix = true;
+            return Task::none();
         }
         let normal = self
             .active_document()
@@ -882,7 +1016,7 @@ impl App {
                 None => w.start().view(Message::OpenRecent),
             },
         };
-        let body = self.with_switcher(body);
+        let body = self.with_switcher(self.with_panel(body));
         // Before a vault is open the status line is an empty bar (mockup 10).
         let status: Element<'_, Message> = if self.workspace().is_some() {
             self.status_line().view_with(|_| None)

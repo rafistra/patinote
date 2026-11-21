@@ -9,6 +9,7 @@
 //! leaves the old or the new file, never half of one. A missing or unreadable
 //! file is the default state.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,6 +51,11 @@ pub struct VaultState {
     pub active: Option<usize>,
     /// Recently opened notes, newest first.
     pub recent: Vec<Recent>,
+    /// The side panel was open (F-28.11).
+    pub panel_open: bool,
+    /// The cursor (line, character) of each open buffer, to restore the
+    /// session (F-09.6).
+    pub cursors: HashMap<String, (usize, usize)>,
 }
 
 impl VaultState {

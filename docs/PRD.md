@@ -716,14 +716,14 @@ Melihat siapa yang menautkan catatan ini, berpindah maju-mundur seperti di Vim, 
 
 **Kriteria penerimaan**
 
-- [ ] F-09.1 Backlinks memperlihatkan link baru di bawah 1 detik setelah catatan sumber disimpan.
-- [ ] F-09.2 Link ke heading, ke blok, dan dari properti frontmatter tampil dengan penandanya.
-- [ ] F-09.3 `Enter` pada item backlink membuka catatan sumber dengan kursor di baris link.
-- [ ] F-09.4 Outline menyorot heading tempat kursor berada; `Enter` melompat ke heading itu.
-- [ ] F-09.5 Buka A, B, C lalu `Ctrl+O` dua kali: kembali di A dengan posisi kursor yang sama; `Ctrl+I` maju ke B.
-- [ ] F-09.6 Setelah aplikasi ditutup dan dibuka lagi, buffer yang sama terbuka di posisi kursor yang sama.
-- [ ] F-09.7 Membuka buffer ke-21 menutup buffer tertua yang tidak diubah; buffer belum tersimpan tidak pernah ditutup otomatis.
-- [ ] F-09.8 Semua aksi di bagian ini bisa dilakukan tanpa mouse.
+- [x] F-09.1 Backlinks memperlihatkan link baru di bawah 1 detik setelah catatan sumber disimpan. `f09_1_a_new_link_shows_in_backlinks_right_after_the_save`
+- [x] F-09.2 Link ke heading, ke blok, dan dari properti frontmatter tampil dengan penandanya. `f09_2_heading_block_and_property_links_are_marked`
+- [x] F-09.3 `Enter` pada item backlink membuka catatan sumber dengan kursor di baris link. `f09_3_enter_on_a_backlink_opens_the_source_at_the_link`
+- [x] F-09.4 Outline menyorot heading tempat kursor berada; `Enter` melompat ke heading itu. `f09_4_the_outline_follows_the_cursor_and_enter_jumps`
+- [x] F-09.5 Buka A, B, C lalu `Ctrl+O` dua kali: kembali di A dengan posisi kursor yang sama; `Ctrl+I` maju ke B. `f09_5_ctrl_o_and_ctrl_i_walk_the_jump_list`
+- [x] F-09.6 Setelah aplikasi ditutup dan dibuka lagi, buffer yang sama terbuka di posisi kursor yang sama. `f09_6_buffers_and_cursors_come_back_after_a_restart`
+- [x] F-09.7 Membuka buffer ke-21 menutup buffer tertua yang tidak diubah; buffer belum tersimpan tidak pernah ditutup otomatis. `f09_7_the_21st_buffer_closes_the_oldest_unchanged_one`
+- [x] F-09.8 Semua aksi di bagian ini bisa dilakukan tanpa mouse. `tests/panels.rs` (semua test memakai tombol saja), `buffers_move_with_gt_and_brackets_and_close_with_the_leader`
 
 ### F-10 · Membuat, mengganti nama, dan menghapus
 
@@ -962,7 +962,7 @@ Rapat/Rapat 19 Nov.md	12	Keputusan untuk [[Patinote]]: FTS5 dulu
 - [x] A-01.4 Nama ambigu keluar dengan exit code 4 dan daftar kandidat. `a01_4_ambiguous_names_exit_4_with_candidates`
 - [x] A-01.5 `cut -f1` pada output tanpa `--json` menghasilkan daftar path yang valid. `a01_5_first_column_is_a_valid_path`
 - [x] A-01.6 Di vault 10.000 catatan, `backlinks`, `links`, `resolve`, dan `read` selesai di bawah 100 ms, termasuk pengecekan cepat indeks. `cargo bench -p patinote-cli --bench cli`
-- [ ] A-01.7 Hasil `patinote backlinks X` sama persis dengan panel backlinks di GUI untuk catatan yang sama.
+- [x] A-01.7 Hasil `patinote backlinks X` sama persis dengan panel backlinks di GUI untuk catatan yang sama. `a01_7_the_panel_shows_exactly_what_patinote_backlinks_prints`
 
 ### A-02 · Kontrak output `--json`
 

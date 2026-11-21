@@ -83,7 +83,11 @@ impl App {
 
     /// Links into the active note, as the status line shows, for tests.
     pub fn active_backlinks(&self) -> Option<usize> {
-        self.workspace()?.active_buffer()?.backlinks
+        self.workspace()?
+            .active_buffer()?
+            .backlinks
+            .as_ref()
+            .map(Vec::len)
     }
 
     /// Whether the active note has unsaved changes, for tests.
@@ -142,10 +146,30 @@ impl App {
         let Some(doc) = self.active_document_mut() else {
             return Task::none();
         };
-        // `gd`, `gx` and `Enter` on a link (F-08); Vim leaves them alone.
+        // `gd`, `gx` and `Enter` on a link (F-08); `gt`/`gT`, `]b`/`[b`
+        // and `Ctrl+O`/`Ctrl+I` (F-09). Vim leaves them alone.
         if doc.vim.mode() == vim::Mode::Normal {
             let pending_g = doc.vim.pending() == "g";
+            if let Some(b) = self.bracket.take() {
+                if vk == vim::Key::Char('b') {
+                    return self.cycle_buffer(if b == ']' { 1 } else { -1 });
+                }
+                return Task::none();
+            }
+            let Some(doc) = self.active_document_mut() else {
+                return Task::none();
+            };
             match vk {
+                vim::Key::Char('t') | vim::Key::Char('T') if pending_g => {
+                    doc.vim.handle(&mut doc.buffer, vim::Key::Esc, now, lines);
+                    return self.cycle_buffer(if vk == vim::Key::Char('t') { 1 } else { -1 });
+                }
+                vim::Key::Char(c @ (']' | '[')) if doc.vim.pending().is_empty() => {
+                    self.bracket = Some(c);
+                    return Task::none();
+                }
+                vim::Key::Ctrl('o') if doc.vim.pending().is_empty() => return self.jump(true),
+                vim::Key::Ctrl('i') if doc.vim.pending().is_empty() => return self.jump(false),
                 vim::Key::Char('d') | vim::Key::Char('x') if pending_g => {
                     doc.vim.handle(&mut doc.buffer, vim::Key::Esc, now, lines);
                     return if vk == vim::Key::Char('d') {
@@ -169,7 +193,31 @@ impl App {
                 _ => {}
             }
         }
+        let Some(doc) = self.active_document_mut() else {
+            return Task::none();
+        };
+        // Jump motions are remembered for `Ctrl+O` (F-09), as in Vim.
+        let jump_key = doc.vim.mode() == vim::Mode::Normal
+            && matches!(
+                vk,
+                vim::Key::Char('G' | 'n' | 'N' | '%' | '{' | '}' | '(' | ')')
+            )
+            || (doc.vim.pending() == "g" && vk == vim::Key::Char('g'));
+        let before = doc.buffer.cursor();
         let outcome = doc.vim.handle(&mut doc.buffer, vk, now, lines);
+        let moved_line = doc.buffer.cursor().line != before.line;
+        let path = doc.path.clone();
+        if jump_key && moved_line && !self.navigating {
+            self.jumps.truncate(self.jump_at);
+            self.jumps.push((path, (before.line, before.col)));
+            if self.jumps.len() > super::panels::MAX_JUMPS {
+                self.jumps.remove(0);
+            }
+            self.jump_at = self.jumps.len();
+        }
+        let Some(doc) = self.active_document_mut() else {
+            return Task::none();
+        };
         if doc.read_only.is_some() && outcome.changed {
             // Edits do nothing on a read-only note (F-05.8): take the change
             // back and leave insert mode.
@@ -237,6 +285,7 @@ impl App {
         if pattern.is_empty() {
             return Task::none();
         }
+        self.record_jump();
         let Some(doc) = self.active_document_mut() else {
             return Task::none();
         };
@@ -279,6 +328,7 @@ impl App {
             return Task::none();
         }
         self.apply_pending_jump();
+        self.apply_pending_cursor();
         self.load_ambiguous(path)
     }
 
@@ -366,6 +416,7 @@ impl App {
                         doc: Some(doc),
                         backlinks: None,
                         id,
+                        used: 0,
                     });
                     w.active = Some(w.buffers.len() - 1);
                 }
@@ -489,6 +540,9 @@ impl App {
         });
         editor.search = doc.vim.last_search();
         editor.ambiguous = self.workspace().and_then(|w| w.ambiguous.get(&doc.path));
+        if let Some(footer) = self.inline_backlinks() {
+            editor = editor.footer(footer);
+        }
         match self.popup() {
             Some((col, popup)) => editor.popup(col, popup).into(),
             None => editor.into(),
@@ -574,7 +628,7 @@ impl App {
             let c = doc.buffer.cursor();
             line.position = Some(format!("{}:{}", c.line + 1, c.col + 1));
         }
-        if let Some(n) = b.backlinks {
+        if let Some(n) = b.backlinks.as_ref().map(Vec::len) {
             line.notes.push(if n == 1 {
                 "⇠ 1 backlink".into()
             } else {
@@ -588,7 +642,7 @@ impl App {
             },
             StatusButton {
                 label: "␣b panel",
-                on: false,
+                on: self.panel_open,
             },
             StatusButton {
                 label: "␣ leader",

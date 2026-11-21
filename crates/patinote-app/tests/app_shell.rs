@@ -198,9 +198,16 @@ fn recent_notes_and_window_size_are_remembered() {
     // `:q` closes a note (F-06.4); `:qa` quits and saves the window size.
     command(&mut app, "qa");
 
-    // Next start: no vault given, the last one opens with the start screen
-    // listing recent notes, newest first; j and Enter open the second.
+    // Next start: no vault given, the last one opens with its buffers back
+    // (F-09.6). Closing them shows the start screen with recent notes,
+    // newest first; j and Enter open the second.
     let mut app = env.start(env.launch(None, Config::default()));
+    assert_eq!(
+        open_paths(&app),
+        ["Proyek/Patinote.md", "Inbox/Ide cepat.md"]
+    );
+    command(&mut app, "bd");
+    command(&mut app, "bd");
     assert!(workspace(&app).buffers().is_empty());
     press(&mut app, "j");
     press(&mut app, "Enter");

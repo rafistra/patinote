@@ -219,6 +219,14 @@ pub fn path_box(_: &Theme) -> container::Style {
     }
 }
 
+/// The side panel and explorer (`bg.panel`), set off by `border.default`.
+pub fn side_panel(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(BORDER_DEFAULT, SIZE_BORDER, 0.0),
+        ..filled(BG_PANEL, TEXT_PRIMARY)
+    }
+}
+
 // --- Buttons ------------------------------------------------------------------
 
 fn button_style(bg: Option<Color>, text: Color, edge: Option<Color>) -> button::Style {
@@ -274,11 +282,35 @@ pub fn buffer_tab(active: bool) -> impl Fn(&Theme, button::Status) -> button::St
 }
 
 /// A button in the status line (`␣e explorer`): `text.secondary`, no frame;
-/// `text.strong` when its panel is open.
+/// on `accent` with `text.on-accent` when its panel is open (mockup 02).
 pub fn statusline_button(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, _| {
-        let mut s = button_style(None, if on { TEXT_STRONG } else { TEXT_SECONDARY }, None);
+        let mut s = if on {
+            button_style(Some(ACCENT), TEXT_ON_ACCENT, None)
+        } else {
+            button_style(None, TEXT_SECONDARY, None)
+        };
         s.border.radius = iced::border::Radius::default();
+        s
+    }
+}
+
+/// A backlink card (0003 section 6): `bg.card` in the panel,
+/// `bg.card.inline` under the note; keyboard focus is `bg.selected`.
+pub fn backlink_card(
+    inline: bool,
+    focused: bool,
+) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let bg = if focused {
+            BG_SELECTED
+        } else if inline {
+            BG_CARD_INLINE
+        } else {
+            BG_CARD
+        };
+        let mut s = button_style(Some(bg), TEXT_PRIMARY, None);
+        s.border.radius = RADIUS_CONTROL.into();
         s
     }
 }
