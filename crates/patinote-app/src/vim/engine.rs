@@ -2021,6 +2021,41 @@ impl Vim {
         buf.set_cursor_raw(cur);
     }
 
+    /// The cursor moved by the app (a click, the wheel). In insert mode this
+    /// is like an arrow key (Vim's `start_arrow`): the insert so far is a
+    /// finished change, and an auto-indent left unused goes. Elsewhere the
+    /// cursor stays on a character.
+    pub fn move_cursor(&mut self, buf: &mut Buffer, pos: Pos) {
+        if self.mode != Mode::Insert {
+            buf.set_cursor(pos);
+            self.clamp_normal(buf);
+            self.update_curswant(buf);
+            return;
+        }
+        let cur = buf.cursor();
+        if !self.replaying {
+            buf.end_step();
+            if let Some(ins) = &self.insert
+                && !ins.arrow_used
+                && let Some(mut change) = self.recording.take()
+            {
+                change.keys.push(Key::Esc);
+                self.last_change = Some(change);
+            }
+        }
+        let did_ai = self.insert.as_ref().is_some_and(|i| i.did_ai);
+        if did_ai && pos.line != cur.line && buf.line(cur.line).chars().all(is_blank) {
+            buf.splice_lines(cur.line..cur.line + 1, vec![String::new()]);
+        }
+        buf.set_cursor(pos);
+        if let Some(ins) = &mut self.insert {
+            ins.arrow_used = true;
+            ins.did_ai = false;
+            ins.count = 1;
+        }
+        self.update_curswant(buf);
+    }
+
     fn insert_arrow(&mut self, buf: &mut Buffer, key: Key) {
         let cur = buf.cursor();
         let stuck = match key {

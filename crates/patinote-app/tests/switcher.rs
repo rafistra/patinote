@@ -201,3 +201,28 @@ fn f07_5_shift_enter_creates_a_note_inside_a_folder() {
     wait(&mut app, Duration::from_millis(1100));
     assert!(env.path("Vault/Proyek/Ide baru.md").exists());
 }
+
+#[test]
+fn f10_2_shift_enter_refuses_hidden_folders_and_trims_each_part() {
+    let env = Env::new();
+    let mut app = start(&env);
+    let open = |app: &mut App| {
+        press_with(
+            app,
+            Key::Character("o".into()),
+            Modifiers::CTRL | Modifiers::SHIFT,
+            None,
+            false,
+        )
+    };
+    open(&mut app);
+    for name in [".patinote/Ide", ".obsidian/Ide", "Proyek/.Ide"] {
+        shift_enter(&mut app, name);
+        assert!(app.switcher_open(), "{name} is refused");
+        assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error), "{name}");
+    }
+    shift_enter(&mut app, "Proyek / Ide rapi ");
+    keys(&mut app, "isi<Esc>");
+    wait(&mut app, Duration::from_millis(1100));
+    assert!(env.path("Vault/Proyek/Ide rapi.md").exists());
+}

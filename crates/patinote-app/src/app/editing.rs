@@ -292,10 +292,13 @@ impl App {
         let Some(doc) = self.active_document_mut() else {
             return Task::none();
         };
-        if doc.read_only.is_some() && outcome.changed {
+        if doc.read_only.is_some() && (outcome.changed || doc.vim.mode() == vim::Mode::Insert) {
             // Edits do nothing on a read-only note (F-05.8): take the change
-            // back and leave insert mode.
-            doc.vim.undo(&mut doc.buffer);
+            // back and leave insert mode at once, so no key is held to be
+            // typed later and no link suggestions open.
+            if outcome.changed {
+                doc.vim.undo(&mut doc.buffer);
+            }
             if doc.vim.mode() == vim::Mode::Insert {
                 doc.vim.handle(&mut doc.buffer, vim::Key::Esc, now, lines);
             }
@@ -481,6 +484,21 @@ impl App {
         if w.moving {
             return Task::none();
         }
+        if force {
+            // A note being left (or the app quitting): a key held to see
+            // whether `insert_escape` follows is typed now, not lost.
+            for d in w.buffers.iter_mut().filter_map(|b| b.doc.as_mut()) {
+                if let Some(due) = d.vim.deadline()
+                    && d.read_only.is_none()
+                    && d.vim
+                        .tick(&mut d.buffer, due + std::time::Duration::from_millis(1))
+                        .changed
+                {
+                    d.edited(now);
+                    d.kinds();
+                }
+            }
+        }
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let jobs: Vec<_> = w
@@ -525,7 +543,13 @@ impl App {
                     next = Task::future(async move { Message::Saved(job.run()) });
                 } else if doc.dirty() {
                     // Saving a closed note failed: bring it back, text intact.
-                    message = landed_message(&doc);
+                    // It may not be the note shown, so say so either way.
+                    message = landed_message(&doc).or_else(|| {
+                        Some((
+                            Level::Error,
+                            format!("Can't save \"{}\": it changed on disk", doc.path),
+                        ))
+                    });
                     if doc.save == Save::Changed {
                         reread = Some(doc.path.clone());
                     }
@@ -538,7 +562,11 @@ impl App {
                         used: 0,
                         read: None,
                     });
-                    w.active = Some(w.buffers.len() - 1);
+                    // Back in the bufferline, without taking the keys of the
+                    // note being typed in; the message says which it is.
+                    if w.active.is_none() {
+                        w.active = Some(w.buffers.len() - 1);
+                    }
                 }
             } else if let Some(doc) = w
                 .buffers
@@ -562,6 +590,15 @@ impl App {
             self.say(level, text);
         }
         if let Some(path) = reread {
+            // A conflict: the text waits for the user, so a quit in progress
+            // stops here rather than happening once it is resolved.
+            if self.quitting {
+                self.quitting = false;
+                self.say(
+                    Level::Error,
+                    format!("Can't quit: \"{path}\" has unsaved changes"),
+                );
+            }
             return self.read_disk(path);
         }
         let recheck = recheck.map_or_else(Task::none, |p| self.read_disk(p));
@@ -594,14 +631,7 @@ impl App {
     /// under it (F-08).
     pub(super) fn click(&mut self, line: usize, col: usize, ctrl: bool) -> Task<Message> {
         if let Some(doc) = self.active_document_mut() {
-            // Past the last character only in insert mode, as in Vim.
-            let col = if doc.vim.mode() == vim::Mode::Insert {
-                col
-            } else {
-                let len = doc.buffer.line_len(line.min(doc.buffer.line_count() - 1));
-                col.min(len.saturating_sub(1))
-            };
-            doc.buffer.set_cursor(vim::Pos { line, col });
+            doc.vim.move_cursor(&mut doc.buffer, vim::Pos { line, col });
         }
         if ctrl {
             return self.follow_link();
@@ -620,7 +650,7 @@ impl App {
             } else {
                 return;
             }
-            doc.buffer.set_cursor(pos);
+            doc.vim.move_cursor(&mut doc.buffer, pos);
         }
     }
 

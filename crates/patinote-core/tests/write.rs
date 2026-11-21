@@ -658,3 +658,29 @@ fn a_symlinked_note_is_never_turned_into_a_copy_by_a_move() {
             .is_symlink()
     );
 }
+
+#[test]
+fn a_journal_entry_that_cannot_be_read_for_now_is_tried_again() {
+    use std::os::unix::fs::PermissionsExt;
+    let v = vault();
+    v.write("a.md", "a lama\n");
+    let c = v
+        .commit(vec![write_op("a.md", "a baru\n", v.expect("a.md"))])
+        .unwrap();
+    mark_pending(&v.journal, &c.id);
+    let manifest = v.journal.dir().join(&c.id).join("manifest.json");
+    // Unreadable for now (permissions, an I/O error): not damaged.
+    fs::set_permissions(&manifest, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&manifest).is_ok() {
+        return; // running as root: permissions do not stop reads
+    }
+    assert!(recover(&v.root, &v.journal).is_err());
+    fs::set_permissions(&manifest, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(manifest.is_file(), "not set aside");
+    recover(&v.root, &v.journal).unwrap();
+    assert_eq!(
+        v.read("a.md").as_deref(),
+        Some("a lama\n"),
+        "undone on the next try"
+    );
+}

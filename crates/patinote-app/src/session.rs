@@ -31,6 +31,9 @@ pub enum IndexEvent {
     Watching(patinote_core::WatchMode),
     /// The vault needs more inotify watches than the system allows (F-04).
     WatchLimit { command: String },
+    /// Writes left half-done by a crash were undone, first thing, or why
+    /// some could not be. Notes are read only after this.
+    Recovered(Option<String>),
 }
 
 /// Where a vault's files and data are.
@@ -140,9 +143,11 @@ fn run(
     // Writes left half-done by a crash are undone before anything else
     // (docs/design/0001; PRD "Gerbang 2", point 1).
     let journal = Journal::for_vault(&paths.state_home, &paths.id);
-    if let Err(e) = recover(&paths.root, &journal) {
+    let recovered = recover(&paths.root, &journal).err().map(|e| {
         tracing::warn!("cannot recover interrupted writes: {e}");
-    }
+        e.to_string()
+    });
+    send(IndexEvent::Recovered(recovered));
     if let Some(dir) = paths.index.parent()
         && let Err(e) = std::fs::create_dir_all(dir)
     {

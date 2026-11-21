@@ -407,3 +407,118 @@ fn a_note_opened_at_startup_waits_for_interrupted_writes_to_be_undone() {
     assert_eq!(disk(&env, NOTE), before, "recovered");
     assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
 }
+
+#[test]
+fn a_damaged_journal_entry_is_reported_on_screen() {
+    use patinote_app::session::VaultPaths;
+    use patinote_core::write::{Actor, Journal, Op, Transaction, commit, expect_current};
+    let env = Env::new();
+    let vault = env.vault();
+    let paths = VaultPaths::resolve(&vault, &env.path("cache"), &env.path("state")).unwrap();
+    let journal = Journal::for_vault(&paths.state_home, &paths.id);
+    let done = commit(
+        &vault,
+        &journal,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: NOTE.into(),
+                content: b"baru\n".to_vec(),
+                expect: expect_current(&vault, NOTE).unwrap(),
+            }],
+        },
+    )
+    .unwrap();
+    std::fs::write(journal.dir().join(&done.id).join("manifest.json"), "{rusak").unwrap();
+    let app = env.start(env.launch(Some(vault), Config::default()));
+    let (level, text) = app.message().expect("a message");
+    assert_eq!(level, Level::Error);
+    assert!(
+        text.starts_with("Can't undo an interrupted write"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_closed_note_whose_save_fails_comes_back_without_taking_the_keys() {
+    let env = Env::new();
+    let mut app = env.start(env.launch(Some(env.vault()), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Rapat.md".into(),
+        }),
+    );
+    send(
+        &mut app,
+        Message::Remote(Request::Open { path: NOTE.into() }),
+    );
+    keys(&mut app, "ggOtigabelas<Esc>");
+    // The save of the closed note will fail: the file changed outside.
+    std::fs::write(env.path("Vault").join(NOTE), "dari luar\n").unwrap();
+    let close = command_held(&mut app, "q");
+    assert_eq!(app.title(), "Rapat — Patinote");
+    keys(&mut app, "i");
+    run(&mut app, close);
+    assert_eq!(
+        app.title(),
+        "Rapat — Patinote",
+        "the note being typed in stays"
+    );
+    assert!(
+        titles(&app).iter().any(|t| t == "Ide cepat"),
+        "the unsaved note is back"
+    );
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error));
+    assert!(app.buffer_text(NOTE).unwrap().starts_with("tigabelas\n"));
+}
+
+#[test]
+fn a_key_held_for_insert_escape_is_typed_when_the_note_is_left() {
+    let env = Env::new();
+    let config = Config {
+        insert_escape: Some("jk".into()),
+        ..Config::default()
+    };
+    let mut app = env.start(env.launch(Some(env.vault()), config));
+    send(
+        &mut app,
+        Message::Remote(Request::Open { path: NOTE.into() }),
+    );
+    // `j` waits to see whether `k` follows; another note opens meanwhile.
+    keys(&mut app, "ggOfooj");
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Rapat.md".into(),
+        }),
+    );
+    let text = app.buffer_text(NOTE).unwrap();
+    assert!(text.starts_with("fooj\n"), "{text:?}");
+    command(&mut app, "qa");
+    assert!(
+        disk(&env, NOTE).starts_with("fooj\n"),
+        "{:?}",
+        disk(&env, NOTE)
+    );
+}
+
+#[test]
+fn a_conflict_during_quit_stops_the_quit_for_good() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOempatbelas<Esc>");
+    // The file changes outside while the quit's save runs.
+    std::fs::write(env.path("Vault").join(NOTE), "dari luar\n").unwrap();
+    command(&mut app, "qa");
+    assert!(app.external_title().is_some(), "the conflict banner is up");
+    assert!(!app.quitting(), "quitting is not left pending");
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error));
+    // Resolving it later does not quit on its own.
+    send(
+        &mut app,
+        Message::Choose(patinote_app::app::Choice::KeepMine),
+    );
+    assert!(!app.exited());
+    assert!(disk(&env, NOTE).starts_with("empatbelas\n"));
+}

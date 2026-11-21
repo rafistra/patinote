@@ -157,7 +157,8 @@ impl Document {
             root: root.to_path_buf(),
             journal: journal.clone(),
             path: self.path.clone(),
-            bytes: file::encode(&self.buffer.text(), &self.format),
+            text: self.buffer.text(),
+            format: self.format.clone(),
             expect: self.disk_hash,
             rev,
         }
@@ -188,7 +189,10 @@ pub struct SaveJob {
     root: PathBuf,
     journal: Journal,
     pub path: String,
-    bytes: Vec<u8>,
+    /// Encoded off the UI thread, in `run`: a mixed-ending file needs a
+    /// line diff.
+    text: String,
+    format: Format,
     /// What is on disk now; `None` when the file must not exist yet.
     expect: Option<Hash>,
     rev: u64,
@@ -217,7 +221,8 @@ impl SaveJob {
     /// checked against the hash it was read with). Bytes equal to what is
     /// on disk are not written again (F-05.4).
     pub fn run(self) -> SaveDone {
-        let hash = content_hash(&self.bytes);
+        let bytes = file::encode(&self.text, &self.format);
+        let hash = content_hash(&bytes);
         let result = if self.expect == Some(hash) {
             Ok(hash)
         } else {
@@ -225,7 +230,7 @@ impl SaveJob {
                 actor: Actor::User,
                 ops: vec![Op::Write {
                     path: self.path.clone(),
-                    content: self.bytes,
+                    content: bytes,
                     expect: self.expect.map_or(Expect::Absent, Expect::Hash),
                 }],
             };
