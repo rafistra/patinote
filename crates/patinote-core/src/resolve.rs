@@ -187,21 +187,52 @@ impl Resolver {
 /// Where the note a link points to goes when it does not exist yet: a
 /// Markdown link starting with `./` or `../` is relative to the source
 /// note's folder, anything else is from the vault root; `.md` is added when
-/// missing. `None` when the path would leave the vault.
-pub fn missing_note_path(source: &str, kind: LinkKind, target: &str) -> Option<String> {
+/// missing. `Ok(None)` when it names no file (`./`, a folder); an error
+/// when the path would leave the vault.
+pub fn missing_note_path(
+    source: &str,
+    kind: LinkKind,
+    target: &str,
+) -> Result<Option<String>, OutsideVault> {
     let relative =
         kind == LinkKind::Markdown && (target.starts_with("./") || target.starts_with("../"));
-    let path = if relative {
+    let full = if relative {
         let dir = source.rsplit_once('/').map_or("", |(d, _)| d);
-        normalize(&format!("{dir}/{target}"))?
+        format!("{dir}/{target}")
     } else {
-        normalize(target)?
+        target.to_owned()
     };
-    Some(if path.to_lowercase().ends_with(".md") {
+    if leaves(&full) {
+        return Err(OutsideVault);
+    }
+    let Some(path) = normalize(&full).filter(|_| !full.trim_end().ends_with('/')) else {
+        return Ok(None);
+    };
+    Ok(Some(if path.to_lowercase().ends_with(".md") {
         path
     } else {
         format!("{path}.md")
-    })
+    }))
+}
+
+/// A link path that goes above the vault folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutsideVault;
+
+/// Whether `..` segments go above the root.
+fn leaves(path: &str) -> bool {
+    let mut depth = 0usize;
+    for seg in path.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => match depth.checked_sub(1) {
+                Some(d) => depth = d,
+                None => return true,
+            },
+            _ => depth += 1,
+        }
+    }
+    false
 }
 
 /// `![alt](img/a.png)` is a path; `![[a.png]]` is a name.
@@ -357,23 +388,22 @@ mod tests {
     fn missing_notes_go_where_the_link_says() {
         let src = "Proyek/Sumber.md";
         let md = LinkKind::Markdown;
+        let path = |kind, t| missing_note_path(src, kind, t);
         assert_eq!(
-            missing_note_path(src, md, "../Arsip/Baru.md").as_deref(),
-            Some("Arsip/Baru.md")
+            path(md, "../Arsip/Baru.md"),
+            Ok(Some("Arsip/Baru.md".into()))
         );
+        assert_eq!(path(md, "./Baru"), Ok(Some("Proyek/Baru.md".into())));
+        assert_eq!(path(md, "/Baru.md"), Ok(Some("Baru.md".into())));
+        assert_eq!(path(md, "../../Luar.md"), Err(OutsideVault));
         assert_eq!(
-            missing_note_path(src, md, "./Baru").as_deref(),
-            Some("Proyek/Baru.md")
+            path(LinkKind::Wiki, "Ide/Baru"),
+            Ok(Some("Ide/Baru.md".into()))
         );
-        assert_eq!(
-            missing_note_path(src, md, "/Baru.md").as_deref(),
-            Some("Baru.md")
-        );
-        assert_eq!(missing_note_path(src, md, "../../Luar.md"), None);
-        assert_eq!(
-            missing_note_path(src, LinkKind::Wiki, "Ide/Baru").as_deref(),
-            Some("Ide/Baru.md")
-        );
+        // Names no file: the vault or the note's own folder.
+        assert_eq!(path(md, "./"), Ok(None));
+        assert_eq!(path(md, "../"), Ok(None));
+        assert_eq!(path(md, "."), Ok(None));
     }
 
     #[test]

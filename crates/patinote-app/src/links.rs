@@ -13,8 +13,12 @@ pub enum Link {
         /// Heading or `^block` after `#`.
         subpath: Option<String>,
     },
-    /// `[text](target)` where the target is a file in the vault.
-    Markdown { target: String },
+    /// `[text](target#subpath)` where the target is a file in the vault:
+    /// both decoded, after splitting at `#` (`%23` stays in the name).
+    Markdown {
+        target: String,
+        subpath: Option<String>,
+    },
     /// A web address (`gx`).
     Url(String),
 }
@@ -61,8 +65,13 @@ pub fn link_at(line: &str, col: usize) -> Option<(Link, usize)> {
                 let link = if is_url(&target) {
                     Link::Url(target)
                 } else {
+                    let (path, subpath) = match target.split_once('#') {
+                        Some((p, s)) => (p, Some(percent_decode(s))),
+                        None => (target.as_str(), None),
+                    };
                     Link::Markdown {
-                        target: percent_decode(&target),
+                        target: percent_decode(path),
+                        subpath,
                     }
                 };
                 return Some((link, i));
@@ -201,7 +210,8 @@ mod tests {
         assert_eq!(
             link_at("[x](Diskon 50%—baru.md)", 1).map(|l| l.0),
             Some(Link::Markdown {
-                target: "Diskon 50%—baru.md".into()
+                target: "Diskon 50%—baru.md".into(),
+                subpath: None,
             })
         );
     }
@@ -212,7 +222,8 @@ mod tests {
         assert_eq!(
             link_at(line, 8).map(|l| l.0),
             Some(Link::Markdown {
-                target: "Proyek/Desain indeks.md".into()
+                target: "Proyek/Desain indeks.md".into(),
+                subpath: None,
             })
         );
         assert_eq!(

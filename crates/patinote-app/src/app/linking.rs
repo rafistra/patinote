@@ -119,11 +119,7 @@ impl App {
             Link::Wiki { target, subpath } => {
                 self.resolve_link(source, target, LinkKind::Wiki, subpath, col)
             }
-            Link::Markdown { target } => {
-                let (target, subpath) = match target.split_once('#') {
-                    Some((t, s)) => (t.to_owned(), Some(s.to_owned())),
-                    None => (target, None),
-                };
+            Link::Markdown { target, subpath } => {
                 self.resolve_link(source, target, LinkKind::Markdown, subpath, col)
             }
         }
@@ -170,8 +166,10 @@ impl App {
                 let found = store.link_candidates(&target).unwrap_or_default();
                 let resolver = Resolver::new(found);
                 match resolver.resolve(&source, kind, &target) {
-                    None => missing_note_path(&source, kind, &target)
-                        .map_or(Followed::Outside, Followed::Missing),
+                    None => match missing_note_path(&source, kind, &target) {
+                        Ok(path) => Followed::Missing(path.unwrap_or_default()),
+                        Err(_) => Followed::Outside,
+                    },
                     Some(r) if r.is_ambiguous() => Followed::Ambiguous {
                         name: target.clone(),
                         choices: r

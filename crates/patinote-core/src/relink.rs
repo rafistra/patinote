@@ -273,32 +273,46 @@ pub fn plan(
     }
 }
 
+/// An inner change folded into an outer one: its byte range in the
+/// original and how much it changed the length.
+type Folded = (usize, usize, isize);
+
 /// Sorts changes by position and folds a link inside another
 /// (`[![alt](img.png)](Note.md)`) into the outer one's new text, so no two
 /// changes overlap. An inner change whose text the outer rewrite no longer
 /// holds where it was, or a partial overlap, is dropped: that link stays.
 fn nest(mut changes: Vec<LinkChange>) -> Vec<LinkChange> {
     changes.sort_by_key(|c| (c.byte_start, std::cmp::Reverse(c.byte_end)));
-    // Each outer change, with how much the inner changes folded into it so
-    // far moved the text after them.
-    let mut out: Vec<(LinkChange, isize)> = Vec::with_capacity(changes.len());
+    // Each outer change, with the inner changes folded into it so far:
+    // their range in the original and how much they changed the length.
+    let mut out: Vec<(LinkChange, Vec<Folded>)> = Vec::with_capacity(changes.len());
     for c in changes {
-        let Some((outer, shift)) = out.last_mut().filter(|(o, _)| c.byte_start < o.byte_end) else {
-            out.push((c, 0));
+        let Some((outer, folded)) = out.last_mut().filter(|(o, _)| c.byte_start < o.byte_end)
+        else {
+            out.push((c, Vec::new()));
             continue;
         };
         if c.byte_end > outer.byte_end {
             continue;
         }
         // Rewrites only change a link's target, which comes after any link
-        // in its text, so the inner link sits at the same offset, moved by
-        // the inner links before it.
-        let Some(at) = (c.byte_start - outer.byte_start).checked_add_signed(*shift) else {
+        // in its text: the inner link sits at its own offset, moved only by
+        // the folded changes that end before it (not by one around it).
+        let shift: isize = folded
+            .iter()
+            .filter(|(_, end, _)| *end <= c.byte_start)
+            .map(|(_, _, d)| d)
+            .sum();
+        let Some(at) = (c.byte_start - outer.byte_start).checked_add_signed(shift) else {
             continue;
         };
         if outer.new.get(at..at + c.old.len()) == Some(c.old.as_str()) {
             outer.new.replace_range(at..at + c.old.len(), &c.new);
-            *shift += c.new.len() as isize - c.old.len() as isize;
+            folded.push((
+                c.byte_start,
+                c.byte_end,
+                c.new.len() as isize - c.old.len() as isize,
+            ));
         }
     }
     out.into_iter().map(|(c, _)| c).collect()

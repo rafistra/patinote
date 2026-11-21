@@ -399,3 +399,31 @@ fn buffer_keeps_the_final_newline() {
     buf.set_cursor(Pos::new(5, 9));
     assert_eq!(buf.cursor(), Pos::new(0, 3));
 }
+
+/// Counts are capped so the editor never stalls (`MAX_COUNT`): even the
+/// largest repeat finishes quickly, with the right text.
+#[test]
+fn a_huge_count_does_not_stall_the_editor() {
+    for (keys, lines, first_len) in [
+        ("99999ihello<Esc>", 1, 5 * 99999 + 1),
+        ("99999ox<Esc>", 100_000, 1),
+        ("3ia<CR>b<Esc>", 4, 1),
+        ("yy99999p", 100_000, 1),
+    ] {
+        let mut buf = Buffer::from_text("a\n");
+        let mut vim = Vim::new(Config::default());
+        let start = Instant::now();
+        for (i, k) in parse_keys(keys).into_iter().enumerate() {
+            vim.handle(
+                &mut buf,
+                k,
+                start + Duration::from_millis(i as u64),
+                VIEWPORT,
+            );
+        }
+        let took = start.elapsed();
+        assert!(took < Duration::from_secs(3), "{keys}: {took:?}");
+        assert_eq!(buf.lines().len(), lines, "{keys}");
+        assert_eq!(buf.lines()[0].chars().count(), first_len, "{keys}");
+    }
+}

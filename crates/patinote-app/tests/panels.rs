@@ -256,3 +256,24 @@ fn f09_6_the_active_note_comes_back_when_an_earlier_one_is_gone() {
     assert_eq!(app.buffer_titles(), ["Rapat", "Daftar bacaan"]);
     assert_eq!(title(&app), "Rapat");
 }
+
+#[test]
+fn f09_5_a_search_that_finds_nothing_is_not_a_jump() {
+    let env = Env::new();
+    let mut app = start(&env);
+    open(&mut app, "Proyek/Patinote.md");
+    keys(&mut app, "3G");
+    open(&mut app, "Inbox/Ide cepat.md");
+    ctrl(&mut app, "o");
+    assert_eq!(title(&app), "Patinote");
+    // A failed search does not cut off the way forward.
+    press(&mut app, "/");
+    send(&mut app, Message::CmdInput("zzzz".into()));
+    send(&mut app, Message::CmdSubmit);
+    assert!(
+        app.message()
+            .is_some_and(|(_, m)| m.starts_with("Pattern not found"))
+    );
+    ctrl(&mut app, "i");
+    assert_eq!(title(&app), "Ide cepat");
+}

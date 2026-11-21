@@ -69,8 +69,7 @@ fn landed_message(doc: &Document) -> Option<(Level, String)> {
 }
 
 /// `186 words`.
-fn word_count(text: &str) -> String {
-    let n = text.split_whitespace().count();
+fn word_count(n: usize) -> String {
     if n == 1 {
         "1 word".into()
     } else {
@@ -362,12 +361,21 @@ impl App {
         if pattern.is_empty() {
             return Task::none();
         }
-        self.record_jump();
         let Some(doc) = self.active_document_mut() else {
             return Task::none();
         };
+        let before = doc.buffer.cursor();
         if !doc.vim.search(&mut doc.buffer, pattern, forward) {
             self.say(Level::Error, format!("Pattern not found: {pattern}"));
+            return Task::none();
+        }
+        // Only a search that moved is a jump (Vim's previous context mark):
+        // record where it started.
+        let found = doc.buffer.cursor();
+        doc.buffer.set_cursor(before);
+        self.record_jump();
+        if let Some(doc) = self.active_document_mut() {
+            doc.buffer.set_cursor(found);
         }
         Task::none()
     }
@@ -794,7 +802,7 @@ impl App {
                 line.mode = Mode::Read;
                 line.notes = vec![
                     "Tab next link · Enter follow · ␣r edit".into(),
-                    word_count(&doc.buffer.text()),
+                    word_count(doc.word_count()),
                 ];
                 line.indicator = None;
                 return line;
@@ -810,7 +818,7 @@ impl App {
             if doc.read_only.is_some() {
                 line.notes.push("read-only".into());
             }
-            line.notes.push(word_count(&doc.buffer.text()));
+            line.notes.push(word_count(doc.word_count()));
             if matches!(doc.save, Save::Failed { .. }) {
                 line.indicator = Some(Indicator::NotSaved);
             }
