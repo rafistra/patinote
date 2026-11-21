@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "tools/*"]
+# Patched copies of upstream crates (Q-018); not workspace members.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -55,3 +57,9 @@ vaultgen = { path = "tools/vaultgen" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
+
+# Iced's tiny-skia renderer with one change: many damage regions are drawn
+# as their union (vendor/iced_tiny_skia/README.md, design 0002 section 11,
+# Q-018). Remove this once Iced ships the fix.
+[patch.crates-io]
+iced_tiny_skia = { path = "vendor/iced_tiny_skia" }
