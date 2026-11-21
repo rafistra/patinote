@@ -29,6 +29,9 @@ pub const META_VAULT_PATH: &str = "vault_path";
 pub const META_APP_VERSION: &str = "app_version";
 /// `meta` key: Unix seconds of the last completed indexing run.
 pub const META_INDEXED_AT: &str = "indexed_at";
+/// `meta` key: `1` while files are stored whose links are not resolved
+/// yet, so a run cut short is finished by the next one; `0` after.
+pub const META_LINKS_PENDING: &str = "links_pending";
 
 /// Indexing settings.
 #[derive(Debug, Clone, Copy)]
@@ -165,6 +168,17 @@ pub fn index_vault<S: Store>(
     });
 
     let cancelled = || options.cancel.is_some_and(|c| c.load(Ordering::Relaxed));
+    // Stored links start unresolved; until `resolve_links` has run, a stop
+    // would leave them so with nothing left to re-index.
+    let pending = store
+        .meta(META_LINKS_PENDING)
+        .map_err(IndexError::Store)?
+        .is_some_and(|v| v == "1");
+    if !changed.is_empty() || !removed.is_empty() {
+        store
+            .set_meta(META_LINKS_PENDING, "1")
+            .map_err(IndexError::Store)?;
+    }
     let mut batch = Batch::default();
     let mut done = 0;
     for (file, old) in &changed {
@@ -212,8 +226,13 @@ pub fn index_vault<S: Store>(
 
     // Adding, changing or removing any file can move where links point (a new
     // shorter path, a removed note), so resolution runs after every change.
-    if report.reprocessed() + report.removed > 0 {
+    if report.reprocessed() + report.removed > 0 || pending {
         report.links_updated = resolve_links(store).map_err(IndexError::Store)?;
+    }
+    if pending || !changed.is_empty() || report.removed > 0 {
+        store
+            .set_meta(META_LINKS_PENDING, "0")
+            .map_err(IndexError::Store)?;
     }
 
     if let Ok(canonical) = fs::canonicalize(root) {

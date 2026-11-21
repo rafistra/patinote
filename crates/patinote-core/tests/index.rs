@@ -245,3 +245,44 @@ fn full_rereads_everything() {
     let r = index_vault(&dir.path().join("v"), &mut store, &opts, &mut |_| {}).unwrap();
     assert_eq!((r.unchanged, r.touched), (0, 30));
 }
+
+#[test]
+fn f03_4_links_stored_before_a_stop_are_resolved_by_the_next_run() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let dir = vault(200);
+    let root = dir.path().join("v");
+    let resolved = |s: &MemoryStore| {
+        s.destinations
+            .values()
+            .filter(|(_, _, d)| d.is_some())
+            .count()
+    };
+    let mut whole = MemoryStore::default();
+    index(&root, &mut whole);
+
+    // Stopped (Ctrl+C) once every file was stored, before links were
+    // resolved: the next run finds nothing changed.
+    let stop: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
+    let options = IndexOptions {
+        batch_size: 1,
+        cancel: Some(stop),
+        ..IndexOptions::default()
+    };
+    let mut store = MemoryStore::default();
+    let stopped = index_vault(&root, &mut store, &options, &mut |p| {
+        if let Progress::Stored { done, changed } = p
+            && done == changed
+        {
+            stop.store(true, Ordering::Relaxed);
+        }
+    });
+    assert!(stopped.is_err());
+    assert_eq!(
+        store.files.len(),
+        whole.files.len(),
+        "every file was stored"
+    );
+
+    index(&root, &mut store);
+    assert_eq!(resolved(&store), resolved(&whole));
+}

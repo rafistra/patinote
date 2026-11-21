@@ -10,7 +10,7 @@ use iced::{Element, Length, Padding, Task};
 use super::{App, Message};
 use crate::screens::switcher::{self, View};
 use crate::switcher::{Candidate, Results};
-use crate::theme::styles;
+use crate::theme::styles::{self, Field, Level};
 use crate::theme::tokens::*;
 
 /// An open quick switcher.
@@ -19,6 +19,8 @@ pub struct Switcher {
     pub query: String,
     pub results: Results,
     pub selected: usize,
+    /// The risky name already warned about: the next Shift+Enter creates it.
+    pub warned: Option<String>,
 }
 
 impl App {
@@ -128,6 +130,25 @@ impl App {
                 .unwrap_or_default();
             if name.is_empty() {
                 return Task::none();
+            }
+            // The same name rules as the new note dialog (F-10.2).
+            match super::files::name_problem(&name) {
+                Some((Field::Rejected, why)) => {
+                    self.say(Level::Error, why);
+                    return Task::none();
+                }
+                Some((_, why))
+                    if self.switcher.as_ref().and_then(|s| s.warned.as_deref())
+                        != Some(name.as_str()) =>
+                {
+                    if let Some(s) = &mut self.switcher {
+                        s.warned = Some(name);
+                    }
+                    // Here it is Shift+Enter that creates the note.
+                    self.say(Level::Warning, why.replace("Enter", "Shift+Enter"));
+                    return Task::none();
+                }
+                _ => {}
             }
             self.switcher = None;
             return self.create_note(&name);

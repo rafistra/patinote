@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use patinote_core::commands::{AgentsInitOutput, ErrorCode};
 use patinote_core::names::stem;
 use patinote_core::write::{
-    Actor, Expect, Op, Transaction, WriteError, commit, expect_current, recover,
+    Actor, Expect, Op, Transaction, WriteError, commit, content_hash, recover,
 };
 
 use crate::commands::Ctx;
@@ -270,7 +270,11 @@ pub fn init(ctx: &Ctx<'_>, update: bool, agents: &[Agent]) -> Result<AgentsInitO
             out.written.push("AGENTS.md".into());
         }
         (Some(old), true) => {
-            let (Some(b), Some(e)) = (old.find(BEGIN), old.find(END)) else {
+            // The end marker that closes the generated part: the first one
+            // after the begin marker, not one mentioned above it.
+            let begin = old.find(BEGIN);
+            let end_marker = begin.and_then(|b| old[b..].find(END).map(|i| b + i));
+            let (Some(b), Some(e)) = (begin, end_marker) else {
                 return Err(Failure::new(
                     ErrorCode::InvalidArgument,
                     format!(
@@ -287,12 +291,11 @@ pub fn init(ctx: &Ctx<'_>, update: bool, agents: &[Agent]) -> Result<AgentsInitO
             if new == *old {
                 out.unchanged.push("AGENTS.md".into());
             } else {
-                let expect = expect_current(root, "AGENTS.md")
-                    .map_err(|e| io_failure("cannot read AGENTS.md", e))?;
+                // The text the new one was built from must still be on disk.
                 ops.push(Op::Write {
                     path: "AGENTS.md".into(),
                     content: new.into_bytes(),
-                    expect,
+                    expect: Expect::Hash(content_hash(old.as_bytes())),
                 });
                 out.written.push("AGENTS.md".into());
             }
