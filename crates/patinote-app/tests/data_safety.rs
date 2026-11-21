@@ -522,3 +522,74 @@ fn a_conflict_during_quit_stops_the_quit_for_good() {
     assert!(!app.exited());
     assert!(disk(&env, NOTE).starts_with("empatbelas\n"));
 }
+
+#[test]
+fn a_late_recovery_from_the_previous_vault_does_not_load_the_new_one_early() {
+    use patinote_app::session::VaultPaths;
+    use patinote_core::write::{Actor, Journal, Op, Transaction, commit, expect_current};
+    let env = Env::new();
+    let vault = env.vault();
+    let before = disk(&env, NOTE);
+    {
+        // The last session of this vault had the note open.
+        let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+        send(
+            &mut app,
+            Message::Remote(Request::Open { path: NOTE.into() }),
+        );
+    }
+    let paths = VaultPaths::resolve(&vault, &env.path("cache"), &env.path("state")).unwrap();
+    let journal = Journal::for_vault(&paths.state_home, &paths.id);
+    let done = commit(
+        &vault,
+        &journal,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: NOTE.into(),
+                content: b"setengah jadi\n".to_vec(),
+                expect: expect_current(&vault, NOTE).unwrap(),
+            }],
+        },
+    )
+    .unwrap();
+    let manifest = journal.dir().join(&done.id).join("manifest.json");
+    let text = std::fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("\"committed\"", "\"pending\"");
+    std::fs::write(&manifest, text).unwrap();
+
+    // Another vault is open first; its events are still on their way.
+    let other = env.path("Lain");
+    common::copy_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/vault-mockup"),
+        &other,
+    );
+    let (mut app, startup) = App::new(env.launch(Some(other), Config::default()));
+    let late = common::outputs(startup);
+    // This vault's recovery is held up (another write holds the lock).
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(journal.dir().join(".lock"))
+        .unwrap();
+    lock.lock().unwrap();
+    let opening = app.update(Message::FolderChosen(Some(vault)));
+    // Its "writes recovered" arrives now. Only that one, and what it reads
+    // is collected while the lock is held (anything asking the index would
+    // wait on the lock too).
+    let mut read = Vec::new();
+    for m in late {
+        if format!("{m:?}").contains("Recovered") {
+            read.extend(common::outputs(app.update(m)));
+        }
+    }
+    lock.unlock().unwrap();
+    for m in read {
+        send(&mut app, m);
+    }
+    common::run(&mut app, opening);
+    assert_eq!(disk(&env, NOTE), before, "recovered");
+    assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
+}

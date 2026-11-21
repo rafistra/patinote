@@ -963,8 +963,9 @@ pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
         let undone = (|| {
             let manifest = journal.dir().join(&id).join("manifest.json");
             // Not read (permissions, an I/O error): tried again next time.
-            let text = fs::read_to_string(&manifest)?;
-            let mut entry: Entry = match serde_json::from_str(&text) {
+            // Bytes, so text that is not UTF-8 counts as damaged below.
+            let bytes = fs::read(&manifest)?;
+            let mut entry: Entry = match serde_json::from_slice(&bytes) {
                 Ok(entry) => entry,
                 Err(e) => {
                     // Read but damaged: nothing can ever be undone from it.
