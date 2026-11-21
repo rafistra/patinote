@@ -104,11 +104,13 @@ impl Session {
         let (events, stream) = async_mpsc::unbounded();
         let (changes, change_stream) = async_mpsc::unbounded();
         let worker = paths.clone();
-        std::thread::Builder::new()
+        let fallback = events.clone();
+        if let Err(e) = std::thread::Builder::new()
             .name("patinote-index".into())
             .spawn(move || run(&worker, &rx, &events, watch.then_some(changes)))
-            .map_err(|e| tracing::error!("cannot start the index thread: {e}"))
-            .ok();
+        {
+            not_started(&paths, &fallback, &e);
+        }
         (Self { paths, jobs }, stream, change_stream)
     }
 
@@ -131,6 +133,30 @@ impl Session {
     }
 }
 
+/// The index thread could not start: writes left half-done are undone
+/// here instead (quick, and rare), so notes still open, and the index is
+/// reported failed.
+fn not_started(
+    paths: &VaultPaths,
+    events: &async_mpsc::UnboundedSender<IndexEvent>,
+    e: &std::io::Error,
+) {
+    tracing::error!("cannot start the index thread: {e}");
+    let _ = events.unbounded_send(IndexEvent::Recovered(recover_writes(paths)));
+    let _ = events.unbounded_send(IndexEvent::Failed(format!(
+        "cannot start the index thread: {e}"
+    )));
+}
+
+/// Undoes writes a crash left half-done; the error, if any, as text.
+fn recover_writes(paths: &VaultPaths) -> Option<String> {
+    let journal = Journal::for_vault(&paths.state_home, &paths.id);
+    recover(&paths.root, &journal).err().map(|e| {
+        tracing::warn!("cannot recover interrupted writes: {e}");
+        e.to_string()
+    })
+}
+
 fn run(
     paths: &VaultPaths,
     jobs: &mpsc::Receiver<Job>,
@@ -142,12 +168,7 @@ fn run(
     };
     // Writes left half-done by a crash are undone before anything else
     // (docs/design/0001; PRD "Gerbang 2", point 1).
-    let journal = Journal::for_vault(&paths.state_home, &paths.id);
-    let recovered = recover(&paths.root, &journal).err().map(|e| {
-        tracing::warn!("cannot recover interrupted writes: {e}");
-        e.to_string()
-    });
-    send(IndexEvent::Recovered(recovered));
+    send(IndexEvent::Recovered(recover_writes(paths)));
     if let Some(dir) = paths.index.parent()
         && let Err(e) = std::fs::create_dir_all(dir)
     {
@@ -259,5 +280,33 @@ pub fn lookup(store: &SqliteStore, name: &str) -> Lookup {
             Lookup::Ambiguous(r.candidates.iter().map(|c| (*c).to_owned()).collect())
         }
         Some(r) => Lookup::Found(r.path.to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::futures::StreamExt;
+    use iced::futures::executor::block_on;
+
+    /// Without the index thread, notes still open (they wait for
+    /// `Recovered`) and the index shows as failed.
+    #[test]
+    fn a_thread_that_cannot_start_still_reports_recovery() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        let paths =
+            VaultPaths::resolve(&vault, &dir.path().join("cache"), &dir.path().join("state"))
+                .unwrap();
+        let (tx, rx) = async_mpsc::unbounded();
+        not_started(&paths, &tx, &std::io::Error::other("no threads"));
+        drop(tx);
+        let events: Vec<IndexEvent> = block_on(rx.collect());
+        assert!(
+            matches!(events[0], IndexEvent::Recovered(None)),
+            "{events:?}"
+        );
+        assert!(matches!(events[1], IndexEvent::Failed(_)), "{events:?}");
     }
 }

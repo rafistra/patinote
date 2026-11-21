@@ -103,6 +103,8 @@ pub struct App {
     /// Cursors to set once their notes have loaded (session restore,
     /// backlinks, the jump list).
     pending_cursor: HashMap<String, (usize, usize)>,
+    /// How many vaults this app has opened; tags their index events.
+    opened: u64,
     /// The side panel is open (F-09).
     panel_open: bool,
     /// The item of the side panel with the keyboard focus; `None` when the
@@ -207,6 +209,8 @@ pub struct Workspace {
     /// asked for wait in `waiting`.
     recovered: bool,
     waiting: Vec<Waiting>,
+    /// Which vault opening this is (`App::opened`).
+    opened: u64,
 }
 
 /// Where the opening index update is.
@@ -252,7 +256,9 @@ pub enum Message {
     ChooseFolder,
     FolderChosen(Option<PathBuf>),
     RetryVault,
-    Index(IndexEvent),
+    /// An event from the index thread of the vault opened `n`th
+    /// ([`App`]'s `opened`); events of a vault since closed are dropped.
+    Index(u64, IndexEvent),
     Remote(Request),
     /// A key press; `true` when a widget already handled it.
     Key(keyboard::Event, bool),
@@ -394,6 +400,7 @@ impl App {
             picker: None,
             pending_jump: None,
             pending_cursor: HashMap::new(),
+            opened: 0,
             panel_open: false,
             focus: None,
             window_prefix: false,
@@ -530,7 +537,9 @@ impl App {
         let journal = Journal::for_vault(&paths.state_home, &paths.id);
         let root = paths.root.clone();
         let (session, events, changes) = Session::open_watching(paths, self.watch);
-        tasks.push(Task::stream(events).map(Message::Index));
+        self.opened += 1;
+        let opened = self.opened;
+        tasks.push(Task::stream(events).map(move |e| Message::Index(opened, e)));
         if self.watch {
             tasks.push(Task::stream(changes).map(Message::External));
         }
@@ -587,6 +596,7 @@ impl App {
             watch_limit: None,
             ambiguous: HashMap::new(),
             recovered: false,
+            opened,
             waiting: self
                 .startup_note
                 .take()
@@ -974,7 +984,10 @@ impl App {
                 }
                 _ => Task::none(),
             },
-            Message::Index(event) => {
+            Message::Index(opened, _) if self.workspace().is_none_or(|w| w.opened != opened) => {
+                Task::none()
+            }
+            Message::Index(_, event) => {
                 let ready = matches!(event, IndexEvent::Ready { .. });
                 let mut recovered = None;
                 let mut failed = None;

@@ -375,6 +375,29 @@ fn recover_goes_past_a_damaged_journal_entry() {
 }
 
 #[test]
+fn recover_sets_aside_a_manifest_that_is_not_utf8() {
+    let v = vault();
+    v.write("a.md", "a lama\n");
+    let old = v
+        .commit(vec![write_op("a.md", "a baru\n", v.expect("a.md"))])
+        .unwrap();
+    fs::write(
+        v.journal.dir().join(&old.id).join("manifest.json"),
+        b"{\"id\": \"\xff\xfe\"}",
+    )
+    .unwrap();
+    assert!(recover(&v.root, &v.journal).is_err(), "reported once");
+    assert!(recover(&v.root, &v.journal).is_ok(), "and not again");
+    assert!(
+        v.journal
+            .dir()
+            .join(&old.id)
+            .join("manifest.json.damaged")
+            .is_file()
+    );
+}
+
+#[test]
 fn recover_undoes_a_transaction_interrupted_by_a_crash() {
     let v = vault();
     v.write("a.md", "a lama\n");

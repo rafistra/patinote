@@ -6,7 +6,9 @@
 //! CRLF and LF, every unchanged line keeps its own ending. Notes over 5 MB and
 //! files that are not UTF-8 open read-only (F-05.8).
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use patinote_core::MAX_PARSE_BYTES;
 use patinote_core::store::Hash;
@@ -94,8 +96,17 @@ pub fn open(bytes: &[u8]) -> Opened {
     }
 }
 
+/// How long the line diff of a note with mixed endings may take. A 5 MB
+/// note of short, repeated lines can otherwise take most of a minute, and
+/// the save (and quitting) waits for it.
+const MIXED_DIFF_TIME: Duration = Duration::from_secs(2);
+
 /// The bytes to write for `text` in `format`.
 pub fn encode(text: &str, format: &Format) -> Vec<u8> {
+    encode_by(text, format, Instant::now() + MIXED_DIFF_TIME)
+}
+
+fn encode_by(text: &str, format: &Format, deadline: Instant) -> Vec<u8> {
     let mut out = Vec::with_capacity(text.len() + 3);
     if format.bom {
         out.extend_from_slice(BOM);
@@ -109,20 +120,32 @@ pub fn encode(text: &str, format: &Format) -> Vec<u8> {
             .collect();
         let was: Vec<&str> = old.iter().map(|(t, _)| t.as_str()).collect();
         let mut crlf = vec![format.crlf; new.len()];
-        // No deadline: a coarser diff would change the endings of lines
-        // that did not change. Saves encode off the UI thread (`SaveJob::run`).
-        for op in similar::capture_diff_slices(similar::Algorithm::Myers, &was, &bare) {
-            if let similar::DiffOp::Equal {
-                old_index,
-                new_index,
-                len,
-            } = op
-            {
-                for k in 0..len {
-                    crlf[new_index + k] = old[old_index + k].1;
+        // Past the deadline the diff is coarser: inside a changed region a
+        // line that is still there, byte for byte, keeps its ending too.
+        let ops = similar::capture_diff_slices_deadline(
+            similar::Algorithm::Myers,
+            &was,
+            &bare,
+            Some(deadline),
+        );
+        // Lines deleted and inserted between two runs of equal lines.
+        let mut left: HashMap<&str, VecDeque<bool>> = HashMap::new();
+        let mut added: Vec<usize> = Vec::new();
+        for op in ops {
+            let (old_range, new_range) = (op.old_range(), op.new_range());
+            if let similar::DiffOp::Equal { .. } = op {
+                settle(&bare, &mut crlf, &mut left, &mut added);
+                for k in 0..new_range.len() {
+                    crlf[new_range.start + k] = old[old_range.start + k].1;
                 }
+                continue;
             }
+            for (t, c) in &old[old_range] {
+                left.entry(t.as_str()).or_default().push_back(*c);
+            }
+            added.extend(new_range);
         }
+        settle(&bare, &mut crlf, &mut left, &mut added);
         for (line, crlf) in new.iter().zip(crlf) {
             match line.strip_suffix('\n') {
                 Some(t) if crlf => {
@@ -138,6 +161,21 @@ pub fn encode(text: &str, format: &Format) -> Vec<u8> {
         out.extend_from_slice(text.as_bytes());
     }
     out
+}
+
+/// Gives each line in `added` the ending of an identical line in `left`.
+fn settle(
+    bare: &[&str],
+    crlf: &mut [bool],
+    left: &mut HashMap<&str, VecDeque<bool>>,
+    added: &mut Vec<usize>,
+) {
+    for k in added.drain(..) {
+        if let Some(c) = left.get_mut(bare[k]).and_then(VecDeque::pop_front) {
+            crlf[k] = c;
+        }
+    }
+    left.clear();
 }
 
 #[cfg(test)]
@@ -160,6 +198,57 @@ mod tests {
             assert_eq!(encode(&o.text, &o.format), bytes, "{bytes:?}");
             assert_eq!(o.hash, content_hash(bytes));
         }
+    }
+
+    /// When the line diff runs out of time, lines that did not change still
+    /// keep their own endings.
+    #[test]
+    fn f05_4_mixed_endings_survive_a_diff_that_gave_up() {
+        let bytes = b"a\r\nb\nb\r\nc\r\nd\n";
+        let o = open(bytes);
+        let past = Instant::now();
+        assert_eq!(encode_by(&o.text, &o.format, past), bytes);
+        assert_eq!(
+            encode_by("a\nb\nb\nbaru\nc\nd\n", &o.format, past),
+            b"a\r\nb\nb\r\nbaru\r\nc\r\nd\n"
+        );
+    }
+
+    /// A large note of short, repeated lines with mixed endings, mostly
+    /// changed: the save does not wait on the diff for long.
+    #[test]
+    fn f05_4_a_large_mixed_note_saves_in_bounded_time() {
+        let mut bytes = Vec::new();
+        for i in 0..300_000 {
+            let line = if i % 3 == 0 {
+                String::new()
+            } else {
+                (i % 3).to_string()
+            };
+            bytes.extend_from_slice(line.as_bytes());
+            bytes.extend_from_slice(if i % 2 == 0 { b"\r\n" } else { b"\n" });
+        }
+        let o = open(&bytes);
+        let changed: String = o
+            .text
+            .lines()
+            .enumerate()
+            .map(|(i, l)| {
+                if i % 2 == 0 {
+                    format!("x{l}\n")
+                } else {
+                    format!("{l}\n")
+                }
+            })
+            .collect();
+        let start = Instant::now();
+        let out = encode(&changed, &o.format);
+        assert!(
+            start.elapsed() < Duration::from_secs(8),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(out.iter().filter(|&&b| b == b'\n').count(), 300_000);
     }
 
     /// Mixed endings: every line keeps its own; a changed or new line takes
