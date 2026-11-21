@@ -6,7 +6,8 @@
 use iced::keyboard::{Key, Modifiers, key::Named};
 use iced::widget::{container, stack};
 use iced::{Element, Length, Padding, Task};
-use patinote_core::write::{Actor, Op, Transaction, commit, content_hash, expect_current};
+use patinote_core::store::Hash;
+use patinote_core::write::{Actor, Expect, Op, Transaction, commit, content_hash};
 use patinote_core::{Change, SyncConflict, WatchMode};
 
 use super::{App, Message};
@@ -17,7 +18,6 @@ use crate::screens::compare::{self, Side};
 use crate::screens::conflicts::{self, Item, copy_info};
 use crate::theme::styles::{self, BannerKind, Level};
 use crate::theme::tokens::*;
-use crate::vim;
 use crate::widgets::banner::{Action, Banner, Icon};
 
 /// What is being compared side by side.
@@ -26,11 +26,19 @@ pub enum Comparing {
     /// The open note against its version on disk (mockup 08).
     Disk(String),
     /// A Syncthing conflict: the original and the copy (mockup 16).
-    Sync {
-        original: String,
-        copy: String,
-        sides: diff::Sides,
-    },
+    Sync(Box<SyncPair>),
+}
+
+/// A Syncthing conflict as read for the comparison. Picking a version acts
+/// on exactly these bytes: a file that changed since is not overwritten.
+#[derive(Debug, Clone)]
+pub struct SyncPair {
+    pub original: String,
+    pub copy: String,
+    pub sides: diff::Sides,
+    /// The original's hash when read; `None` when it was missing.
+    pub original_hash: Option<Hash>,
+    pub copy_bytes: Vec<u8>,
 }
 
 /// An action on a banner or in a comparison.
@@ -104,6 +112,12 @@ impl App {
         else {
             return;
         };
+        // While a save runs, the disk may already hold what it writes. A
+        // real change from outside makes that save fail its hash check,
+        // which reads the disk again once the save has landed.
+        if matches!(doc.save, Save::Running(_)) {
+            return;
+        }
         match bytes {
             None if doc.disk_hash.is_none() => {}
             None => {
@@ -119,6 +133,7 @@ impl App {
                 if doc.dirty() {
                     doc.external = Some(External::Changed {
                         text: file::open(&bytes).text,
+                        bytes,
                         hash,
                     });
                     doc.save = Save::Changed;
@@ -152,11 +167,10 @@ impl App {
             return Task::none();
         };
         match (choice, doc.external.take()) {
-            (Choice::UseDisk, Some(External::Changed { text, .. })) => {
-                let cursor = doc.buffer.cursor();
-                let bytes = file::encode(&text, doc.format);
+            (Choice::UseDisk, Some(External::Changed { bytes, .. })) => {
+                // The bytes as they are on disk: their hash and format.
                 reload(doc, &bytes);
-                doc.buffer.set_cursor(cursor);
+                self.refresh_reading();
                 Task::none()
             }
             (Choice::KeepMine, Some(External::Changed { hash, .. })) => {
@@ -182,7 +196,8 @@ impl App {
 
     /// The banner for a note changed or deleted outside (mockups 08, 17).
     pub(super) fn external_banner(&self) -> Option<Element<'_, Message>> {
-        if let Some(Comparing::Sync { original, .. }) = &self.comparing {
+        if let Some(Comparing::Sync(pair)) = &self.comparing {
+            let original = &pair.original;
             return Some(
                 Banner {
                     kind: BannerKind::Warning,
@@ -248,11 +263,13 @@ impl App {
                     "Pick a version in the banner, or open both side by side to merge by hand. Per-hunk merge arrives in Phase 3.",
                 ))
             }
-            Comparing::Sync {
-                original,
-                copy,
-                sides,
-            } => {
+            Comparing::Sync(pair) => {
+                let SyncPair {
+                    original,
+                    copy,
+                    sides,
+                    ..
+                } = pair.as_ref();
                 let from = copy_info(copy).map_or_else(String::new, |c| {
                     format!(" · from device {}, {}", c.device, c.when)
                 });
@@ -289,10 +306,10 @@ impl App {
                     s.right_only()
                 ))
             }
-            Comparing::Sync { sides, .. } => Some(format!(
+            Comparing::Sync(pair) => Some(format!(
                 "{} only in the original, {} only in the copy",
-                plural(sides.left_only(), "line"),
-                sides.right_only()
+                plural(pair.sides.left_only(), "line"),
+                pair.sides.right_only()
             )),
         }
     }
@@ -396,30 +413,40 @@ impl App {
         };
         let root = w.session.paths.root.clone();
         Task::future(async move {
-            let read = |p: &str| {
-                std::fs::read(root.join(p))
-                    .map(|b| file::open(&b).text)
-                    .unwrap_or_default()
-            };
-            let sides = diff::sides(&read(&c.original), &read(&c.path));
-            Message::SyncLoaded(c.original, c.path, sides)
+            let original = std::fs::read(root.join(&c.original)).ok();
+            let copy_bytes = std::fs::read(root.join(&c.path)).unwrap_or_default();
+            let text = |b: &[u8]| file::open(b).text;
+            let sides = diff::sides(
+                &original.as_deref().map(text).unwrap_or_default(),
+                &text(&copy_bytes),
+            );
+            Message::SyncLoaded(Box::new(SyncPair {
+                original: c.original,
+                copy: c.path,
+                sides,
+                original_hash: original.as_deref().map(content_hash),
+                copy_bytes,
+            }))
         })
     }
 
-    pub(super) fn sync_loaded(&mut self, original: String, copy: String, sides: diff::Sides) {
-        self.comparing = Some(Comparing::Sync {
-            original,
-            copy,
-            sides,
-        });
+    pub(super) fn sync_loaded(&mut self, pair: Box<SyncPair>) {
+        self.comparing = Some(Comparing::Sync(pair));
     }
 
     /// Use copy, Keep original, Open both (F-11.6). The copy moves to
     /// `.trash/` once a version is picked; nothing is deleted.
     fn resolve_sync(&mut self, choice: Choice) -> Task<Message> {
-        let Some(Comparing::Sync { original, copy, .. }) = self.comparing.take() else {
+        let Some(Comparing::Sync(pair)) = self.comparing.take() else {
             return Task::none();
         };
+        let SyncPair {
+            original,
+            copy,
+            original_hash,
+            copy_bytes,
+            ..
+        } = *pair;
         if choice == Choice::OpenBoth {
             let first = self.open_note(original);
             return Task::batch([first, self.open_note(copy)]);
@@ -433,31 +460,27 @@ impl App {
         let use_copy = choice == Choice::UseCopy;
         let (o, c) = (original.clone(), copy.clone());
         let job = Task::future(async move {
-            let result = (|| -> Result<(), String> {
-                let mut ops = Vec::new();
-                if use_copy {
-                    let bytes = std::fs::read(root.join(&c)).map_err(|e| e.to_string())?;
-                    ops.push(Op::Write {
-                        path: o.clone(),
-                        content: bytes,
-                        expect: expect_current(&root, &o).map_err(|e| e.to_string())?,
-                    });
-                }
-                ops.push(Op::Trash {
-                    path: c.clone(),
-                    expect: expect_current(&root, &c).map_err(|e| e.to_string())?,
+            let mut ops = Vec::new();
+            // Both files must still be what the comparison showed.
+            let copy_expect = Expect::Hash(content_hash(&copy_bytes));
+            if use_copy {
+                ops.push(Op::Write {
+                    path: o.clone(),
+                    content: copy_bytes,
+                    expect: original_hash.map_or(Expect::Absent, Expect::Hash),
                 });
-                commit(
-                    &root,
-                    &journal,
-                    &Transaction {
-                        actor: Actor::User,
-                        ops,
-                    },
-                )
+            }
+            ops.push(Op::Trash {
+                path: c.clone(),
+                expect: copy_expect,
+            });
+            let tx = Transaction {
+                actor: Actor::User,
+                ops,
+            };
+            let result = commit(&root, &journal, &tx)
                 .map(|_| ())
-                .map_err(|e| e.to_string())
-            })();
+                .map_err(|e| e.to_string());
             Message::FilesChanged(vec![c], result)
         });
         let reread = self.read_disk(original);
@@ -518,7 +541,7 @@ fn action(label: &str, primary: bool, choice: Choice) -> Action<Message> {
 fn reload(doc: &mut Document, bytes: &[u8]) {
     let cursor = doc.buffer.cursor();
     let opened = file::open(bytes);
-    doc.buffer = vim::Buffer::from_text(&opened.text);
+    doc.buffer.replace_text(&opened.text);
     doc.buffer.set_cursor(cursor);
     doc.format = opened.format;
     doc.read_only = opened.read_only;

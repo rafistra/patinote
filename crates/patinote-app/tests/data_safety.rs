@@ -185,3 +185,126 @@ fn text_typed_while_a_rename_runs_is_kept_at_the_new_path() {
     assert!(disk(&env, "Inbox/Ide baru.md").starts_with("delapan\n"));
     assert!(!env.path("Vault").join(NOTE).exists());
 }
+
+// --- Changes from outside (F-11, F-27) ------------------------------------
+
+/// What the watcher would report for the note.
+fn changed_outside(app: &mut App, rel: &str) {
+    send(
+        app,
+        Message::External(patinote_core::Change {
+            paths: vec![rel.to_owned()],
+            rescan: false,
+            mode: patinote_core::WatchMode::Events,
+        }),
+    );
+}
+
+#[test]
+fn our_own_autosave_is_not_taken_for_a_change_from_outside() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsembilan<Esc>");
+    let save = start_autosave(&mut app);
+    // The watcher reports our write before the save has landed.
+    let ours = app.active_text().unwrap().into_bytes();
+    send(&mut app, Message::DiskState(NOTE.into(), Some(ours)));
+    keys(&mut app, "ggOsepuluh<Esc>");
+    run(&mut app, save);
+    assert_eq!(app.external_title(), None, "no banner for our own save");
+    command(&mut app, "w");
+    assert!(disk(&env, NOTE).starts_with("sepuluh\nsembilan\n"));
+}
+
+#[test]
+fn reading_mode_shows_a_note_updated_from_outside() {
+    let env = Env::new();
+    let mut app = open(&env);
+    leader(&mut app, "r");
+    assert!(app.reading());
+    std::fs::write(env.path("Vault").join(NOTE), "Lihat [[Catatan baru]]\n").unwrap();
+    changed_outside(&mut app, NOTE);
+    assert_eq!(app.reading_targets(), vec!["Catatan baru".to_owned()]);
+}
+
+#[test]
+fn use_disk_version_keeps_the_disk_format_and_saves_without_a_conflict() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOmilikku<Esc>");
+    std::fs::write(env.path("Vault").join(NOTE), "satu\r\ndua\r\n").unwrap();
+    changed_outside(&mut app, NOTE);
+    assert!(app.external_title().is_some());
+    send(
+        &mut app,
+        Message::Choose(patinote_app::app::Choice::UseDisk),
+    );
+    keys(&mut app, "ggObaru<Esc>");
+    command(&mut app, "w");
+    assert_eq!(app.external_title(), None, "no false conflict");
+    assert_eq!(disk(&env, NOTE), "baru\r\nsatu\r\ndua\r\n");
+}
+
+#[test]
+fn use_copy_does_not_overwrite_an_original_changed_since_the_comparison() {
+    let env = Env::new();
+    let mut app = env.start(env.launch(Some(env.vault()), Config::default()));
+    let original = "Rapat/Rapat 19 Nov.md";
+    let copy = "Rapat/Rapat 19 Nov.sync-conflict-20261119-162104-ABCDEFG.md";
+    command(&mut app, "conflicts");
+    let i = app.conflict_index(original).unwrap();
+    send(&mut app, Message::OpenConflict(i));
+    assert!(app.compare_summary().is_some());
+    // Syncthing brings yet another version while the comparison is open.
+    std::fs::write(env.path("Vault").join(original), "versi terbaru\n").unwrap();
+    send(
+        &mut app,
+        Message::Choose(patinote_app::app::Choice::UseCopy),
+    );
+    assert_eq!(disk(&env, original), "versi terbaru\n");
+    assert!(env.path("Vault").join(copy).exists(), "the copy is kept");
+    assert_eq!(app.message().map(|(l, _)| l), Some(Level::Error));
+}
+
+#[test]
+fn notes_from_the_last_session_load_after_interrupted_writes_are_undone() {
+    use patinote_app::session::VaultPaths;
+    use patinote_core::write::{Actor, Journal, Op, Transaction, commit, expect_current};
+    let env = Env::new();
+    let vault = env.vault();
+    let before = disk(&env, NOTE);
+    {
+        // The last session had the note open.
+        let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+        send(
+            &mut app,
+            Message::Remote(Request::Open { path: NOTE.into() }),
+        );
+    }
+    // A write that crashed half-way: the new bytes are on disk, the
+    // journal entry still says pending.
+    let paths = VaultPaths::resolve(&vault, &env.path("cache"), &env.path("state")).unwrap();
+    let journal = Journal::for_vault(&paths.state_home, &paths.id);
+    let done = commit(
+        &vault,
+        &journal,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: NOTE.into(),
+                content: b"setengah jadi\n".to_vec(),
+                expect: expect_current(&vault, NOTE).unwrap(),
+            }],
+        },
+    )
+    .unwrap();
+    let manifest = journal.dir().join(&done.id).join("manifest.json");
+    let text = std::fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("\"committed\"", "\"pending\"");
+    std::fs::write(&manifest, text).unwrap();
+
+    let app = env.start(env.launch(Some(vault), Config::default()));
+    assert_eq!(disk(&env, NOTE), before, "recovered");
+    assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
+}

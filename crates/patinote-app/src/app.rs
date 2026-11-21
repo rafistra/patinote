@@ -308,7 +308,7 @@ pub enum Message {
     Conflicts(Vec<patinote_core::SyncConflict>),
     OpenConflict(usize),
     /// A conflict's original and copy, compared.
-    SyncLoaded(String, String, crate::diff::Sides),
+    SyncLoaded(Box<external::SyncPair>),
     /// Reading mode (F-27): a link clicked or entered, a checkbox, the
     /// properties box, scrolling, links found missing, and images decoded.
     ReadLink(usize),
@@ -506,6 +506,12 @@ impl App {
         tasks.push(self.save_app_state());
         let journal = Journal::for_vault(&paths.state_home, &paths.id);
         let root = paths.root.clone();
+        // Writes left half-done by a crash are undone before the last
+        // session's notes are read, so no note opens with half-written text.
+        // (The session thread runs it again, finding nothing to do.)
+        if let Err(e) = patinote_core::write::recover(&root, &journal) {
+            tracing::warn!("cannot recover interrupted writes: {e}");
+        }
         let (session, events, changes) = Session::open_watching(paths, self.watch);
         tasks.push(Task::stream(events).map(Message::Index));
         if self.watch {
@@ -1009,8 +1015,8 @@ impl App {
                 Task::none()
             }
             Message::OpenConflict(i) => self.open_conflict(i),
-            Message::SyncLoaded(original, copy, sides) => {
-                self.sync_loaded(original, copy, sides);
+            Message::SyncLoaded(pair) => {
+                self.sync_loaded(pair);
                 Task::none()
             }
             Message::ReadLink(i) => self.reading_link(i),

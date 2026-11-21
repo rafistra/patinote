@@ -37,6 +37,13 @@ impl App {
         self.read_state().is_some()
     }
 
+    /// The link targets of the note shown in reading mode, for tests.
+    pub fn reading_targets(&self) -> Vec<String> {
+        self.read_state()
+            .map(|r| r.doc.links.iter().map(|l| l.target.clone()).collect())
+            .unwrap_or_default()
+    }
+
     /// The link `Tab` selected in reading mode, for tests.
     pub fn reading_focus(&self) -> Option<usize> {
         self.read_state()?.focus

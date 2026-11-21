@@ -110,6 +110,15 @@ impl Buffer {
     }
 
     /// Increases on every change to the text, undo and redo included.
+    /// Replaces the whole text, as reading the file again does. The
+    /// revision keeps going up, so whatever was computed from the old text
+    /// is computed again.
+    pub fn replace_text(&mut self, text: &str) {
+        let revision = self.revision + 1;
+        *self = Self::from_text(text);
+        self.revision = revision;
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }

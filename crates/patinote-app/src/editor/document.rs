@@ -37,8 +37,9 @@ pub enum Save {
 /// What happened on disk to an open note with unsaved text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum External {
-    /// Changed by another app: the text on disk and its hash.
+    /// Changed by another app: the bytes on disk, their text and hash.
     Changed {
+        bytes: Vec<u8>,
         text: String,
         hash: patinote_core::store::Hash,
     },
