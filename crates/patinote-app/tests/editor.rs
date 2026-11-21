@@ -198,3 +198,37 @@ fn f06_1_wq_and_x_save_and_close() {
         );
     }
 }
+
+#[test]
+fn f05_relative_line_numbers_can_be_turned_off() {
+    use patinote_app::theme::styles::Level;
+    let env = Env::new();
+    let vault = env.vault();
+    let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    assert!(app.relative_numbers(), "on by default");
+    command(&mut app, "set nornu");
+    assert!(!app.relative_numbers());
+    command(&mut app, "set rnu?");
+    assert_eq!(app.message(), Some((Level::Info, "norelativenumber")));
+    command(&mut app, "set rnu!");
+    assert!(app.relative_numbers());
+    command(&mut app, "set norelativenumber");
+    command(&mut app, "set nowrap");
+    assert_eq!(
+        app.message(),
+        Some((Level::Error, "Unknown option: nowrap"))
+    );
+
+    // Remembered for this vault.
+    let app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    assert!(!app.relative_numbers());
+
+    // The configuration sets the default for a vault that never used `:set`.
+    let other = Env::new();
+    let config = Config {
+        relative_numbers: Some(false),
+        ..Config::default()
+    };
+    let app = other.start(other.launch(Some(other.vault()), config));
+    assert!(!app.relative_numbers());
+}
