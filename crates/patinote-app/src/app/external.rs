@@ -131,6 +131,7 @@ impl App {
         if let Some(text) = info {
             self.say(Level::Info, text);
         }
+        self.refresh_reading();
     }
 
     /// A banner or comparison action.

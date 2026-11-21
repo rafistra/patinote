@@ -150,7 +150,7 @@ impl App {
         Some((link, col, doc.path.clone()))
     }
 
-    fn resolve_link(
+    pub(super) fn resolve_link(
         &mut self,
         source: String,
         target: String,
@@ -301,6 +301,7 @@ impl App {
             backlinks: Some(Vec::new()),
             id,
             used: 0,
+            read: None,
         });
         w.active = Some(w.buffers.len() - 1);
         w.state.touch(&path, state::now());

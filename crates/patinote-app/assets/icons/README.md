@@ -8,3 +8,4 @@ black; the app colors each icon with a token through Iced's SVG color filter.
 the welcome card (mockup 10) uses the same mark at `size.logo.large`.
 `search.svg` is the magnifier of the quick switcher in `docs/mockups/05-quick-switcher.html`.
 `folder.svg` is the folder of the move picker in `docs/mockups/14-create-move-delete-folder.html`.
+`note.svg` is the embedded note card's icon in `docs/mockups/07-reading-mode.html`.

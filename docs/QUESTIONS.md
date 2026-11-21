@@ -188,3 +188,14 @@ Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2.
 
 Rekomendasi agent: A.
 **Jawaban:** A, disetujui pemilik (21 November 2026).
+
+## Q-016 · Crate `image` untuk gambar di mode baca (langkah 2.8, 21 November 2026)
+
+**Konteks:** Mode baca (F-27) menampilkan gambar. F-27.4 meminta kenaikan RAM tidak melebihi bitmap pada ukuran tampil (+10%), sehingga gambar 4000×3000 harus didekode lalu diperkecil ke lebar kolom sebelum diberikan ke Iced. Itu butuh crate `image` (Rust murni, MIT/Apache-2.0, sudah dipakai fitur `image` Iced) sebagai dependensi langsung.
+**Pilihan:**
+- A. Tambah `image` (hanya dekoder PNG, JPEG, GIF, WebP) dan fitur `image-without-codecs` Iced; gambar didekode dan diperkecil di thread background.
+- B. Hanya fitur `image` Iced tanpa memperkecil; F-27.4 gagal.
+- C. Gambar ditampilkan sebagai kotak nama file dulu.
+
+Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (21 November 2026).
