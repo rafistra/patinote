@@ -1,5 +1,6 @@
 //! Whole screens, built from [`crate::widgets`].
 
+pub mod panel;
 pub mod popups;
 pub mod start;
 pub mod switcher;

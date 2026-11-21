@@ -4,8 +4,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use patinote_core::commands::{
-    Backlink, BacklinksOutput, ConflictOut, ConflictsOutput, ErrorBody, ErrorCode, HeadingOut,
-    LineRange, LinkOut, LinksOutput, ListOutput, NoteRef, NoteSummary, OrphansOutput, ReadOutput,
+    BacklinksOutput, ConflictOut, ConflictsOutput, ErrorBody, ErrorCode, HeadingOut, LineRange,
+    LinkOut, LinksOutput, ListOutput, NoteRef, NoteSummary, OrphansOutput, ReadOutput,
     ResolveOutput, SearchOutput, SearchResult, SourceLine, TagOut, TagsOutput, UnresolvedOutput,
     UnresolvedTarget, VaultInfoOutput,
 };
@@ -405,33 +405,10 @@ pub fn search(ctx: &Ctx<'_>, query: &str, limit: usize) -> Result<SearchOutput, 
 
 /// `note.backlinks`: sources most recently modified first (F-09, A-01.7).
 pub fn backlinks(ctx: &Ctx<'_>, row: &NoteRow) -> Result<BacklinksOutput, Failure> {
-    let rows = ctx.store.backlinks(row.id).map_err(index_failure)?;
-    let mut bodies: HashMap<i64, Vec<String>> = HashMap::new();
-    let mut out = Vec::with_capacity(rows.len());
-    for b in rows {
-        let lines = match bodies.entry(b.source_id) {
-            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-            std::collections::hash_map::Entry::Vacant(e) => {
-                let body = ctx
-                    .store
-                    .body(b.source_id)
-                    .map_err(index_failure)?
-                    .unwrap_or_default();
-                e.insert(body.lines().map(str::to_owned).collect())
-            }
-        };
-        let context = lines
-            .get(b.line.saturating_sub(1))
-            .map_or("", |l| l.trim())
-            .to_owned();
-        out.push(Backlink {
-            path: b.source,
-            line: b.line,
-            kind: b.kind,
-            subpath: b.subpath,
-            context,
-        });
-    }
+    let out = ctx
+        .store
+        .backlinks_with_context(row.id)
+        .map_err(index_failure)?;
     Ok(BacklinksOutput {
         v: 1,
         note: note_ref(row),

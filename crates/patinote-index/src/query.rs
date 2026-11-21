@@ -301,6 +301,39 @@ impl SqliteStore {
             .collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Links pointing at a note with the line around each, in backlink order
+    /// (newest source first). The CLI (`patinote backlinks`) and the app's
+    /// backlinks panel both use this, so they always agree (A-01.7).
+    pub fn backlinks_with_context(
+        &self,
+        id: i64,
+    ) -> Result<Vec<patinote_core::commands::Backlink>, IndexError> {
+        let rows = self.backlinks(id)?;
+        let mut bodies: HashMap<i64, Vec<String>> = HashMap::new();
+        let mut out = Vec::with_capacity(rows.len());
+        for b in rows {
+            let lines = match bodies.entry(b.source_id) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    let body = self.body(b.source_id)?.unwrap_or_default();
+                    e.insert(body.lines().map(str::to_owned).collect())
+                }
+            };
+            let context = lines
+                .get(b.line.saturating_sub(1))
+                .map_or("", |l| l.trim())
+                .to_owned();
+            out.push(patinote_core::commands::Backlink {
+                path: b.source,
+                line: b.line,
+                kind: b.kind,
+                subpath: b.subpath,
+                context,
+            });
+        }
+        Ok(out)
+    }
+
     /// Links written in a note, in file order.
     pub fn outgoing(&self, id: i64) -> Result<Vec<LinkRow>, IndexError> {
         let mut stmt = self.conn.prepare_cached(

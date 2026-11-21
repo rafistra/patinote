@@ -451,3 +451,46 @@ fn mockup_12_ambiguous_link() {
         );
     }
 }
+
+/// Mockup 02, part of it: the side panel (Outline and Backlinks). The
+/// explorer comes with step 2.6 and the leader popup with step 2.9.
+#[test]
+fn mockup_02_side_panel() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    for name in ["Desain indeks Patinote", "Patinote", "2026-11-19"] {
+        command(&mut app, &format!("e {name}"));
+    }
+    command(&mut app, "b 1");
+    common::keys(&mut app, "12G");
+    common::leader(&mut app, "b");
+    common::press(&mut app, "Escape");
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("02-minimal-panels-open", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(BG_PANEL) >= area(100_000.0), "side panel");
+        assert!(
+            frame.count(ACCENT) >= area(2_000.0),
+            "the panel button is on"
+        );
+        assert!(frame.count(BG_CARD) >= area(10_000.0), "backlink cards");
+    }
+}
+
+/// Mockup 01's backlinks under the note, on a note short enough to show
+/// them (the fixture's main note is longer than the window).
+#[test]
+fn mockup_01_backlinks_under_the_note() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    command(&mut app, "e Patinote");
+    let mut h = Harness::new();
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("01-minimal-backlinks.png"));
+    assert!(
+        frame.count(BG_CARD_INLINE) >= 20_000,
+        "backlink cards under the note"
+    );
+}
