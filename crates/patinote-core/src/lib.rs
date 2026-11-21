@@ -13,6 +13,7 @@ pub mod location;
 pub mod model;
 pub mod names;
 pub mod parser;
+pub mod relink;
 pub mod resolve;
 pub mod scan;
 pub mod store;
