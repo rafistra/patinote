@@ -558,7 +558,7 @@ Menulis dan mengedit catatan dengan nyaman: mengetik tidak pernah tersendat dan 
 - [ ] F-05.4 File CRLF tetap CRLF dan file ber-BOM tetap ber-BOM setelah diedit; file tanpa perubahan isi tidak tersimpan ulang.
 - [ ] F-05.5 Disk penuh (disimulasikan): pesan error muncul, isi editor utuh, file asli di disk tidak rusak.
 - [ ] F-05.6 Satu sesi pengeditan tidak menghasilkan event perubahan ganda di indeks.
-- [ ] F-05.7 Undo dan redo mengembalikan isi persis setelah 100 langkah pengeditan.
+- [x] F-05.7 Undo dan redo mengembalikan isi persis setelah 100 langkah pengeditan. `f05_7_undo_redo_100_edits_restore_exactly`
 - [ ] F-05.8 Membuka catatan 6 MB atau file Latin-1 menampilkan banner read-only; menekan `i`, `dd`, atau `p` tidak mengubah apa pun dan file di disk identik byte per byte.
 
 ### F-06 · Mode Vim dasar
@@ -599,12 +599,12 @@ Register bernama, macro, visual blok, `:s`, objek teks lain, dan file keymap tet
 **Kriteria penerimaan**
 
 - [ ] F-06.1 Setiap perintah di tabel punya minimal satu kasus uji (teks dan kursor awal, urutan tombol, teks dan kursor akhir). Hasil yang diharapkan dibuat otomatis dengan `nvim --headless` pada kasus yang sama; semua kasus lolos.
-- [ ] F-06.2 Hitungan bekerja untuk semua gerakan dan operator di tabel.
-- [ ] F-06.3 Satu `u` membatalkan satu perintah utuh: `3dd` utuh, satu sesi insert utuh, satu `.` utuh.
+- [x] F-06.2 Hitungan bekerja untuk semua gerakan dan operator di tabel. `f06_2_counts_work_for_every_motion_and_operator`
+- [x] F-06.3 Satu `u` membatalkan satu perintah utuh: `3dd` utuh, satu sesi insert utuh, satu `.` utuh. `f06_3_one_undo_reverts_one_whole_command`
 - [ ] F-06.4 `:q` menutup catatan aktif, bukan aplikasi; `:q!` membuang perubahan sejak simpan terakhir.
 - [ ] F-06.5 `yy` di Patinote lalu paste di aplikasi lain menghasilkan teks yang sama, dan sebaliknya.
 - [ ] F-06.6 Latensi tetap di bawah 16 ms saat menahan `j` di catatan 1.000 baris.
-- [ ] F-06.7 Dengan `insert_escape = "jk"`, mengetik `jk` di insert keluar ke normal tanpa menyisakan huruf; mengetik `j` lalu jeda lebih dari 1 detik tetap menyisipkan `j`.
+- [x] F-06.7 Dengan `insert_escape = "jk"`, mengetik `jk` di insert keluar ke normal tanpa menyisakan huruf; mengetik `j` lalu jeda lebih dari 1 detik tetap menyisipkan `j`. `f06_7_insert_escape_jk_and_timeout`
 
 ### F-07 · Quick switcher
 
