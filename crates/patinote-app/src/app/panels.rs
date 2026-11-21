@@ -74,22 +74,39 @@ impl App {
     /// section, or closes it when it is open (F-28.3). A closed panel drops
     /// what it showed.
     pub(super) fn toggle_panel(&mut self, backlinks: bool) -> Task<Message> {
-        if self.panel_open {
+        // Classic shows one section at a time: a key for the other one, or
+        // for an unfocused panel, brings that section up instead.
+        let shown_elsewhere =
+            self.classic() && (self.focus.is_none() || self.panel_outline == backlinks);
+        if self.panel_open && !shown_elsewhere {
             self.panel_open = false;
             self.focus = None;
         } else {
             self.panel_open = true;
-            self.focus = Some(if backlinks {
+            let focus = if backlinks {
                 Focused::Backlink(0)
             } else {
                 Focused::Outline(self.current_heading().unwrap_or(0))
-            });
+            };
+            self.focus_panel(focus);
         }
         let open = self.panel_open;
         if let Some(w) = self.workspace_mut() {
             w.state.panel_open = open;
         }
         self.save_vault_state()
+    }
+
+    fn classic(&self) -> bool {
+        self.layout() == patinote_core::config::Layout::Classic
+    }
+
+    /// Puts the focus in the panel; in classic, its section's tab shows.
+    fn focus_panel(&mut self, focus: Focused) {
+        if self.classic() {
+            self.panel_outline = matches!(focus, Focused::Outline(_));
+        }
+        self.focus = Some(focus);
     }
 
     fn current_heading(&self) -> Option<usize> {
@@ -135,7 +152,12 @@ impl App {
         match text {
             Some("l") if self.panel_open => {
                 if self.focus.is_none() {
-                    self.focus = Some(Focused::Outline(self.current_heading().unwrap_or(0)));
+                    let focus = if self.classic() && !self.panel_outline {
+                        Focused::Backlink(0)
+                    } else {
+                        Focused::Outline(self.current_heading().unwrap_or(0))
+                    };
+                    self.focus_panel(focus);
                 }
             }
             Some("h") => self.focus = None,
@@ -159,8 +181,16 @@ impl App {
             self.window_prefix = true;
             return Task::none();
         }
-        let outline = self.outline().len();
-        let links = self.backlink_items().len();
+        let mut outline = self.outline().len();
+        let mut links = self.backlink_items().len();
+        // In classic only the section shown is walked.
+        if self.classic() {
+            if self.panel_outline {
+                links = 0;
+            } else {
+                outline = 0;
+            }
+        }
         // One list: outline items, then backlinks.
         let total = outline + links;
         let index = match focus {

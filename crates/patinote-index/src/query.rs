@@ -378,12 +378,14 @@ impl SqliteStore {
             .collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Notes with no links in or out (links from a note to itself do not count).
+    /// Notes with no links in or out. Links from a note to itself do not
+    /// count; a link to a note that does not exist yet counts as out.
     pub fn orphans(&self) -> Result<Vec<NoteRow>, IndexError> {
         let mut stmt = self.conn.prepare_cached(&format!(
             "SELECT {NOTE_COLUMNS} FROM notes n
              WHERE n.kind = 'note' AND n.excluded = 0
-               AND NOT EXISTS (SELECT 1 FROM links l WHERE l.src_id = n.id)
+               AND NOT EXISTS (SELECT 1 FROM links l WHERE l.src_id = n.id
+                               AND (l.dst_id IS NULL OR l.dst_id != n.id))
                AND NOT EXISTS (SELECT 1 FROM links l WHERE l.dst_id = n.id AND l.src_id != n.id)
              ORDER BY n.path"
         ))?;
