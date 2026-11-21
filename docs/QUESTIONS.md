@@ -123,7 +123,7 @@ Hampir seluruh waktu untuk `kabut` (47 ms dari 52 ms) dipakai FTS5 menghitung sk
 Benchmark target belum dijalankan di CI: runner GitHub lebih lambat dan tidak sama dengan laptop target, sehingga angkanya tidak bisa dibandingkan dengan target. CI hanya mengompilasinya (`cargo bench --workspace --no-run`). Pertanyaan tambahan: perlu runner khusus, atau cukup dijalankan di laptop pemilik sebelum rilis?
 
 Rekomendasi agent: A, dan benchmark dijalankan di laptop pemilik untuk setiap PR yang menyentuh jalur panas (`CLAUDE.md` bagian 5). Selisihnya kecil, hanya terjadi pada query yang cocok dengan separuh vault, dan B maupun C menurunkan kualitas hasil.
-**Jawaban:** _(belum dijawab)_
+**Jawaban:** A, mengikuti rekomendasi agent (21 November 2026). Target 50 ms berlaku untuk query biasa; query yang cocok dengan lebih dari separuh vault boleh sekitar 50 ms. Benchmark target dijalankan di laptop pemilik untuk setiap PR yang menyentuh jalur panas, tanpa runner CI khusus; CI tetap hanya mengompilasinya.
 
 ## Q-010 · `chrono` tidak dipelihara lagi, dan `rmcp` membutuhkannya (langkah 1.8, 20 November 2026)
 
@@ -166,7 +166,7 @@ Rekomendasi agent: A. Pemeriksaan tetap ketat, dan setiap pengecualian punya ala
 - B. Di dalam bagian: `[layout] default = "classic"` dan `[editor] renderer = "wgpu"`. F-28.12 perlu ditulis ulang.
 
 Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2; bisa diubah bila pemilik memilih B.
-**Jawaban:** _(belum dijawab)_
+**Jawaban:** A, mengikuti rekomendasi agent (21 November 2026). Kunci tingkat atas `layout` dan `renderer`; bagian `[layout]` tidak dipakai.
 
 ## Q-014 · Urutan memilih vault di aplikasi (langkah 2.2, 21 November 2026)
 
@@ -176,7 +176,7 @@ Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2; bisa diubah bila pemil
 - B. Vault terakhir selalu menang atas `PATINOTE_VAULT` dan `[vault] default`.
 
 Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2.
-**Jawaban:** _(belum dijawab)_
+**Jawaban:** A, mengikuti rekomendasi agent (21 November 2026).
 
 ## Q-015 · Lisensi `nucleo` (langkah 2.4, 21 November 2026)
 
