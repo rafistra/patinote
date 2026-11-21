@@ -31,7 +31,7 @@ use patinote_core::ipc::{self, Request, Response};
 use patinote_core::names::stem;
 use patinote_core::write::Journal;
 
-use crate::editor::document::{Document, SaveDone};
+use crate::editor::document::{Document, Save, SaveDone};
 use crate::screens::start::{RECENT_SHOWN, RecentRow, Start, relative_time};
 use crate::screens::welcome;
 use crate::session::{IndexEvent, Lookup, Session, VaultPaths, lookup};
@@ -170,6 +170,9 @@ pub struct Workspace {
     active: Option<usize>,
     /// Notes closed with unsaved changes, kept until their save lands.
     closing: Vec<Document>,
+    /// A rename or move is running: autosave waits, so nothing is written
+    /// at a path that is about to move.
+    moving: bool,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -549,6 +552,7 @@ impl App {
             buffers,
             active,
             closing: Vec::new(),
+            moving: false,
             selected: 0,
             candidates: Vec::new(),
             attachments: Vec::new(),
@@ -617,9 +621,16 @@ impl App {
             return Task::batch([leave, self.save_vault_state()]);
         }
         let id = w.buffers.iter().map(|b| b.id).max().map_or(0, |m| m + 1);
+        // Closed a moment ago and still saving: its text is newer than the
+        // file, so it comes back as it is (the read below is then ignored).
+        let doc = w
+            .closing
+            .iter()
+            .position(|d| d.path == path)
+            .map(|i| w.closing.remove(i));
         w.buffers.push(Buffer {
             path: path.clone(),
-            doc: None,
+            doc,
             backlinks: None,
             id,
             used,
@@ -785,7 +796,12 @@ impl App {
         if discard || !doc.dirty() || doc.read_only.is_some() {
             return Task::none();
         }
-        // Unsaved text is kept until it is on disk.
+        // Unsaved text is kept until it is on disk. A save already running
+        // is let land first; the text typed since is saved after it.
+        if matches!(doc.save, Save::Running(_)) {
+            w.closing.push(doc);
+            return Task::none();
+        }
         let job = doc.start_save(&w.session.paths.root, &w.journal);
         w.closing.push(doc);
         Task::future(async move { Message::Saved(job.run()) })
@@ -795,6 +811,16 @@ impl App {
     fn quit(&mut self, discard: bool) -> Task<Message> {
         if !discard {
             let pending = self.autosave(true);
+            // A note waiting on a conflict is never saved on its own: say
+            // so now rather than quitting later, once it is resolved.
+            if let Some(path) = self.unsaved_stuck(|_| true, false) {
+                self.quitting = false;
+                self.say(
+                    Level::Error,
+                    format!("Can't quit: \"{path}\" has unsaved changes"),
+                );
+                return pending;
+            }
             if self.unsaved() || self.waiting_on_vim() {
                 self.quitting = true;
                 return pending;
