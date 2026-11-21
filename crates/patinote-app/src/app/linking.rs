@@ -562,7 +562,16 @@ impl App {
                     .lines()
                     .get(c.line)
                     .and_then(|l| suggest_at(l, c.col))
-                    .is_some_and(|(_, s)| s == start)
+                    .is_some_and(|(suggest, s)| {
+                        // The same link: another one at the same column
+                        // (on another line) asked for other headings.
+                        let now = match suggest {
+                            Suggest::Headings { note, query } => format!("{note}#{query}"),
+                            Suggest::Blocks { note, query } => format!("{note}#^{query}"),
+                            Suggest::Notes { .. } => return false,
+                        };
+                        s == start && now == typed
+                    })
         });
         if !still {
             return;
