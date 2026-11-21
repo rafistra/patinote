@@ -12,6 +12,9 @@ pub struct Args {
     pub vault: Option<PathBuf>,
     /// `--open <path>`: a note to open, relative to the vault.
     pub open: Option<String>,
+    /// `--bench`: replay scripted keys on the open note, print measurements
+    /// as JSON and exit (step 2.10).
+    pub bench: bool,
 }
 
 /// Parses the arguments after the program name. Unknown arguments are
@@ -28,6 +31,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
                 let note = it.next().ok_or("--open needs a note path")?;
                 out.open = Some(note.to_string_lossy().into_owned());
             }
+            Some("--bench") => out.bench = true,
             _ => return Err(format!("unknown argument: {}", arg.to_string_lossy())),
         }
     }

@@ -242,3 +242,24 @@ fn the_socket_hands_requests_to_the_running_app() {
     drop(app.update(Message::CmdSubmit));
     assert!(!socket.exists(), "quitting removes the socket");
 }
+
+#[test]
+fn open_with_a_note_opens_it_while_the_watcher_and_socket_run() {
+    // `patinote open` starts the app with `--open` when none is running.
+    // The vault's tasks never end, so the note must not wait for them.
+    let env = Env::new();
+    let runtime = env.path("run");
+    std::fs::create_dir_all(&runtime).unwrap();
+    let launch = patinote_app::app::Launch {
+        note: Some("Proyek/Patinote.md".into()),
+        watch: true,
+        runtime_dir: Some(runtime),
+        ..env.launch(Some(env.vault()), Config::default())
+    };
+    let (mut app, task) = App::new(launch);
+    let opened = common::run_until(&mut app, task, std::time::Duration::from_secs(10), |a| {
+        a.active_cursor().is_some()
+    });
+    assert!(opened, "the note did not open");
+    assert_eq!(open_paths(&app), ["Proyek/Patinote.md"]);
+}

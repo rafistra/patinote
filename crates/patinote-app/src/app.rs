@@ -14,6 +14,8 @@ mod panels;
 mod reading;
 pub use reading::decoded_size;
 mod renaming;
+#[doc(hidden)]
+pub use renaming::commit_moves;
 mod switching;
 
 use std::collections::{HashMap, HashSet};
@@ -62,6 +64,8 @@ pub struct Launch {
     /// Watch the vault for changes from outside (F-04). Tests leave it off
     /// and send the changes themselves.
     pub watch: bool,
+    /// `--bench`: when the first process started, in ns since the epoch.
+    pub bench: Option<u64>,
 }
 
 /// The app.
@@ -137,6 +141,9 @@ pub struct App {
     window_width: f32,
     /// Classic mode's side panel shows Outline instead of Backlinks.
     panel_outline: bool,
+    /// `--bench` (step 2.10).
+    bench: Option<crate::bench::Bench>,
+    draw_clock: crate::bench::DrawClock,
 }
 
 /// The screen shown.
@@ -322,6 +329,9 @@ pub enum Message {
     CloseTab(usize),
     /// Classic mode's "Find note…" button.
     FindNote,
+    /// `--bench`: a frame went by; the report after the idle wait.
+    BenchFrame,
+    BenchReport,
     /// The watch limit banner's buttons.
     DismissLimit,
     CopyCommand,
@@ -382,6 +392,8 @@ impl App {
             hover_edge: None,
             window_width: SIZE_WINDOW.0,
             panel_outline: false,
+            bench: launch.bench.map(crate::bench::Bench::new),
+            draw_clock: crate::bench::DrawClock::default(),
         };
         app.zoom = app.app_state.zoom.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX);
         if let Some((w, _)) = app.app_state.window {
@@ -394,10 +406,14 @@ impl App {
         let task = match vault {
             Some(path) => {
                 let open = app.open_vault(&path);
+                // Not `chain`: the vault's tasks (index events, watcher,
+                // socket) run as long as the vault is open. The workspace
+                // exists once `open_vault` returns.
                 match launch.note {
-                    Some(note) => {
-                        open.chain(Task::done(Message::Remote(Request::Open { path: note })))
-                    }
+                    Some(note) => Task::batch([
+                        open,
+                        Task::done(Message::Remote(Request::Open { path: note })),
+                    ]),
                     None => open,
                 }
             }
@@ -1014,6 +1030,14 @@ impl App {
                 Task::batch([select, self.close_or_quit(false)])
             }
             Message::FindNote => self.open_switcher(),
+            Message::BenchFrame => self.bench_frame(),
+            Message::BenchReport => {
+                let notes = self.workspace().map_or(0, |w| w.candidates.len());
+                if let Some(b) = &self.bench {
+                    println!("{}", b.report(notes));
+                }
+                iced::exit()
+            }
             Message::Scale(s) => {
                 self.scale = s;
                 Task::none()
@@ -1072,7 +1096,7 @@ impl App {
         }
     }
 
-    fn on_key(&mut self, event: keyboard::Event, captured: bool) -> Task<Message> {
+    pub(super) fn on_key(&mut self, event: keyboard::Event, captured: bool) -> Task<Message> {
         if let keyboard::Event::ModifiersChanged(m) = event {
             self.modifiers = m;
             return Task::none();
@@ -1282,6 +1306,9 @@ impl App {
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             window::close_requests().map(Message::CloseRequested),
         ];
+        if self.bench.as_ref().is_some_and(|b| !b.done) {
+            subs.push(window::frames().map(|_| Message::BenchFrame));
+        }
         // While an edge is dragged, the mouse moves it (F-28.7).
         if self.dragging.is_some() {
             subs.push(event::listen_with(|event, _, _| match event {

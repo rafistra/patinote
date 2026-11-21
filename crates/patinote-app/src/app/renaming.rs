@@ -115,8 +115,9 @@ fn preview_of(path: String, plan: &RelinkPlan) -> Preview {
 }
 
 /// Commits `moves` with their link updates in one transaction; a folder
-/// moves whole, attachments and subfolders included.
-fn commit_moves(
+/// moves whole, attachments and subfolders included. Public for the rename
+/// benchmark (`benches/rename.rs`).
+pub fn commit_moves(
     store: &SqliteStore,
     root: &Path,
     journal: &Journal,

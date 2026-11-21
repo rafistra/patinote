@@ -42,6 +42,28 @@ cargo build --workspace
 cargo test --workspace
 ```
 
+## Installing
+
+To install a release build for your user (Ubuntu, GNOME or any desktop that
+reads XDG desktop entries):
+
+```bash
+scripts/install.sh              # installs to ~/.local
+scripts/install.sh --uninstall  # removes it again
+```
+
+This puts `patinote` and `patinote-app` in `~/.local/bin`, adds Patinote to
+the app launcher, and installs shell completions for bash, zsh and fish. Set
+`PREFIX` to install somewhere else. Your vaults, settings and indexes are not
+touched by either command.
+
+To measure the app against the performance targets on your machine (needs a
+desktop session; uses a generated vault only):
+
+```bash
+scripts/measure.sh
+```
+
 ## Contributing
 
 CI runs `cargo fmt`, `cargo clippy`, `cargo test`, `cargo deny` and a check

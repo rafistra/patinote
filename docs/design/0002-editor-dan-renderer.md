@@ -3,7 +3,7 @@
 - Status: **diterima** (20 November 2026). Renderer: Q-004 pilihan C. Font sistem: Q-011 pilihan A.
 - Terkait PRD: F-05, F-06, F-28; Bagian I "Anggaran memori" butir 1 dan 3, dan tabel Performa
 - Terkait: `CLAUDE.md` bagian 3 (langkah 0.6 dan daftar uji tampilan), `0003` bagian 10
-- Prototipe: `experiments/editor-proto/` (dibuang setelah langkah 2.3; tidak ikut workspace utama)
+- Prototipe: `experiments/editor-proto/`, dihapus di langkah 2.10 setelah aplikasi punya mode ukur sendiri (bagian 10). Isinya masih bisa dilihat di riwayat Git sebelum langkah itu.
 
 ## 1. Ringkasan
 
@@ -22,7 +22,7 @@ Laptop pemilik: Intel Core i5-1235U dengan Iris Xe (Alder Lake), RAM 14 GiB, Ubu
 
 ## 3. Hasil daftar uji tampilan
 
-Setiap butir punya test otomatis di `experiments/editor-proto/tests/screenshot.rs` yang memeriksa warna piksel pada skala 1,0, 1,25, dan 2,0. Screenshot-nya disimpan sebagai artefak CI (`editor-proto-snapshots`).
+Setiap butir punya test otomatis di `experiments/editor-proto/tests/screenshot.rs` yang memeriksa warna piksel pada skala 1,0, 1,25, dan 2,0. Screenshot-nya disimpan sebagai artefak CI (`editor-proto-snapshots`). Sejak langkah 2.10 pemeriksaan yang sama dilakukan oleh `crates/patinote-app/tests/ui_snapshots.rs` pada aplikasi sungguhan.
 
 | Butir | Widget bawaan `text_editor` | Widget sendiri | Bukti |
 | --- | --- | --- | --- |
@@ -126,4 +126,46 @@ Saat Iced masuk ke `patinote-app`, `deny.toml` perlu mengizinkan Apache-2.0, Zli
 - **Uji terhadap Neovim.** `scripts/vim-fixtures.py` menjalankan setiap kasus di `tests/vim/cases.json` dengan `nvim --headless --clean` (jendela 24 baris, `formatoptions-=j`) dan menyimpan hasilnya di `expected.json`. `tests/vim.rs` memutar kasus yang sama lewat mesin tanpa Neovim. CI memasang Neovim 0.11.5 dari rilis resmi (sha256 dicek) dan menjalankan `--check`.
 - **Widget editor** (`editor/view.rs`) hanya menggambar. Tombol diterjemahkan di `app/editing.rs` lalu diberikan ke mesin Vim. Gulir mengikuti kursor; roda mouse menggulir sendiri, lalu aplikasi memindahkan kursor ke baris yang terlihat, seperti Vim.
 - **Menyimpan.** Catatan disimpan lewat `commit` jalur tulis core dengan hash yang diharapkan, sehingga perubahan dari luar tidak tertimpa (autosave berhenti dan menunggu F-11 di langkah 2.7). Byte yang sama dengan isi disk tidak ditulis ulang. BOM dan CRLF (ditentukan oleh akhir baris pertama) dipulihkan saat menyimpan. Aplikasi tidak keluar selama ada teks yang belum tersimpan.
-- **Prototipe dipertahankan sementara.** `experiments/editor-proto/` belum dihapus seperti rencana di awal dokumen ini, karena `--bench`-nya satu-satunya alat ukur latensi di jendela sungguhan (bagian 4.1). Prototipe dihapus setelah aplikasi punya mode ukur sendiri di langkah 2.10.
+- **Prototipe dipertahankan sementara.** `experiments/editor-proto/` belum dihapus seperti rencana di awal dokumen ini, karena `--bench`-nya satu-satunya alat ukur latensi di jendela sungguhan (bagian 4.1). Prototipe dihapus di langkah 2.10, setelah aplikasi punya `--bench` sendiri (bagian 10).
+
+## 10. Pengukuran akhir Gerbang 1 (langkah 2.10)
+
+### 10.1 Alat ukur
+
+- **`patinote-app --bench`** menggantikan `editor-proto --bench`. Skripnya sama dengan bagian 4.1 (200× `j`, satu baris 176 karakter lewat `o`, `/indeks` lalu 30× `n`, seleksi visual 30 baris), tetapi tombol masuk lewat jalur `Message::Key` yang sama dengan tombol yang diketik, jadi yang diukur adalah aplikasi lengkap: indeks, panel, status line, autosave. Widget editor mencatat waktu setiap `draw`; waktu buka dihitung dari proses pertama, sebelum restart untuk font (bagian 7, Q-011), sampai catatan pertama kali tergambar. Hasilnya satu baris JSON di stdout.
+- **`scripts/measure.sh [RUNS] [BACKENDS…]`** membuat vault `vaultgen` 10.000 catatan dengan satu catatan 5.000 baris, memakai folder XDG sendiri di `target/measure/`, membuang run pertama (membangun indeks), lalu menjalankan `--bench` untuk setiap renderer. Perlu sesi desktop, jadi tidak berjalan di CI.
+- **`cargo bench -p patinote-app --bench rename`**: rename catatan dengan backlink terbanyak di vault 10.000 catatan lewat `commit_moves`, fungsi yang sama dengan dialog rename.
+
+### 10.2 Hasil di laptop pemilik
+
+Intel Iris Xe, GNOME Wayland, satu monitor skala 1,25 (fractional scaling Mutter), refresh 48 Hz (satu frame = 20,8 ms). Build release, tiga run per renderer.
+
+| Target PRD | tiny-skia (bawaan) | wgpu | Target |
+| --- | --- | --- | --- |
+| Buka sampai catatan tergambar, indeks sudah ada | 244–284 ms | 489–503 ms | < 300 ms |
+| RAM idle (PSS) setelah 2 detik | 82–83 MB | 157–165 MB | < 100 MB |
+| Mengetik: tombol sampai `draw`, p50 / p95 | 6,2 / 10–18 ms | 19 / 20–24 ms | < 16 ms |
+| Mengetik: jarak antar-frame, p50 / p95 | 20,8 / 30–39 ms | 20,8 / 23–25 ms | 1 frame |
+| `/` lalu `n`: jarak antar-frame, p50 / p95 | 20,8 / 27–34 ms | 20,8 / 24–28 ms | — |
+| Seleksi visual 30 baris: jarak antar-frame, p50 / p95 | 20,8 / 22 ms | 20,8 / 22–23 ms | — |
+| Menahan `j` (seluruh layar bergulir): jarak antar-frame, p50 / p95 | **173–182 / 307–313 ms** | 20,8 / 23–27 ms | — |
+
+Tanpa jendela (`cargo bench`), vault 10.000 catatan:
+
+| Target PRD | Hasil | Target |
+| --- | --- | --- |
+| Indeks ulang penuh dari nol | 5,8 s | < 10 s |
+| Pengecekan cepat vault yang tidak berubah | 35 ms | < 200 ms (F-03.8) |
+| Backlinks beserta baris konteks | 0,3 ms | < 16 ms |
+| Quick switcher (langkah 2.4, `benches/switcher.rs`) | 1,6–2,4 ms | < 16 ms |
+| Rename dengan pembaruan link (17 backlink, 17 file ditulis) | 62 ms | < 1 s |
+| Pencarian full-text, 50.000 catatan (Gerbang 2) | 17–52 ms | < 50 ms (Q-009) |
+
+Satu run per renderer mencatat satu tombol yang baru tergambar 3–4 menit kemudian (max `hold_j` 205 s dan 228 s). Run lain di skenario yang sama tidak; kemungkinan layar terkunci atau mati selama run sehingga compositor berhenti meminta frame. p50 dan p95 tidak terpengaruh.
+
+### 10.3 Kesimpulan
+
+- Dengan tiny-skia sebagai bawaan, target buka, RAM, dan semua target indeks terpenuhi. Seleksi visual, yang di prototipe 223 ms per frame, sekarang satu frame. Penyebabnya belum dipastikan; kemungkinan karena seleksi di aplikasi hanya mengubah latar baris yang terpilih, sedangkan di prototipe seluruh layar digambar ulang.
+- **Gulir layar penuh dengan tiny-skia tetap lambat**: 170–180 ms per frame saat menahan `j`, sama dengan temuan bagian 4.3. Waktu sampai `draw` selesai hanya 5–6 ms, jadi hampir seluruh waktunya ada setelah `draw`: rasterisasi dan penayangan lewat `softbuffer` di skala pecahan 1,25. Ini dicatat sebagai Q-017. Keputusan pemilik (pilihan A): tiny-skia tetap bawaan untuk Gerbang 1, dan jalur penayangan diselidiki sebagai langkah tersendiri; `renderer = "wgpu"` tersedia bagi yang lebih memilih gulir lancar.
+- p95 mengetik dengan tiny-skia (sampai 18 ms di dua dari tiga run) sedikit di atas 16 ms, tetapi jarak antar-frame tetap satu frame di p50. Pemeriksaan dengan mengetik sungguhan tetap pada pemilik (F-05.1).
+- wgpu lancar di semua skenario, tetapi waktu buka dan RAM-nya di atas target, seperti di langkah 0.6.

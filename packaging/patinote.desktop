@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Patinote
+GenericName=Notes
+Comment=A light second brain for Markdown vaults
+Exec=patinote-app
+Icon=patinote
+Terminal=false
+Categories=Office;TextEditor;Utility;
+Keywords=notes;markdown;vault;wiki;vim;
+StartupWMClass=patinote
+StartupNotify=true

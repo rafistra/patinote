@@ -907,7 +907,7 @@ Komponen yang sama disusun dalam tiga mode; berpindah mode tidak menutup buffer 
 - [x] F-28.5 Status line menampilkan mode yang benar dalam satu frame setelah mode berganti. `f28_5_the_status_line_shows_the_new_mode_at_once`
 - [ ] F-28.6 Di skala GNOME 125% dan 200%, teks tajam dan tata letak tidak terpotong.
 - [x] F-28.7 Lebar panel yang diseret tetap sama setelah aplikasi ditutup dan dibuka lagi. `f28_7_a_dragged_panel_width_is_kept`
-- [ ] F-28.8 Membuka aplikasi sampai layar utama tampil (indeks sudah ada) di bawah 300 ms.
+- [x] F-28.8 Membuka aplikasi sampai layar utama tampil (indeks sudah ada) di bawah 300 ms. `scripts/measure.sh` (244–284 ms, `0002` bagian 10)
 - [ ] F-28.9 Semua elemen di tabel bisa dicapai tanpa mouse.
 - [x] F-28.10 `:layout classic`, `:layout focus`, dan `<leader>l` berpindah mode di bawah 100 ms tanpa menutup buffer atau mengubah posisi kursor. `f28_10_switching_layouts_keeps_buffers_and_the_cursor`
 - [x] F-28.11 Mode dan panel yang terakhir terbuka sama setelah aplikasi ditutup dan dibuka lagi. `f28_11_layout_and_panels_come_back_after_a_restart`

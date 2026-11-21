@@ -65,6 +65,8 @@ pub struct Editor<'a, Message, Theme = iced::Theme, R = iced::Renderer> {
     pub gutter: bool,
     /// Space above the first line.
     pub top_pad: f32,
+    /// Marked on each draw during `--bench`.
+    pub drawn: Option<crate::bench::DrawClock>,
     popup: Option<(usize, Element<'a, Message, Theme, R>)>,
     footer: Option<Element<'a, Message, Theme, R>>,
     on_click: Option<Box<dyn Fn(At, bool) -> Message + 'a>>,
@@ -94,6 +96,7 @@ impl<'a, Message, Theme, R> Editor<'a, Message, Theme, R> {
             ty: TYPE_EDITOR,
             gutter: true,
             top_pad: PAD_EDITOR_TOP,
+            drawn: None,
             popup: None,
             footer: None,
             on_click: None,
@@ -672,6 +675,9 @@ where
         _cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
+        if let Some(clock) = &self.drawn {
+            clock.mark();
+        }
         let bounds = layout.bounds();
         let state = tree.state.downcast_ref::<State<R::Paragraph>>();
         let mut cache = state.lines.borrow_mut();
