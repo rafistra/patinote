@@ -114,7 +114,13 @@ fn filled(bg: Color, text: Color) -> container::Style {
 
 /// The app background (`bg.app`).
 pub fn app(_: &Theme) -> container::Style {
-    filled(BG_APP, TEXT_PRIMARY)
+    // No fill: the window is cleared to `bg.app` (the theme's background)
+    // before anything is drawn, and a second full-window fill costs a few
+    // milliseconds per frame with tiny-skia (0002 section 11).
+    container::Style {
+        text_color: Some(TEXT_PRIMARY),
+        ..container::Style::default()
+    }
 }
 
 /// Bufferline and other chrome (`bg.chrome`).

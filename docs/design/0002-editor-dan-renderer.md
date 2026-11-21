@@ -169,3 +169,26 @@ Satu run per renderer mencatat satu tombol yang baru tergambar 3–4 menit kemud
 - **Gulir layar penuh dengan tiny-skia tetap lambat**: 170–180 ms per frame saat menahan `j`, sama dengan temuan bagian 4.3. Waktu sampai `draw` selesai hanya 5–6 ms, jadi hampir seluruh waktunya ada setelah `draw`: rasterisasi dan penayangan lewat `softbuffer` di skala pecahan 1,25. Ini dicatat sebagai Q-017. Keputusan pemilik (pilihan A): tiny-skia tetap bawaan untuk Gerbang 1, dan jalur penayangan diselidiki sebagai langkah tersendiri; `renderer = "wgpu"` tersedia bagi yang lebih memilih gulir lancar.
 - p95 mengetik dengan tiny-skia (sampai 18 ms di dua dari tiga run) sedikit di atas 16 ms, tetapi jarak antar-frame tetap satu frame di p50. Pemeriksaan dengan mengetik sungguhan tetap pada pemilik (F-05.1).
 - wgpu lancar di semua skenario, tetapi waktu buka dan RAM-nya di atas target, seperti di langkah 0.6.
+
+## 11. Gulir layar penuh dengan tiny-skia (Q-017)
+
+### 11.1 Ke mana waktunya habis
+
+Diukur dengan salinan `iced_tiny_skia` 0.14.1 yang diberi pencatat waktu di `window::compositor::present` (tidak di-commit), memakai `patinote-app --bench` di laptop pemilik (skala 1,25):
+
+- Damage tracking bekerja (`buffer.age()` = 2), dan `softbuffer` `present` hanya 30–60 µs. Hampir seluruh waktu habis di `Renderer::draw` (rasterisasi).
+- Satu persegi damage seukuran jendela dirasterisasi dalam 14–22 ms. Tetapi saat menggulir, setiap baris berubah dan damage pecah menjadi 20–26 persegi. `damage::group` menggabungkan persegi secara rakus menurut jarak pusatnya dari titik (0, 0), sehingga nomor baris, teks, dan quad dari baris yang berbeda berselang-seling dan tidak tergabung (celah lebih dari 20.000 px²).
+- `Renderer::draw` menggambar semua layer untuk setiap persegi. Untuk 26 persegi: 3.144 quad (228 ms), 1.454 teks (104 ms), dan 615 kali `adjust_clip_mask` yang mengisi ulang mask seukuran jendela (83 ms). Quad yang hanya sebagian berada di dalam persegi diisi penuh lalu dipotong mask, jadi latar besar seperti latar editor terisi berulang kali.
+- Kode yang sama masih ada di cabang `master` Iced (dicek 21 November 2026).
+
+### 11.2 Perbaikan
+
+| Perubahan | Menahan `j`: jarak antar-frame p50 / p95 |
+| --- | --- |
+| Sebelum (bagian 10) | 173–182 / 307–313 ms |
+| Tanpa latar ganda (di aplikasi) | 58 / 98 ms |
+| Ditambah penggabungan damage di `iced_tiny_skia` (Q-018) | 24 / 41 ms |
+
+- **Di aplikasi (sudah diterapkan):** jendela sudah dibersihkan dengan `bg.app` (latar tema) sebelum apa pun digambar, jadi `styles::app` tidak lagi mengisi latar dan widget editor tidak lagi menggambar quad latar. Dua isian seukuran jendela itu dulu digambar ulang untuk setiap persegi damage. Tampilan tidak berubah; snapshot UI tetap sama.
+- **Di `iced_tiny_skia` (belum, menunggu Q-018):** bila `damage::group` menghasilkan lebih dari 4 persegi, gambar sekali di gabungannya. Satu persegi besar lebih murah daripada banyak persegi kecil yang masing-masing menggambar semua layer.
+- Sisa biaya setelah keduanya: teks sekitar 14 ms per layar penuh dan `adjust_clip_mask` 5–7 ms. Keduanya ada di dalam Iced.

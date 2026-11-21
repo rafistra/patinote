@@ -219,3 +219,16 @@ Dengan tiny-skia, target buka (< 300 ms) dan RAM (< 100 MB) lolos, dan mengetik,
 
 Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, dan gulir layar penuh hanya muncul saat seluruh layar berubah. Penyelidikan butuh waktu riset tersendiri sebelum bisa dijanjikan hasilnya.
 **Jawaban:** A, disetujui pemilik (21 November 2026). tiny-skia tetap bawaan untuk Gerbang 1; penyelidikan jalur penayangan di skala pecahan dikerjakan sebagai langkah tersendiri.
+
+## Q-018 · Menambal `iced_tiny_skia` agar gulir layar penuh satu frame (21 November 2026)
+
+**Konteks:** Penyelidikan Q-017 (`0002` bagian 11). Gulir tersendat karena `iced_tiny_skia` 0.14.1 menggambar semua layer untuk setiap persegi damage, dan saat menggulir damage pecah menjadi 20–26 persegi. Menghapus latar ganda di aplikasi menurunkan menahan `j` dari 175 ms ke 58 ms per frame (p50). Sisa perbaikannya ada di Iced: menggabungkan damage menjadi satu persegi bila lebih dari 4 menurunkannya lagi ke 24 ms (p95 41 ms). Perubahannya sekitar 8 baris di `iced_tiny_skia/src/window/compositor.rs`. Cabang `master` Iced belum memperbaikinya.
+**Pilihan:**
+- A. Bawa salinan `iced_tiny_skia` 0.14.1 dengan tambalan itu di `vendor/iced_tiny_skia/` lewat `[patch.crates-io]`, dan laporkan ke Iced (issue atau PR dengan angka pengukuran). Salinan dihapus begitu versi Iced yang dipakai sudah memperbaikinya. Lisensi MIT, tidak ada dependensi baru.
+- B. Hanya laporkan ke Iced dan tunggu rilis berikutnya. Gulir tetap 58 ms per frame sampai itu.
+- C. Biarkan; gunakan `renderer = "wgpu"` bila perlu gulir lancar.
+
+Melapor ke repositori Iced berarti mengirim tulisan ke layanan luar atas nama pemilik, jadi agent tidak melakukannya tanpa persetujuan.
+
+Rekomendasi agent: A. Tambalannya kecil dan mudah dibuang, dan dengan itu gulir mendekati satu frame tanpa mengorbankan target buka dan RAM.
+**Jawaban:** _(belum dijawab)_
