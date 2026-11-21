@@ -52,7 +52,7 @@ fn key_hint<'a, Message: 'a>(parts: &[(&'a str, bool)]) -> Element<'a, Message> 
             if *key {
                 span(*text).font(FONT_MONO_SEMIBOLD).color(TEXT_PRIMARY)
             } else {
-                span(*text).color(TEXT_MUTED)
+                span(*text).font(FONT_MONO).color(TEXT_MUTED)
             }
         })
         .collect();

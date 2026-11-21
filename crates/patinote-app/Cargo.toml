@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 iced.workspace = true
+nucleo-matcher.workspace = true
 patinote-core.workspace = true
 patinote-index.workspace = true
 rfd.workspace = true
@@ -26,9 +27,15 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 iced_runtime.workspace = true
 png.workspace = true
 tempfile.workspace = true
+vaultgen.workspace = true
+
+[[bench]]
+name = "switcher"
+harness = false
 
 [lints]
 workspace = true

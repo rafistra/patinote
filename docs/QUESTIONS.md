@@ -177,3 +177,14 @@ Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2; bisa diubah bila pemil
 
 Rekomendasi agent: A. Sudah diterapkan di PR langkah 2.2.
 **Jawaban:** _(belum dijawab)_
+
+## Q-015 · Lisensi `nucleo` (langkah 2.4, 21 November 2026)
+
+**Konteks:** `nucleo` ada di daftar dependensi yang disetujui (quick switcher F-07, autocomplete F-08), tetapi lisensinya MPL-2.0, yang tidak ada di daftar izin `deny.toml`. MPL-2.0 adalah copyleft lemah per file: kompatibel dengan MIT selama file `nucleo` dipakai tanpa diubah. Yang dipakai cukup `nucleo-matcher` (mesin pencocok `nucleo`, tanpa thread pool dan tanpa dependensi lain).
+**Pilihan:**
+- A. Izinkan MPL-2.0 hanya untuk `nucleo-matcher` lewat `[[licenses.exceptions]]`, dengan alasan tertulis.
+- B. Izinkan MPL-2.0 untuk semua crate.
+- C. Cari pengganti berlisensi MIT.
+
+Rekomendasi agent: A.
+**Jawaban:** A, disetujui pemilik (21 November 2026).

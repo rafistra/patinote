@@ -40,8 +40,9 @@ pub struct Document {
     pub buffer: vim::Buffer,
     pub format: Format,
     pub read_only: Option<ReadOnly>,
-    /// Hash of the bytes on disk, as last read or written.
-    pub disk_hash: Hash,
+    /// Hash of the bytes on disk, as last read or written; `None` for a
+    /// new note that is not on disk yet (it is written once it has text).
+    pub disk_hash: Option<Hash>,
     /// The buffer revision that is on disk.
     pub saved_rev: u64,
     pub last_edit: Option<Instant>,
@@ -64,7 +65,7 @@ impl Document {
             buffer,
             format: opened.format,
             read_only: opened.read_only,
-            disk_hash: opened.hash,
+            disk_hash: Some(opened.hash),
             saved_rev: rev,
             last_edit: None,
             save: Save::Idle,
@@ -72,6 +73,13 @@ impl Document {
             kinds,
             kinds_rev: rev,
         }
+    }
+
+    /// A new, empty note that is not on disk yet (F-07.5, F-08).
+    pub fn new_note(path: String, vim: vim::Vim) -> Self {
+        let mut doc = Self::new(path, b"", vim);
+        doc.disk_hash = None;
+        doc
     }
 
     /// Unsaved changes.
@@ -105,6 +113,10 @@ impl Document {
         if !self.dirty() || self.read_only.is_some() {
             return false;
         }
+        // A new note stays off the disk until it has text (F-08.6).
+        if self.disk_hash.is_none() && self.buffer.text().trim().is_empty() {
+            return false;
+        }
         match &self.save {
             Save::Running(_) | Save::Changed => false,
             Save::Failed { at, .. } => force || now.duration_since(*at) >= RETRY_AFTER,
@@ -136,7 +148,7 @@ impl Document {
     pub fn finish_save(&mut self, done: &SaveDone, now: Instant) {
         match &done.result {
             Ok(hash) => {
-                self.disk_hash = *hash;
+                self.disk_hash = Some(*hash);
                 self.saved_rev = done.rev;
                 self.save = Save::Idle;
             }
@@ -158,7 +170,8 @@ pub struct SaveJob {
     journal: Journal,
     pub path: String,
     bytes: Vec<u8>,
-    expect: Hash,
+    /// What is on disk now; `None` when the file must not exist yet.
+    expect: Option<Hash>,
     rev: u64,
 }
 
@@ -186,7 +199,7 @@ impl SaveJob {
     /// on disk are not written again (F-05.4).
     pub fn run(self) -> SaveDone {
         let hash = content_hash(&self.bytes);
-        let result = if hash == self.expect {
+        let result = if self.expect == Some(hash) {
             Ok(hash)
         } else {
             let tx = Transaction {
@@ -194,7 +207,7 @@ impl SaveJob {
                 ops: vec![Op::Write {
                     path: self.path.clone(),
                     content: self.bytes,
-                    expect: Expect::Hash(self.expect),
+                    expect: self.expect.map_or(Expect::Absent, Expect::Hash),
                 }],
             };
             match commit(&self.root, &self.journal, &tx) {
