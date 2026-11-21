@@ -179,7 +179,7 @@ Diukur dengan salinan `iced_tiny_skia` 0.14.1 yang diberi pencatat waktu di `win
 - Damage tracking bekerja (`buffer.age()` = 2), dan `softbuffer` `present` hanya 30–60 µs. Hampir seluruh waktu habis di `Renderer::draw` (rasterisasi).
 - Satu persegi damage seukuran jendela dirasterisasi dalam 14–22 ms. Tetapi saat menggulir, setiap baris berubah dan damage pecah menjadi 20–26 persegi. `damage::group` menggabungkan persegi secara rakus menurut jarak pusatnya dari titik (0, 0), sehingga nomor baris, teks, dan quad dari baris yang berbeda berselang-seling dan tidak tergabung (celah lebih dari 20.000 px²).
 - `Renderer::draw` menggambar semua layer untuk setiap persegi. Untuk 26 persegi: 3.144 quad (228 ms), 1.454 teks (104 ms), dan 615 kali `adjust_clip_mask` yang mengisi ulang mask seukuran jendela (83 ms). Quad yang hanya sebagian berada di dalam persegi diisi penuh lalu dipotong mask, jadi latar besar seperti latar editor terisi berulang kali.
-- Kode yang sama masih ada di cabang `master` Iced (dicek 21 November 2026).
+- Kode yang sama masih ada di branch `0.14` Iced, sumber rilis 0.14.x (dicek 21 November 2026). Di `master`, `tiny_skia` sudah diganti dengan renderer `vello_cpu` (draf sejak Maret 2026) yang menggambar ulang seluruh jendela tanpa persegi damage. Dilaporkan ke Iced sebagai [iced-rs/iced#3556](https://github.com/iced-rs/iced/issues/3556).
 
 ### 11.2 Perbaikan
 

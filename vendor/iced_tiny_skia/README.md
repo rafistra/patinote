@@ -17,7 +17,10 @@ once when there are more than four. Measurements and the cause are in
 
 ## Removing it
 
-When an Iced release fixes this upstream: delete this folder, the
+Reported upstream as [iced-rs/iced#3556](https://github.com/iced-rs/iced/issues/3556).
+Iced's `master` replaces `tiny_skia` with `vello_cpu`, so a fix can only come
+in a 0.14.x release. When one ships, or when Patinote moves to an Iced
+version without `tiny_skia`: delete this folder, the
 `[patch.crates-io]` section and the `exclude` line in the root
 `Cargo.toml`, then run `scripts/measure.sh 3 tiny-skia` to check holding
 `j` stays near one frame (Q-018).

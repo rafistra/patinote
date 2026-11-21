@@ -222,7 +222,7 @@ Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, da
 
 ## Q-018 · Menambal `iced_tiny_skia` agar gulir layar penuh satu frame (21 November 2026)
 
-**Konteks:** Penyelidikan Q-017 (`0002` bagian 11). Gulir tersendat karena `iced_tiny_skia` 0.14.1 menggambar semua layer untuk setiap persegi damage, dan saat menggulir damage pecah menjadi 20–26 persegi. Menghapus latar ganda di aplikasi menurunkan menahan `j` dari 175 ms ke 58 ms per frame (p50). Sisa perbaikannya ada di Iced: menggabungkan damage menjadi satu persegi bila lebih dari 4 menurunkannya lagi ke 24 ms (p95 41 ms). Perubahannya sekitar 8 baris di `iced_tiny_skia/src/window/compositor.rs`. Cabang `master` Iced belum memperbaikinya.
+**Konteks:** Penyelidikan Q-017 (`0002` bagian 11). Gulir tersendat karena `iced_tiny_skia` 0.14.1 menggambar semua layer untuk setiap persegi damage, dan saat menggulir damage pecah menjadi 20–26 persegi. Menghapus latar ganda di aplikasi menurunkan menahan `j` dari 175 ms ke 58 ms per frame (p50). Sisa perbaikannya ada di Iced: menggabungkan damage menjadi satu persegi bila lebih dari 4 menurunkannya lagi ke 24 ms (p95 41 ms). Perubahannya sekitar 8 baris di `iced_tiny_skia/src/window/compositor.rs`. Branch `0.14` Iced belum memperbaikinya.
 **Pilihan:**
 - A. Bawa salinan `iced_tiny_skia` 0.14.1 dengan tambalan itu di `vendor/iced_tiny_skia/` lewat `[patch.crates-io]`, dan laporkan ke Iced (issue atau PR dengan angka pengukuran). Salinan dihapus begitu versi Iced yang dipakai sudah memperbaikinya. Lisensi MIT, tidak ada dependensi baru.
 - B. Hanya laporkan ke Iced dan tunggu rilis berikutnya. Gulir tetap 58 ms per frame sampai itu.
@@ -231,4 +231,4 @@ Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, da
 Melapor ke repositori Iced berarti mengirim tulisan ke layanan luar atas nama pemilik, jadi agent tidak melakukannya tanpa persetujuan.
 
 Rekomendasi agent: A. Tambalannya kecil dan mudah dibuang, dan dengan itu gulir mendekati satu frame tanpa mengorbankan target buka dan RAM.
-**Jawaban:** A (21 November 2026). Salinan bertambal ada di `vendor/iced_tiny_skia/` (cara membuangnya di `README.md` folder itu). Laporan ke Iced belum dikirim; teksnya disiapkan dan menunggu izin pemilik untuk dikirim atas nama akunnya.
+**Jawaban:** A (21 November 2026). Salinan bertambal ada di `vendor/iced_tiny_skia/` (cara membuangnya di `README.md` folder itu). Dilaporkan ke Iced atas izin pemilik: [iced-rs/iced#3556](https://github.com/iced-rs/iced/issues/3556). Catatan: `master` Iced sudah mengganti `tiny_skia` dengan `vello_cpu`, jadi perbaikan hanya mungkin datang lewat rilis 0.14.x. Bila tidak ada, salinan ini dibuang saat Patinote pindah ke versi Iced berikutnya.
