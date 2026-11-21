@@ -377,3 +377,33 @@ fn mockup_01_minimal_chrome() {
     }
     assert_eq!(app.title(), "Desain indeks Patinote — Patinote");
 }
+
+/// Mockup 05: the quick switcher over a note, with "dsn ind" typed.
+#[test]
+fn mockup_05_quick_switcher() {
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    command(&mut app, "e 2026-11-19");
+    command(&mut app, "e Patinote");
+    command(&mut app, "b 1");
+    common::leader(&mut app, "f");
+    common::send(
+        &mut app,
+        patinote_app::app::Message::SwitcherInput("dsn ind".into()),
+    );
+    let mut h = Harness::new();
+    for scale in SCALES {
+        let frame = h.render(app.view().map(|_| ()), size(), scale);
+        frame.save(&out_dir().join(file_name("05-quick-switcher", scale)));
+        let area = |px: f32| (px * scale * scale) as usize;
+        assert!(frame.count(BG_OVERLAY) >= area(60_000.0), "switcher box");
+        assert!(
+            frame.count(BG_SELECTED) >= area(15_000.0),
+            "selected result"
+        );
+        assert!(
+            frame.count_near(ACCENT, 24) >= area(100.0),
+            "matched letters"
+        );
+    }
+}

@@ -30,7 +30,7 @@ fn with_key<'a, Message: 'a>(text: &'a str, key: &'a str, primary: bool) -> Elem
     let key_color = if primary { TEXT_ON_ACCENT } else { TEXT_SUBTLE };
     let rich: iced::widget::text::Rich<'a, (), Message> = rich_text![
         span(text).font(if primary { FONT_UI_SEMIBOLD } else { FONT_UI }),
-        span(" "),
+        span(" ").font(FONT_UI),
         span(key).font(FONT_MONO).color(key_color),
     ]
     .size(TYPE_UI.size);
@@ -55,11 +55,12 @@ pub fn card<'a, Message: Clone + 'a>(
             .spacing(SPACE_10)
             .align_y(Alignment::Center);
             let where_index: iced::widget::text::Rich<'a, (), Message> = rich_text![
-                span("Patinote doesn't change or add files when it opens a vault. Its index lives in "),
+                span("Patinote doesn't change or add files when it opens a vault. Its index lives in ")
+                    .font(FONT_UI),
                 span("~/.cache/patinote/")
                     .font(FONT_MONO)
                     .color(SYNTAX_CODE),
-                span("."),
+                span(".").font(FONT_UI),
             ]
             .font(TYPE_UI.font)
             .size(TYPE_UI.size)

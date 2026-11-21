@@ -6,3 +6,4 @@ black; the app colors each icon with a token through Iced's SVG color filter.
 
 `logo.svg` is the Patinote mark from the bufferline of `docs/mockups/01-minimal.html`;
 the welcome card (mockup 10) uses the same mark at `size.logo.large`.
+`search.svg` is the magnifier of the quick switcher in `docs/mockups/05-quick-switcher.html`.

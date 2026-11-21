@@ -40,6 +40,13 @@ ignore = [
     { id = "RUSTSEC-2024-0436", reason = "unmaintained paste, required by the iced renderer; Q-012" },
 ]
 
+# nucleo-matcher (quick switcher and link autocomplete, F-07, F-08) is
+# MPL-2.0: weak copyleft per file, compatible with MIT while its files are
+# used unmodified from crates.io. Allowed for this crate only (Q-015).
+[[licenses.exceptions]]
+crate = "nucleo-matcher"
+allow = ["MPL-2.0"]
+
 [licenses.private]
 # Workspace crates are not published; their own license is in LICENSE.
 ignore = true

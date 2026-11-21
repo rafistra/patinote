@@ -151,3 +151,51 @@ pub fn keys(app: &mut App, keys: &str) {
 pub fn wait(app: &mut App, after: std::time::Duration) {
     send(app, Message::Tick(std::time::Instant::now() + after));
 }
+
+/// Presses a key with modifiers held; `captured` as if a widget handled it.
+pub fn press_with(
+    app: &mut App,
+    key: Key,
+    modifiers: Modifiers,
+    text: Option<&str>,
+    captured: bool,
+) {
+    send(
+        app,
+        Message::Key(keyboard::Event::ModifiersChanged(modifiers), false),
+    );
+    send(
+        app,
+        Message::Key(
+            keyboard::Event::KeyPressed {
+                key: key.clone(),
+                modified_key: key,
+                physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
+                location: Location::Standard,
+                modifiers,
+                text: text.map(Into::into),
+                repeat: false,
+            },
+            captured,
+        ),
+    );
+    send(
+        app,
+        Message::Key(
+            keyboard::Event::ModifiersChanged(Modifiers::default()),
+            false,
+        ),
+    );
+}
+
+/// Presses the leader key (Space) and then `next`.
+pub fn leader(app: &mut App, next: &str) {
+    press_with(
+        app,
+        Key::Named(key::Named::Space),
+        Modifiers::default(),
+        Some(" "),
+        false,
+    );
+    press(app, next);
+}

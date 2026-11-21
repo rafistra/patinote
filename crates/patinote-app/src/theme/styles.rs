@@ -309,7 +309,24 @@ pub fn banner_button(kind: BannerKind) -> impl Fn(&Theme, button::Status) -> but
     }
 }
 
+/// Dims what is behind an overlay (`bg.scrim`).
+pub fn scrim(_: &Theme) -> container::Style {
+    filled(BG_SCRIM, TEXT_PRIMARY)
+}
+
 // --- Inputs -------------------------------------------------------------------
+
+/// The quick switcher's input: no frame, `text.strong`.
+pub fn switcher_input(_: &Theme, _: text_input::Status) -> text_input::Style {
+    text_input::Style {
+        background: Background::Color(Color::TRANSPARENT),
+        border: Border::default(),
+        icon: TEXT_MUTED,
+        placeholder: TEXT_MUTED,
+        value: TEXT_STRONG,
+        selection: EDITOR_SELECTION,
+    }
+}
 
 /// The `:` input on the command line: no frame, `text.primary`.
 pub fn cmdline_input(_: &Theme, _: text_input::Status) -> text_input::Style {

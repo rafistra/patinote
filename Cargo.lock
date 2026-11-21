@@ -2165,6 +2165,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nucleo-matcher"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf33f538733d1a5a3494b836ba913207f14d9d4a1d3cd67030c5061bdd2cac85"
+dependencies = [
+ "memchr",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2593,8 +2603,10 @@ checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 name = "patinote-app"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "iced",
  "iced_runtime",
+ "nucleo-matcher",
  "patinote-core",
  "patinote-index",
  "png",
@@ -2604,6 +2616,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+ "vaultgen",
 ]
 
 [[package]]

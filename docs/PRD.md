@@ -639,13 +639,13 @@ Kotak kosong menampilkan catatan yang terakhir dibuka.
 
 **Kriteria penerimaan**
 
-- [ ] F-07.1 Hasil diperbarui di bawah 16 ms per tombol di vault uji 10.000 catatan.
-- [ ] F-07.2 Mengetik alias menemukan catatan pemiliknya.
-- [ ] F-07.3 "cafe" menemukan "Café Bandung"; "PATI" menemukan "Patinote".
-- [ ] F-07.4 Kotak kosong menampilkan catatan terakhir dibuka, terbaru di atas.
-- [ ] F-07.5 `Shift+Enter` dengan nama baru membuat catatan dan langsung membukanya dalam mode insert.
+- [x] F-07.1 Hasil diperbarui di bawah 16 ms per tombol di vault uji 10.000 catatan. `cargo bench -p patinote-app --bench switcher` (10.000 catatan: 1,6–2,4 ms per tombol)
+- [x] F-07.2 Mengetik alias menemukan catatan pemiliknya. `f07_2_an_alias_finds_its_note`, `f07_2_an_alias_finds_its_note_and_enter_opens_it`
+- [x] F-07.3 "cafe" menemukan "Café Bandung"; "PATI" menemukan "Patinote". `f07_3_case_and_diacritics_are_ignored`
+- [x] F-07.4 Kotak kosong menampilkan catatan terakhir dibuka, terbaru di atas. `f07_4_an_empty_query_lists_recent_notes_newest_first`, `f07_4_the_empty_box_lists_recent_notes_newest_first`
+- [x] F-07.5 `Shift+Enter` dengan nama baru membuat catatan dan langsung membukanya dalam mode insert. `f07_5_shift_enter_creates_the_note_and_opens_it_in_insert_mode`
 - [ ] F-07.6 Catatan baru dari luar Patinote muncul di switcher di bawah 1 detik.
-- [ ] F-07.7 Semua aksi switcher bisa dilakukan tanpa mouse.
+- [x] F-07.7 Semua aksi switcher bisa dilakukan tanpa mouse. `f07_7_every_switcher_action_works_from_the_keyboard`
 
 ### F-08 · Autocomplete link dan mengikuti link
 

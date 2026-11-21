@@ -58,6 +58,7 @@ Semua pasangan teks dan latar di bawah lolos kontras WCAG AA (minimal 4,5:1 untu
 | `bg.cursorline` | `#18201D` | Baris tempat kursor berada |
 | `bg.selected` | `#22403A` | Item terpilih (explorer, hasil switcher, saran autocomplete) |
 | `bg.code.inline` | `#1E2522` | Kode inline di mode baca |
+| `bg.scrim` | `#121614` dengan opasitas 65% | Di atas editor selama quick switcher terbuka, sehingga teks di belakangnya tampil 35% (mockup 05) |
 | `border.default` | `#242C29` | Garis pemisah panel |
 | `border.strong` | `#2E3A35` | Tepi overlay dan dialog |
 | `border.control` | `#34403C` | Tepi tombol sekunder |

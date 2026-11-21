@@ -23,6 +23,10 @@ iced_runtime = "=0.14.0"
 ignore = "0.4.34"
 insta = { version = "1.49.0", features = ["json"] }
 notify = { version = "8.2.2", default-features = false }
+# Fuzzy matching for the quick switcher and link autocomplete (F-07, F-08):
+# the matcher of the approved `nucleo`, without its thread pool.
+# MPL-2.0, allowed for these crates only in deny.toml (Q-015).
+nucleo-matcher = "0.3.1"
 patinote-core = { path = "crates/patinote-core" }
 patinote-index = { path = "crates/patinote-index" }
 png = "0.17.16"

@@ -4,12 +4,13 @@
 //! in [`App::update`] so tests can drive it without a window.
 
 mod editing;
+mod switching;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use iced::keyboard::{self, Key, key::Named};
+use iced::keyboard::{self, Key, Modifiers, key::Named};
 use iced::widget::{Column, container, text_input};
 use iced::{Element, Event, Length, Padding, Size, Subscription, Task, event, window};
 use patinote_core::config::{Config, Layout};
@@ -22,6 +23,7 @@ use crate::screens::start::{RECENT_SHOWN, RecentRow, Start, relative_time};
 use crate::screens::welcome;
 use crate::session::{IndexEvent, Lookup, Session, VaultPaths, lookup};
 use crate::state::{self, AppState, VaultState};
+use crate::switcher::{Candidate, Finder};
 use crate::theme::styles::{self, Level};
 use crate::theme::tokens::*;
 use crate::widgets::bufferline::{self, Tab};
@@ -64,6 +66,12 @@ pub struct App {
     /// The clipboard text last seen, so focus changes only reload the
     /// register when the clipboard changed.
     clipboard: Option<String>,
+    /// The quick switcher, when open (F-07).
+    switcher: Option<switching::Switcher>,
+    /// Modifier keys held now (for `Shift+Enter`).
+    modifiers: Modifiers,
+    /// The leader key (Space) was pressed and waits for the next key (F-28).
+    leader: bool,
 }
 
 /// The screen shown.
@@ -92,6 +100,9 @@ pub struct Workspace {
     closing: Vec<Document>,
     /// The highlighted recent note on the start screen.
     selected: usize,
+    /// Notes the quick switcher finds, loaded from the index.
+    candidates: Vec<Candidate>,
+    finder: Finder,
 }
 
 /// Where the opening index update is.
@@ -156,6 +167,11 @@ pub enum Message {
     Click(usize, usize),
     /// The wheel scrolled the editor: first and last visible line.
     Scrolled(usize, usize),
+    /// Notes for the quick switcher, loaded from the index.
+    Candidates(Vec<Candidate>),
+    SwitcherInput(String),
+    SwitcherSubmit,
+    SwitcherPick(usize),
     /// A banner button of the active note.
     RetrySave,
     OpenExternally,
@@ -178,6 +194,9 @@ impl App {
             window_height,
             quitting: false,
             clipboard: None,
+            switcher: None,
+            modifiers: Modifiers::default(),
+            leader: false,
         };
         let vault = launch
             .vault
@@ -289,6 +308,8 @@ impl App {
             active: None,
             closing: Vec::new(),
             selected: 0,
+            candidates: Vec::new(),
+            finder: Finder::new(),
         }));
         Task::batch(tasks)
     }
@@ -511,6 +532,7 @@ impl App {
                 _ => Task::none(),
             },
             Message::Index(event) => {
+                let ready = matches!(event, IndexEvent::Ready { .. });
                 let mut failed = None;
                 if let Some(w) = self.workspace_mut() {
                     match event {
@@ -530,7 +552,11 @@ impl App {
                 if let Some(why) = failed {
                     self.say(Level::Error, why);
                 }
-                Task::none()
+                if ready {
+                    self.load_candidates()
+                } else {
+                    Task::none()
+                }
             }
             Message::Remote(request) => {
                 let focus = window::latest().and_then(window::gain_focus);
@@ -610,6 +636,19 @@ impl App {
                 self.scrolled(first, last);
                 Task::none()
             }
+            Message::Candidates(candidates) => {
+                if let Some(w) = self.workspace_mut() {
+                    w.candidates = candidates;
+                }
+                self.refresh_switcher();
+                Task::none()
+            }
+            Message::SwitcherInput(query) => {
+                self.switcher_input(query);
+                Task::none()
+            }
+            Message::SwitcherSubmit => self.switcher_submit(),
+            Message::SwitcherPick(i) => self.switcher_pick(i),
             Message::RetrySave => self.autosave(true),
             Message::OpenExternally => {
                 self.open_externally();
@@ -620,6 +659,10 @@ impl App {
     }
 
     fn on_key(&mut self, event: keyboard::Event, captured: bool) -> Task<Message> {
+        if let keyboard::Event::ModifiersChanged(m) = event {
+            self.modifiers = m;
+            return Task::none();
+        }
         let keyboard::Event::KeyPressed {
             key,
             text,
@@ -642,7 +685,43 @@ impl App {
             }
             return Task::none();
         }
+        if self.switcher.is_some() {
+            // The input takes typed text; Escape and movement come here.
+            if captured && key != Key::Named(Named::Escape) {
+                return Task::none();
+            }
+            return self
+                .switcher_key(&key, modifiers)
+                .unwrap_or_else(Task::none);
+        }
         if captured {
+            return Task::none();
+        }
+        // `Ctrl+Shift+O` opens the quick switcher anywhere (F-07).
+        if modifiers.control()
+            && modifiers.shift()
+            && matches!(&key, Key::Character(c) if c.eq_ignore_ascii_case("o"))
+        {
+            return self.open_switcher();
+        }
+        // The leader key (Space) in normal mode, then one key (F-28). The
+        // popup after 300 ms comes with step 2.9.
+        if std::mem::take(&mut self.leader) {
+            return match text.as_deref() {
+                Some("f") => self.open_switcher(),
+                _ => Task::none(),
+            };
+        }
+        let normal = self
+            .active_document()
+            .is_none_or(|d| d.vim.mode() == crate::vim::Mode::Normal && d.vim.pending().is_empty());
+        if normal
+            && self.workspace().is_some()
+            && key == Key::Named(Named::Space)
+            && !modifiers.control()
+            && !modifiers.alt()
+        {
+            self.leader = true;
             return Task::none();
         }
         // An open note gets every key: Vim decides what it means.
@@ -748,6 +827,7 @@ impl App {
                 None => w.start().view(Message::OpenRecent),
             },
         };
+        let body = self.with_switcher(body);
         // Before a vault is open the status line is an empty bar (mockup 10).
         let status: Element<'_, Message> = if self.workspace().is_some() {
             self.status_line().view_with(|_| None)

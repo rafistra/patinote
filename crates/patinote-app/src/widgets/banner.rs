@@ -17,6 +17,8 @@ pub enum Icon {
     Info,
     /// The Patinote mark.
     Logo,
+    /// The quick switcher's magnifier.
+    Search,
 }
 
 impl Icon {
@@ -28,6 +30,7 @@ impl Icon {
             Self::Lock => include_bytes!("../../assets/icons/lock.svg"),
             Self::Info => include_bytes!("../../assets/icons/info.svg"),
             Self::Logo => include_bytes!("../../assets/icons/logo.svg"),
+            Self::Search => include_bytes!("../../assets/icons/search.svg"),
         }
     }
 }

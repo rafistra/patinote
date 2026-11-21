@@ -24,6 +24,9 @@ pub const BG_CARD_INLINE: Color = hex(0x1A201E);
 pub const BG_OVERLAY: Color = hex(0x172019);
 pub const BG_CURSORLINE: Color = hex(0x18201D);
 pub const BG_SELECTED: Color = hex(0x22403A);
+/// `bg.scrim`: over the editor while the quick switcher is open, so the
+/// text behind shows at 35% (mockup 05).
+pub const BG_SCRIM: Color = Color { a: 0.65, ..BG_APP };
 pub const BG_CODE_INLINE: Color = hex(0x1E2522);
 pub const BORDER_DEFAULT: Color = hex(0x242C29);
 pub const BORDER_STRONG: Color = hex(0x2E3A35);
