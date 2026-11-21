@@ -10,4 +10,5 @@ pub mod session;
 pub mod sheet;
 pub mod state;
 pub mod theme;
+pub mod vim;
 pub mod widgets;
