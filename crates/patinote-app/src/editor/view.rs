@@ -690,14 +690,8 @@ where
         let count = self.lines.len();
         let cur = (self.cursor.0.min(count.saturating_sub(1)), self.cursor.1);
 
-        renderer.fill_quad(
-            Quad {
-                bounds,
-                ..Quad::default()
-            },
-            BG_APP,
-        );
-
+        // No background fill: the editor sits on the window's `bg.app`
+        // (0002 section 11).
         let top = state.top.get().min(count.saturating_sub(1));
         let mut y = col.y;
         let mut i = top;
