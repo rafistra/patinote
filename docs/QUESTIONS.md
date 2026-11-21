@@ -218,4 +218,4 @@ Dengan tiny-skia, target buka (< 300 ms) dan RAM (< 100 MB) lolos, dan mengetik,
 - C. Ubah target RAM/buka di PRD untuk wgpu (perlu keputusan pemilik, agent tidak mengubah PRD).
 
 Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, dan gulir layar penuh hanya muncul saat seluruh layar berubah. Penyelidikan butuh waktu riset tersendiri sebelum bisa dijanjikan hasilnya.
-**Jawaban:** _(belum dijawab)_
+**Jawaban:** A, disetujui pemilik (21 November 2026). tiny-skia tetap bawaan untuk Gerbang 1; penyelidikan jalur penayangan di skala pecahan dikerjakan sebagai langkah tersendiri.

@@ -166,6 +166,6 @@ Satu run per renderer mencatat satu tombol yang baru tergambar 3–4 menit kemud
 ### 10.3 Kesimpulan
 
 - Dengan tiny-skia sebagai bawaan, target buka, RAM, dan semua target indeks terpenuhi. Seleksi visual, yang di prototipe 223 ms per frame, sekarang satu frame. Penyebabnya belum dipastikan; kemungkinan karena seleksi di aplikasi hanya mengubah latar baris yang terpilih, sedangkan di prototipe seluruh layar digambar ulang.
-- **Gulir layar penuh dengan tiny-skia tetap lambat**: 170–180 ms per frame saat menahan `j`, sama dengan temuan bagian 4.3. Waktu sampai `draw` selesai hanya 5–6 ms, jadi hampir seluruh waktunya ada setelah `draw`: rasterisasi dan penayangan lewat `softbuffer` di skala pecahan 1,25. Ini dicatat sebagai Q-017.
+- **Gulir layar penuh dengan tiny-skia tetap lambat**: 170–180 ms per frame saat menahan `j`, sama dengan temuan bagian 4.3. Waktu sampai `draw` selesai hanya 5–6 ms, jadi hampir seluruh waktunya ada setelah `draw`: rasterisasi dan penayangan lewat `softbuffer` di skala pecahan 1,25. Ini dicatat sebagai Q-017. Keputusan pemilik (pilihan A): tiny-skia tetap bawaan untuk Gerbang 1, dan jalur penayangan diselidiki sebagai langkah tersendiri; `renderer = "wgpu"` tersedia bagi yang lebih memilih gulir lancar.
 - p95 mengetik dengan tiny-skia (sampai 18 ms di dua dari tiga run) sedikit di atas 16 ms, tetapi jarak antar-frame tetap satu frame di p50. Pemeriksaan dengan mengetik sungguhan tetap pada pemilik (F-05.1).
 - wgpu lancar di semua skenario, tetapi waktu buka dan RAM-nya di atas target, seperti di langkah 0.6.
