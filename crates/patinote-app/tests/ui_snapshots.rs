@@ -699,3 +699,76 @@ fn mockup_07_reading_mode() {
         assert!(frame.count_near(READ_LINK, 20) >= area(100.0), "links");
     }
 }
+
+/// Mockups 03 and 04: classic and focus layouts; and 02 with the leader
+/// popup.
+#[test]
+fn mockups_02_03_04_layouts() {
+    use iced::keyboard::{Key, Modifiers, key};
+    let env = Env::new();
+    let mut app = app_with_recent(&env);
+    for name in ["Desain indeks Patinote", "Patinote", "2026-11-19"] {
+        command(&mut app, &format!("e {name}"));
+    }
+    command(&mut app, "b 1");
+    common::keys(&mut app, "12G");
+    let mut h = Harness::new();
+
+    command(&mut app, "layout classic");
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("03-classic.png"));
+    for (scale, tag) in [(1.25, "1.25x"), (2.0, "2x")] {
+        h.render(app.view().map(|_| ()), size(), scale)
+            .save(&out_dir().join(format!("03-classic@{tag}.png")));
+    }
+    assert!(frame.count(BG_PANEL) >= 200_000, "explorer and side panel");
+    assert!(
+        frame.count(TAB_ACTIVE_BG) < frame.count(BG_CHROME),
+        "tabs on the chrome"
+    );
+
+    command(&mut app, "layout focus");
+    common::keys(&mut app, "GoSatu hal yang masih terbuka");
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("04-focus.png"));
+    for (scale, tag) in [(1.25, "1.25x"), (2.0, "2x")] {
+        h.render(app.view().map(|_| ()), size(), scale)
+            .save(&out_dir().join(format!("04-focus@{tag}.png")));
+    }
+    // A few anti-aliased pixels may land on that color; a status line
+    // would be tens of thousands.
+    assert!(
+        frame.count(BG_STATUSLINE) < 100,
+        "no status line in focus mode"
+    );
+    assert!(
+        frame.count_near(MODE_INSERT, 16) >= 40,
+        "INSERT and the line cursor"
+    );
+    common::press_with(
+        &mut app,
+        Key::Named(key::Named::Escape),
+        Modifiers::default(),
+        None,
+        false,
+    );
+
+    command(&mut app, "layout minimal");
+    common::leader(&mut app, "e");
+    common::press(&mut app, "Escape");
+    common::leader(&mut app, "b");
+    common::press(&mut app, "Escape");
+    common::press_with(
+        &mut app,
+        Key::Named(key::Named::Space),
+        Modifiers::default(),
+        Some(" "),
+        false,
+    );
+    let frame = h.render(app.view().map(|_| ()), size(), 1.0);
+    frame.save(&out_dir().join("02-minimal-panels-open-leader.png"));
+    assert!(
+        frame.count(BG_STATUSLINE) >= 60_000,
+        "status line and leader popup"
+    );
+}

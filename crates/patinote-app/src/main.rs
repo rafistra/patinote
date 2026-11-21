@@ -97,6 +97,7 @@ fn main() -> std::process::ExitCode {
         .title(App::title)
         .subscription(App::subscription)
         .theme(|_: &App| theme::theme())
+        .scale_factor(App::zoom)
         .default_font(fonts::DEFAULT)
         .exit_on_close_request(false)
         .window_size(size);

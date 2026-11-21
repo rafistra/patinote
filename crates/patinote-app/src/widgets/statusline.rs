@@ -84,6 +84,8 @@ pub struct StatusLine {
     pub buttons: Vec<StatusButton>,
     /// `line:column` of the cursor.
     pub position: Option<String>,
+    /// A muted note at the right, before the position (`layout: classic`).
+    pub right_note: Option<String>,
 }
 
 fn segment<'a, Message: 'a>(
@@ -164,6 +166,9 @@ impl StatusLine {
                 btn = btn.on_press(m);
             }
             line = line.push(container(btn).center_y(Length::Fill));
+        }
+        if let Some(note) = &self.right_note {
+            line = line.push(segment(typed(note.clone(), TYPE_MONO_UI).color(TEXT_MUTED)));
         }
         if let Some(pos) = &self.position {
             line = line

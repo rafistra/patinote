@@ -184,6 +184,8 @@ impl App {
         self.explorer_open = !self.explorer_open;
         self.explorer_focus = self.explorer_open;
         self.focus = None;
+        self.remember_panels();
+        let save = self.save_vault_state();
         if self.explorer_open {
             self.rebuild_tree();
             // Select the active note's row, opening its folders.
@@ -200,12 +202,24 @@ impl App {
                     .and_then(|p| w.explorer.tree.rows().iter().position(|r| r.path == p))
                     .or(Some(0));
             }
-            return self.load_tags();
+            return Task::batch([save, self.load_tags()]);
         }
-        Task::none()
+        self.release_explorer();
+        save
     }
 
-    fn load_tags(&self) -> Task<Message> {
+    /// A closed explorer drops its rows and tags (F-28.3); only which
+    /// folders were open is kept.
+    pub(super) fn release_explorer(&mut self) {
+        if let Some(w) = self.workspace_mut() {
+            let open = w.explorer.tree.open_folders().clone();
+            w.explorer.tree = Tree::new(Vec::new(), Vec::new(), open);
+            w.explorer.tags = Vec::new();
+            w.explorer.selected = None;
+        }
+    }
+
+    pub(super) fn load_tags(&self) -> Task<Message> {
         let Some(w) = self.workspace() else {
             return Task::none();
         };
@@ -771,6 +785,10 @@ impl App {
         let (true, Some(w)) = (self.explorer_open, self.workspace()) else {
             return body;
         };
+        let classic = self.layout() == patinote_core::config::Layout::Classic;
+        if self.layout() == patinote_core::config::Layout::Focus {
+            return body;
+        }
         let rows = w.explorer.tree.rows();
         let editing = w.explorer.editing.as_ref().map(|(_, e)| e.clone());
         let active = self.active_document().map(|d| d.path.clone());
@@ -789,9 +807,11 @@ impl App {
             on_select: Message::ExplorerClick,
             on_input: Message::InlineInput,
             on_submit: Message::InlineSubmit,
+            width: self.explorer_width(),
+            find: classic.then_some(Message::FindNote),
         }
         .view();
-        row![explorer, body].into()
+        row![explorer, self.edge(super::layout::Edge::Explorer), body].into()
     }
 
     /// The open dialog over everything, on the scrim, 72 px from the top.

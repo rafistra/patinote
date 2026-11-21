@@ -27,6 +27,8 @@ pub struct AppState {
     pub last_vault: Option<PathBuf>,
     /// Window size in logical pixels (F-28).
     pub window: Option<(f32, f32)>,
+    /// Text size, 1.0 being 100 % (F-28: `Ctrl+=`, `Ctrl+-`, `Ctrl+0`).
+    pub zoom: Option<f32>,
 }
 
 /// A note opened recently.
@@ -51,8 +53,12 @@ pub struct VaultState {
     pub active: Option<usize>,
     /// Recently opened notes, newest first.
     pub recent: Vec<Recent>,
-    /// The side panel was open (F-28.11).
+    /// The side panel and the explorer were open (F-28.11).
     pub panel_open: bool,
+    pub explorer_open: bool,
+    /// Widths the panels were dragged to (F-28.7).
+    pub explorer_w: Option<f32>,
+    pub panel_w: Option<f32>,
     /// The cursor (line, character) of each open buffer, to restore the
     /// session (F-09.6).
     pub cursors: HashMap<String, (usize, usize)>,

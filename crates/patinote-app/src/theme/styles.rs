@@ -292,6 +292,41 @@ pub fn task_box(_: &Theme, status: checkbox::Status) -> checkbox::Style {
     }
 }
 
+/// The tab strip of classic mode's side panel (mockup 03): `bg.app`.
+pub fn segments(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(Color::TRANSPARENT, 0.0, RADIUS_CONTROL),
+        ..filled(BG_APP, TEXT_PRIMARY)
+    }
+}
+
+/// One tab of that strip; the chosen one on `bg.statusline.segment`.
+pub fn segment(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let mut s = button_style(
+            on.then_some(BG_STATUSLINE_SEGMENT),
+            if on { TEXT_STRONG } else { TEXT_MUTED },
+            None,
+        );
+        s.border.radius = RADIUS_ITEM.into();
+        s
+    }
+}
+
+/// The leader popup (mockup 02): `bg.statusline` with `border.strong`.
+pub fn leader_popup(_: &Theme) -> container::Style {
+    container::Style {
+        border: border(BORDER_STRONG, SIZE_BORDER, RADIUS_POPUP),
+        ..filled(BG_STATUSLINE, TEXT_PRIMARY)
+    }
+}
+
+/// The edge between a panel and the editor, which can be dragged (F-28.7);
+/// `accent` 2 px while the mouse is on it (0003 section 7).
+pub fn divider(hover: bool) -> impl Fn(&Theme) -> container::Style {
+    move |_| filled(if hover { ACCENT } else { BORDER_DEFAULT }, TEXT_PRIMARY)
+}
+
 // --- Buttons ------------------------------------------------------------------
 
 fn button_style(bg: Option<Color>, text: Color, edge: Option<Color>) -> button::Style {
@@ -376,6 +411,20 @@ pub fn backlink_card(
         };
         let mut s = button_style(Some(bg), TEXT_PRIMARY, None);
         s.border.radius = RADIUS_CONTROL.into();
+        s
+    }
+}
+
+/// A tab in classic mode (mockup 03): the active one on `bg.app`, the others
+/// on the chrome; each set off by `border.default` at its right.
+pub fn classic_tab(active: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, _| {
+        let mut s = button_style(
+            active.then_some(BG_APP),
+            if active { TEXT_STRONG } else { TEXT_MUTED },
+            None,
+        );
+        s.border.radius = iced::border::Radius::default();
         s
     }
 }
