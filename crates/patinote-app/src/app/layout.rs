@@ -86,6 +86,33 @@ impl App {
         }
     }
 
+    // --- Bench ------------------------------------------------------------------
+
+    /// `--bench`: sends the next scripted key once the last one is drawn,
+    /// then idles before the report.
+    pub(super) fn bench_frame(&mut self) -> Task<Message> {
+        let drawn = self.draw_clock.last();
+        let Some(bench) = &mut self.bench else {
+            return Task::none();
+        };
+        let was_done = bench.done;
+        if let Some(event) = bench.frame(drawn) {
+            return self.on_key(event, false);
+        }
+        if bench.done && !was_done {
+            return Task::future(async {
+                std::thread::sleep(crate::bench::IDLE);
+                Message::BenchReport
+            });
+        }
+        Task::none()
+    }
+
+    /// The clock the editor marks when it draws, during `--bench`.
+    pub(super) fn bench_clock(&self) -> Option<crate::bench::DrawClock> {
+        self.bench.as_ref().map(|_| self.draw_clock.clone())
+    }
+
     // --- Leader popup ------------------------------------------------------------
 
     /// Space was pressed: the popup shows if nothing follows within 300 ms.

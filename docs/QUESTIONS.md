@@ -199,3 +199,23 @@ Rekomendasi agent: A.
 
 Rekomendasi agent: A.
 **Jawaban:** A, disetujui pemilik (21 November 2026).
+
+## Q-017 · Gulir layar penuh dengan tiny-skia lambat di skala 1,25 (langkah 2.10, 21 November 2026)
+
+**Konteks:** Pengukuran akhir (`0002` bagian 10) di laptop pemilik (Iris Xe, GNOME Wayland, skala 1,25, 48 Hz) dengan vault 10.000 catatan:
+
+| | tiny-skia (bawaan) | wgpu |
+| --- | --- | --- |
+| Buka | 244–284 ms | 489–503 ms |
+| RAM idle (PSS) | 82–83 MB | 157–165 MB |
+| Menahan `j`, jarak antar-frame p50 | 173–182 ms | 20,8 ms |
+| Mengetik, jarak antar-frame p50 | 20,8 ms | 20,8 ms |
+
+Dengan tiny-skia, target buka (< 300 ms) dan RAM (< 100 MB) lolos, dan mengetik, mencari, serta seleksi visual tetap satu frame. Tetapi saat seluruh layar berubah (menahan `j`, `Ctrl+d`, berpindah catatan) satu frame butuh 170–180 ms. `draw` sendiri selesai dalam 5–6 ms, jadi waktunya habis di rasterisasi dan penayangan `softbuffer` pada skala pecahan. Dengan wgpu semuanya lancar, tetapi buka dan RAM melewati target. PRD tidak punya angka untuk gulir, tetapi aturan "UI tidak pernah menunggu" dan target latensi mengetik menunjukkan gulir yang tersendat ini tidak diharapkan.
+**Pilihan:**
+- A. Tetap tiny-skia sebagai bawaan untuk Gerbang 1. Selidiki jalur penayangan tiny-skia di skala pecahan sebagai langkah tersendiri (misalnya mengukur rasterisasi vs `softbuffer`, mencoba skala 1,0 atau 2,0, atau melapor ke Iced). Pengguna yang lebih suka gulir lancar bisa memasang `renderer = "wgpu"`.
+- B. Ganti bawaan ke wgpu. Gulir lancar, tetapi target buka dan RAM PRD tidak terpenuhi.
+- C. Ubah target RAM/buka di PRD untuk wgpu (perlu keputusan pemilik, agent tidak mengubah PRD).
+
+Rekomendasi agent: A. Dua target PRD yang punya angka lolos dengan tiny-skia, dan gulir layar penuh hanya muncul saat seluruh layar berubah. Penyelidikan butuh waktu riset tersendiri sebelum bisa dijanjikan hasilnya.
+**Jawaban:** _(belum dijawab)_

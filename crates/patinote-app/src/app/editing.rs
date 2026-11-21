@@ -542,6 +542,7 @@ impl App {
             }
         });
         editor.search = doc.vim.last_search();
+        editor.drawn = self.bench_clock();
         match self.layout() {
             patinote_core::config::Layout::Classic => editor.max_width = SIZE_EDITOR_MAXW_CLASSIC,
             patinote_core::config::Layout::Focus => {

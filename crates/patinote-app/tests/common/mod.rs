@@ -51,6 +51,7 @@ impl Env {
             state_home: self.path("state"),
             runtime_dir: None,
             watch: false,
+            bench: None,
         }
     }
 
@@ -91,6 +92,46 @@ pub fn run(app: &mut App, task: Task<Message>) {
             }
         }
     }
+}
+
+/// Like [`run`], for tasks that never end (the watcher, the socket): every
+/// stream is polled in turn until `done` holds, or for at most `limit`.
+/// Returns whether `done` held.
+pub fn run_until(
+    app: &mut App,
+    task: Task<Message>,
+    limit: std::time::Duration,
+    done: impl Fn(&App) -> bool,
+) -> bool {
+    use iced_runtime::futures::futures::future::{Either, select};
+    use iced_runtime::futures::futures::stream::SelectAll;
+    let deadline = std::time::Instant::now() + limit;
+    let mut streams = SelectAll::new();
+    if let Some(s) = iced_runtime::task::into_stream(task) {
+        streams.push(s);
+    }
+    while !done(app) {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() || streams.is_empty() {
+            return false;
+        }
+        let (tx, rx) = iced_runtime::futures::futures::channel::oneshot::channel::<()>();
+        std::thread::spawn(move || {
+            std::thread::sleep(left);
+            let _ = tx.send(());
+        });
+        match block_on(select(streams.next(), rx)) {
+            Either::Left((Some(iced_runtime::Action::Output(message)), _)) => {
+                if let Some(s) = iced_runtime::task::into_stream(app.update(message)) {
+                    streams.push(s);
+                }
+            }
+            Either::Left((Some(_), _)) => {}
+            Either::Left((None, _)) => return done(app),
+            Either::Right(_) => return done(app),
+        }
+    }
+    true
 }
 
 pub fn send(app: &mut App, message: Message) {

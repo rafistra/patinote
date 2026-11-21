@@ -10,7 +10,11 @@ use patinote_core::location;
 /// test that checks system fonts are not scanned.
 const FONT_REPORT: &str = "PATINOTE_FONT_REPORT";
 
+/// The Wayland app id and X11 class, the same as the desktop file's name.
+const APP_ID: &str = "patinote";
+
 fn main() -> std::process::ExitCode {
+    let started = patinote_app::bench::started_ns();
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_max_level(tracing::Level::WARN)
@@ -21,7 +25,7 @@ fn main() -> std::process::ExitCode {
         Ok(a) => a,
         Err(e) => {
             eprintln!("patinote-app: {e}");
-            eprintln!("usage: patinote-app [--vault PATH] [--open NOTE]");
+            eprintln!("usage: patinote-app [--vault PATH] [--open NOTE] [--bench]");
             return std::process::ExitCode::from(2);
         }
     };
@@ -92,6 +96,7 @@ fn main() -> std::process::ExitCode {
         state_home,
         runtime_dir,
         watch: true,
+        bench: args.bench.then_some(started),
     };
     let mut app = iced::application(move || App::new(launch.clone()), App::update, App::view)
         .title(App::title)
@@ -100,6 +105,15 @@ fn main() -> std::process::ExitCode {
         .scale_factor(App::zoom)
         .default_font(fonts::DEFAULT)
         .exit_on_close_request(false)
+        // Matches `patinote.desktop`, so the desktop shows the app's icon.
+        .window(iced::window::Settings {
+            platform_specific: iced::window::settings::PlatformSpecific {
+                application_id: APP_ID.into(),
+                ..Default::default()
+            },
+            exit_on_close_request: false,
+            ..Default::default()
+        })
         .window_size(size);
     for font in fonts::FONTS {
         app = app.font(font);

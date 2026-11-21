@@ -87,6 +87,9 @@ pub fn restart_without_system_fonts(backend: &str) -> Result<(), String> {
     cmd.args(std::env::args_os().skip(1))
         .env(RESTARTED, "1")
         .env("FONTCONFIG_FILE", file);
+    if std::env::var_os(crate::bench::STARTED).is_none() {
+        cmd.env(crate::bench::STARTED, crate::bench::now_ns().to_string());
+    }
     if std::env::var_os("ICED_BACKEND").is_none() {
         cmd.env("ICED_BACKEND", backend);
     }
