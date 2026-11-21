@@ -81,6 +81,10 @@ pub struct App {
     window_height: f32,
     /// Quitting once every note is saved.
     quitting: bool,
+    /// The app has asked Iced to exit.
+    exited: bool,
+    /// The note `--open` asked for, until the vault opens or is handed over.
+    startup_note: Option<String>,
     /// The clipboard text last seen, so focus changes only reload the
     /// register when the clipboard changed.
     clipboard: Option<String>,
@@ -190,6 +194,10 @@ pub struct Workspace {
     watch_limit: Option<String>,
     /// Link targets (lowercase) that match several notes, per open note.
     ambiguous: HashMap<String, HashSet<String>>,
+    /// Writes left half-done by a crash have been undone; until then notes
+    /// asked for wait in `waiting`.
+    recovered: bool,
+    waiting: Vec<String>,
 }
 
 /// Where the opening index update is.
@@ -264,8 +272,8 @@ pub enum Message {
     /// The vault was open in another app, which was asked to come to the
     /// front: this one closes when it answered.
     HandedOver(bool),
-    /// Undoing writes left half-done by a crash failed.
-    RecoverFailed(String),
+    /// Writes left half-done by a crash were undone, or why they could not be.
+    Recovered(Option<String>),
     /// The wheel scrolled the editor: first and last visible line.
     Scrolled(usize, usize),
     /// Notes and attachments for finding and linking, from the index.
@@ -369,6 +377,8 @@ impl App {
             cmdline: Cmdline::default(),
             window_height,
             quitting: false,
+            exited: false,
+            startup_note: launch.note,
             clipboard: None,
             switcher: None,
             modifiers: Modifiers::default(),
@@ -413,17 +423,9 @@ impl App {
             .or_else(|| app.config.vault_default.clone());
         let task = match vault {
             Some(path) => {
-                let open = app.open_vault(&path);
-                // Not `chain`: the vault's tasks (index events, watcher,
-                // socket) run as long as the vault is open. The workspace
-                // exists once `open_vault` returns.
-                match launch.note {
-                    Some(note) => Task::batch([
-                        open,
-                        Task::done(Message::Remote(Request::Open { path: note })),
-                    ]),
-                    None => open,
-                }
+                // The note from `--open` opens once interrupted writes are
+                // undone, or goes to the app that has the vault open.
+                app.open_vault(&path)
             }
             None => Task::none(),
         };
@@ -498,8 +500,12 @@ impl App {
                     // One app per vault: two would autosave over each
                     // other. The running one comes to the front instead.
                     let socket = ipc::socket_path(dir, &paths.id);
+                    let request = match self.startup_note.take() {
+                        Some(path) => Request::Open { path },
+                        None => Request::Activate,
+                    };
                     return Task::future(async move {
-                        let sent = ipc::send(&socket, &Request::Activate);
+                        let sent = ipc::send(&socket, &request);
                         Message::HandedOver(sent.is_ok_and(|a| a.ok))
                     });
                 }
@@ -567,8 +573,7 @@ impl App {
             })
             .then(move |failed| {
                 let reads = reads.take().unwrap_or_default();
-                Task::batch(failed.map(|e| Task::done(Message::RecoverFailed(e))))
-                    .chain(Task::batch(reads))
+                Task::done(Message::Recovered(failed.clone())).chain(Task::batch(reads))
             }),
         );
         // The active note itself gone: its neighbour.
@@ -597,6 +602,8 @@ impl App {
             watch_mode: None,
             watch_limit: None,
             ambiguous: HashMap::new(),
+            recovered: false,
+            waiting: self.startup_note.take().into_iter().collect(),
         }));
         Task::batch(tasks)
     }
@@ -641,6 +648,13 @@ impl App {
     /// Opens the note at `path` (relative to the vault) in a buffer. The
     /// note being left is saved first (F-05).
     fn open_note(&mut self, path: String) -> Task<Message> {
+        // Read only once interrupted writes are undone (see `Recovered`).
+        if let Some(w) = self.workspace_mut()
+            && !w.recovered
+        {
+            w.waiting.push(path);
+            return Task::none();
+        }
         if self.active_document().is_some_and(|d| d.path != path) {
             self.record_jump();
         }
@@ -893,6 +907,7 @@ impl App {
             let _ = std::fs::remove_file(server.path());
         }
         let save = [self.save_app_state(), self.save_vault_state()];
+        self.exited = true;
         Task::batch(save).chain(iced::exit())
     }
 
@@ -1030,14 +1045,31 @@ impl App {
                 Task::none()
             }
             Message::CloseRequested(_) => self.quit(false),
-            Message::HandedOver(true) => iced::exit(),
-            Message::RecoverFailed(e) => {
-                tracing::warn!("cannot recover interrupted writes: {e}");
-                self.say(
-                    Level::Error,
-                    format!("Can't undo an interrupted write: {e}"),
-                );
-                Task::none()
+            Message::HandedOver(true) => {
+                self.exited = true;
+                iced::exit()
+            }
+            Message::Recovered(failed) => {
+                if let Some(e) = failed {
+                    tracing::warn!("cannot recover interrupted writes: {e}");
+                    self.say(
+                        Level::Error,
+                        format!("Can't undo an interrupted write: {e}"),
+                    );
+                }
+                let waiting = match self.workspace_mut() {
+                    Some(w) => {
+                        w.recovered = true;
+                        std::mem::take(&mut w.waiting)
+                    }
+                    None => Vec::new(),
+                };
+                Task::batch(
+                    waiting
+                        .into_iter()
+                        .map(|p| self.remote_open(p))
+                        .collect::<Vec<_>>(),
+                )
             }
             Message::HandedOver(false) => {
                 self.say(Level::Error, "Patinote is already running for this vault");
@@ -1146,10 +1178,7 @@ impl App {
                 self.hover_edge = edge;
                 Task::none()
             }
-            Message::PanelTab(outline) => {
-                self.panel_outline = outline;
-                Task::none()
-            }
+            Message::PanelTab(outline) => self.panel_tab(outline),
             Message::CloseTab(i) => {
                 let select = self.select_buffer(i);
                 Task::batch([select, self.close_or_quit(false)])

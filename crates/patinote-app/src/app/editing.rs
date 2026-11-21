@@ -159,6 +159,11 @@ impl App {
         self.quitting
     }
 
+    /// Whether the app has asked to exit, for tests.
+    pub fn exited(&self) -> bool {
+        self.exited
+    }
+
     /// Whether the active note has unsaved changes, for tests.
     pub fn active_dirty(&self) -> Option<bool> {
         self.active_document().map(Document::dirty)
@@ -505,6 +510,8 @@ impl App {
         let now = Instant::now();
         let mut message = None;
         let mut reread = None;
+        // A read after a save that worked: it must not hold up the rest.
+        let mut recheck = None;
         let mut next = Task::none();
         if let Some(w) = self.workspace_mut() {
             if let Some(i) = w.closing.iter().position(|d| d.path == done.path) {
@@ -541,11 +548,13 @@ impl App {
             {
                 doc.finish_save(&done, now);
                 message = landed_message(doc);
-                let recheck = std::mem::take(&mut doc.recheck);
-                if doc.save == Save::Changed || recheck {
-                    // The hash on disk differs (F-11.3), or the disk changed
-                    // while the save ran: read it for the banner.
+                let changed_meanwhile = std::mem::take(&mut doc.recheck);
+                if doc.save == Save::Changed {
+                    // The hash on disk differs (F-11.3): read it for the banner.
                     reread = Some(doc.path.clone());
+                } else if changed_meanwhile {
+                    // The disk changed while the save ran: look again.
+                    recheck = Some(doc.path.clone());
                 }
             }
         }
@@ -555,20 +564,21 @@ impl App {
         if let Some(path) = reread {
             return self.read_disk(path);
         }
+        let recheck = recheck.map_or_else(Task::none, |p| self.read_disk(p));
         if self.workspace().is_some_and(|w| !w.closing.is_empty()) {
-            return next;
+            return Task::batch([recheck, next]);
         }
         if self.quitting {
             if self.save_failed() {
                 // Never quit with text that is not on disk.
                 self.quitting = false;
-                return Task::none();
+                return recheck;
             }
             if !self.unsaved() {
-                return self.quit(false);
+                return Task::batch([recheck, self.quit(false)]);
             }
         }
-        Task::none()
+        recheck
     }
 
     fn save_failed(&self) -> bool {

@@ -209,3 +209,15 @@ fn f08_suggestions_and_the_picker_close_when_another_note_opens() {
     );
     assert_eq!(app.picker_choices(), Vec::<String>::new());
 }
+
+#[test]
+fn f08_6_a_link_to_a_new_note_outside_the_vault_says_so() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[x](../../Luar.md)<Esc>0lgd");
+    assert_eq!(title(&app), "Ide cepat");
+    assert_eq!(
+        app.message().map(|(l, _)| l),
+        Some(patinote_app::theme::styles::Level::Error)
+    );
+}

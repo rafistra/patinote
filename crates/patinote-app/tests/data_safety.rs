@@ -352,3 +352,58 @@ fn a_change_from_outside_while_a_save_runs_is_read_once_it_lands() {
     }
     assert_eq!(app.active_text().as_deref(), Some("dari luar\n"));
 }
+
+#[test]
+fn quitting_goes_on_when_the_disk_changed_during_the_last_save() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduabelas<Esc>");
+    let quit = command_held(&mut app, "wqa");
+    // A watcher event (our own earlier write, say) while the save runs.
+    send(
+        &mut app,
+        Message::DiskState(NOTE.into(), Some(b"lain\n".to_vec())),
+    );
+    run(&mut app, quit);
+    assert!(disk(&env, NOTE).starts_with("duabelas\n"));
+    assert!(app.exited(), "the app quit once the save landed");
+}
+
+#[test]
+fn a_note_opened_at_startup_waits_for_interrupted_writes_to_be_undone() {
+    use patinote_app::session::VaultPaths;
+    use patinote_core::write::{Actor, Journal, Op, Transaction, commit, expect_current};
+    let env = Env::new();
+    let vault = env.vault();
+    let before = disk(&env, NOTE);
+    let paths = VaultPaths::resolve(&vault, &env.path("cache"), &env.path("state")).unwrap();
+    let journal = Journal::for_vault(&paths.state_home, &paths.id);
+    let done = commit(
+        &vault,
+        &journal,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: NOTE.into(),
+                content: b"setengah jadi\n".to_vec(),
+                expect: expect_current(&vault, NOTE).unwrap(),
+            }],
+        },
+    )
+    .unwrap();
+    let manifest = journal.dir().join(&done.id).join("manifest.json");
+    let text = std::fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("\"committed\"", "\"pending\"");
+    std::fs::write(&manifest, text).unwrap();
+
+    // A request arrives before the startup tasks (recovery) have run.
+    let (mut app, startup) = App::new(env.launch(Some(vault), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open { path: NOTE.into() }),
+    );
+    run(&mut app, startup);
+    assert_eq!(disk(&env, NOTE), before, "recovered");
+    assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
+}

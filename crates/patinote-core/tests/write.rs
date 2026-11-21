@@ -362,6 +362,16 @@ fn recover_goes_past_a_damaged_journal_entry() {
         v.journal.entry(&crashed.id).unwrap().status,
         EntryStatus::RolledBack
     );
+    // Reported once: the damaged manifest is set aside (kept for a person
+    // to look at), so later starts are not an error every time.
+    assert!(recover(&v.root, &v.journal).is_ok());
+    assert!(
+        v.journal
+            .dir()
+            .join(&old.id)
+            .join("manifest.json.damaged")
+            .is_file()
+    );
 }
 
 #[test]

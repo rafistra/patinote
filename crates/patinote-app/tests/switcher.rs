@@ -183,3 +183,21 @@ fn f10_2_shift_enter_checks_the_name_like_the_dialog() {
     shift_enter(&mut app, "a#b");
     assert_eq!(open_note_path(&app).as_deref(), Some("a#b"));
 }
+
+#[test]
+fn f07_5_shift_enter_creates_a_note_inside_a_folder() {
+    let env = Env::new();
+    let mut app = start(&env);
+    press_with(
+        &mut app,
+        Key::Character("o".into()),
+        Modifiers::CTRL | Modifiers::SHIFT,
+        None,
+        false,
+    );
+    shift_enter(&mut app, "Proyek/Ide baru");
+    assert_eq!(open_note_path(&app).as_deref(), Some("Ide baru"));
+    keys(&mut app, "isi<Esc>");
+    wait(&mut app, Duration::from_millis(1100));
+    assert!(env.path("Vault/Proyek/Ide baru.md").exists());
+}

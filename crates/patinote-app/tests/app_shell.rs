@@ -310,3 +310,32 @@ fn a_second_app_for_an_open_vault_hands_over_instead_of_opening_it() {
     common::run(&mut second, task);
     drop(first);
 }
+
+#[test]
+fn a_note_asked_for_at_startup_is_handed_to_the_running_app() {
+    let env = Env::new();
+    let vault = env.vault();
+    let runtime = env.path("run");
+    let launch = |note: Option<&str>| patinote_app::app::Launch {
+        runtime_dir: Some(runtime.clone()),
+        note: note.map(str::to_owned),
+        ..env.launch(Some(vault.clone()), Config::default())
+    };
+    let (mut first, first_task) = App::new(launch(None));
+    let (mut second, task) = App::new(launch(Some("Proyek/Patinote.md")));
+    common::run(&mut second, task);
+    assert_ne!(
+        second.message().map(|(l, _)| l),
+        Some(Level::Error),
+        "{:?}",
+        second.message()
+    );
+    let opened = common::run_until(
+        &mut first,
+        first_task,
+        std::time::Duration::from_secs(10),
+        |a| a.active_cursor().is_some(),
+    );
+    assert!(opened, "the running app opened the note");
+    assert_eq!(open_paths(&first), ["Proyek/Patinote.md"]);
+}

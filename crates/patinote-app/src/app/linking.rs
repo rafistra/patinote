@@ -37,6 +37,8 @@ pub enum Followed {
     },
     /// Nothing matches: a new note at this path.
     Missing(String),
+    /// Nothing matches, and a new note would be outside the vault.
+    Outside,
 }
 
 /// The open link suggestions.
@@ -168,9 +170,8 @@ impl App {
                 let found = store.link_candidates(&target).unwrap_or_default();
                 let resolver = Resolver::new(found);
                 match resolver.resolve(&source, kind, &target) {
-                    None => Followed::Missing(
-                        missing_note_path(&source, kind, &target).unwrap_or_default(),
-                    ),
+                    None => missing_note_path(&source, kind, &target)
+                        .map_or(Followed::Outside, Followed::Missing),
                     Some(r) if r.is_ambiguous() => Followed::Ambiguous {
                         name: target.clone(),
                         choices: r
@@ -224,6 +225,10 @@ impl App {
                 self.open_externally_path(&full.to_string_lossy())
             }
             Followed::Missing(path) if path.is_empty() => Task::none(),
+            Followed::Outside => {
+                self.say(Level::Error, format!("\"{name}\" points outside the vault"));
+                Task::none()
+            }
             // A note that does not exist yet opens empty and is written only
             // once it has text (F-08.6).
             Followed::Missing(path) => self.open_new_note(path, false),

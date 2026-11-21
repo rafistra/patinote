@@ -143,7 +143,13 @@ impl App {
         Task::perform(
             w.session.query(move |store| {
                 let resolve = |target: &str, markdown: bool| -> Option<String> {
-                    let clean = target.split(['#', '|']).next().unwrap_or(target).trim();
+                    // A Markdown link's target is already the path alone; a
+                    // `#` or `|` in it belongs to the file name.
+                    let clean = if markdown {
+                        target.trim()
+                    } else {
+                        target.split(['#', '|']).next().unwrap_or(target).trim()
+                    };
                     if clean.starts_with("http://")
                         || clean.starts_with("https://")
                         || clean.is_empty()
@@ -310,9 +316,13 @@ impl App {
             }
             return Task::none();
         }
-        let (name, sub) = match target.split('|').next().unwrap_or(target).split_once('#') {
-            Some((n, s)) => (n.to_owned(), Some(s.to_owned())),
-            None => (target.split('|').next().unwrap_or(target).to_owned(), None),
+        let (name, sub) = if link.markdown {
+            (target.to_owned(), link.subpath.clone())
+        } else {
+            match target.split('|').next().unwrap_or(target).split_once('#') {
+                Some((n, s)) => (n.to_owned(), Some(s.to_owned())),
+                None => (target.split('|').next().unwrap_or(target).to_owned(), None),
+            }
         };
         let kind = if link.markdown {
             LinkKind::Markdown
