@@ -109,16 +109,9 @@ pub fn encode(text: &str, format: &Format) -> Vec<u8> {
             .collect();
         let was: Vec<&str> = old.iter().map(|(t, _)| t.as_str()).collect();
         let mut crlf = vec![format.crlf; new.len()];
-        // Saving starts on the UI thread: past the deadline the diff is
-        // coarser, and lines it misses take the first line's ending.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(50);
-        let ops = similar::capture_diff_slices_deadline(
-            similar::Algorithm::Myers,
-            &was,
-            &bare,
-            Some(deadline),
-        );
-        for op in ops {
+        // No deadline: a coarser diff would change the endings of lines
+        // that did not change. Saves encode off the UI thread (`SaveJob::run`).
+        for op in similar::capture_diff_slices(similar::Algorithm::Myers, &was, &bare) {
             if let similar::DiffOp::Equal {
                 old_index,
                 new_index,

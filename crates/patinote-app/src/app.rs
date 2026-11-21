@@ -160,6 +160,15 @@ pub enum Screen {
     Vault(Box<Workspace>),
 }
 
+/// A note asked for before interrupted writes were undone.
+#[derive(Debug, Clone)]
+enum Waiting {
+    /// From `--open` or the socket: checked like any request.
+    Request(String),
+    /// From inside the app, with the path it named.
+    Note(String),
+}
+
 /// An open vault and what the user has open in it.
 pub struct Workspace {
     session: Session,
@@ -197,7 +206,7 @@ pub struct Workspace {
     /// Writes left half-done by a crash have been undone; until then notes
     /// asked for wait in `waiting`.
     recovered: bool,
-    waiting: Vec<String>,
+    waiting: Vec<Waiting>,
 }
 
 /// Where the opening index update is.
@@ -272,8 +281,6 @@ pub enum Message {
     /// The vault was open in another app, which was asked to come to the
     /// front: this one closes when it answered.
     HandedOver(bool),
-    /// Writes left half-done by a crash were undone, or why they could not be.
-    Recovered(Option<String>),
     /// The wheel scrolled the editor: first and last visible line.
     Scrolled(usize, usize),
     /// Notes and attachments for finding and linking, from the index.
@@ -531,7 +538,6 @@ impl App {
         self.explorer_open = state.explorer_open || layout == Layout::Classic;
         // The last session's buffers and cursors come back (F-09.6).
         let mut buffers = Vec::new();
-        let mut reads = Vec::new();
         let mut active = None;
         for (id, path) in state.buffers.iter().enumerate() {
             if !root.join(path).is_file() {
@@ -544,12 +550,7 @@ impl App {
             if let Some(c) = state.cursors.get(path) {
                 self.pending_cursor.insert(path.clone(), *c);
             }
-            let file = root.join(path);
-            let p = path.clone();
-            reads.push(Task::future(async move {
-                let bytes = std::fs::read(&file).map_err(|e| e.to_string());
-                Message::NoteLoaded(p, bytes)
-            }));
+            // Read once interrupted writes are undone (`IndexEvent::Recovered`).
             buffers.push(Buffer {
                 path: path.clone(),
                 doc: None,
@@ -559,23 +560,6 @@ impl App {
                 read: None,
             });
         }
-        // Writes left half-done by a crash are undone, off the UI thread,
-        // before the last session's notes are read, so no note opens with
-        // half-written text. (The session thread runs it again, finding
-        // nothing to do.)
-        let (r, j) = (root.clone(), journal.clone());
-        let mut reads = Some(reads);
-        tasks.push(
-            Task::future(async move {
-                patinote_core::write::recover(&r, &j)
-                    .err()
-                    .map(|e| e.to_string())
-            })
-            .then(move |failed| {
-                let reads = reads.take().unwrap_or_default();
-                Task::done(Message::Recovered(failed.clone())).chain(Task::batch(reads))
-            }),
-        );
         // The active note itself gone: its neighbour.
         let active = active.or_else(|| {
             let last = buffers.len().checked_sub(1)?;
@@ -603,7 +587,12 @@ impl App {
             watch_limit: None,
             ambiguous: HashMap::new(),
             recovered: false,
-            waiting: self.startup_note.take().into_iter().collect(),
+            waiting: self
+                .startup_note
+                .take()
+                .map(Waiting::Request)
+                .into_iter()
+                .collect(),
         }));
         Task::batch(tasks)
     }
@@ -652,7 +641,7 @@ impl App {
         if let Some(w) = self.workspace_mut()
             && !w.recovered
         {
-            w.waiting.push(path);
+            w.waiting.push(Waiting::Note(path));
             return Task::none();
         }
         if self.active_document().is_some_and(|d| d.path != path) {
@@ -789,6 +778,46 @@ impl App {
                 Task::none()
             }
         }
+    }
+
+    /// Writes left half-done by a crash are undone: the last session's notes
+    /// and the notes asked for meanwhile are read now, so none opens with
+    /// half-written text.
+    fn recovered(&mut self, failed: Option<String>) -> Task<Message> {
+        if let Some(e) = failed {
+            self.say(
+                Level::Error,
+                format!("Can't undo an interrupted write: {e}"),
+            );
+        }
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
+        let waiting = std::mem::take(&mut w.waiting);
+        let root = w.session.paths.root.clone();
+        let restored: Vec<String> = w
+            .buffers
+            .iter()
+            .filter(|b| b.doc.is_none())
+            .map(|b| b.path.clone())
+            .collect();
+        let mut tasks: Vec<Task<Message>> = restored
+            .into_iter()
+            .map(|p| {
+                let file = root.join(&p);
+                Task::future(async move {
+                    let bytes = std::fs::read(&file).map_err(|e| e.to_string());
+                    Message::NoteLoaded(p, bytes)
+                })
+            })
+            .collect();
+        for wait in waiting {
+            tasks.push(match wait {
+                Waiting::Request(p) => self.remote_open(p),
+                Waiting::Note(p) => self.open_note(p),
+            });
+        }
+        Task::batch(tasks)
     }
 
     /// Opens the note named `name` (a name, alias or path), as `:e` does.
@@ -932,7 +961,11 @@ impl App {
     fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ChooseFolder => Self::choose_folder(),
-            Message::FolderChosen(Some(folder)) => self.open_vault(&folder),
+            Message::FolderChosen(Some(folder)) => {
+                // `--open` named a note of the vault it was launched for.
+                self.startup_note = None;
+                self.open_vault(&folder)
+            }
             Message::FolderChosen(None) => Task::none(),
             Message::RetryVault => match &self.screen {
                 Screen::Missing(path) => {
@@ -943,6 +976,7 @@ impl App {
             },
             Message::Index(event) => {
                 let ready = matches!(event, IndexEvent::Ready { .. });
+                let mut recovered = None;
                 let mut failed = None;
                 if let Some(w) = self.workspace_mut() {
                     match event {
@@ -959,7 +993,14 @@ impl App {
                         }
                         IndexEvent::Watching(mode) => w.watch_mode = Some(mode),
                         IndexEvent::WatchLimit { command } => w.watch_limit = Some(command),
+                        IndexEvent::Recovered(why) => {
+                            w.recovered = true;
+                            recovered = Some(why);
+                        }
                     }
+                }
+                if let Some(why) = recovered {
+                    return self.recovered(why);
                 }
                 if let Some(why) = failed {
                     self.say(Level::Error, why);
@@ -1048,28 +1089,6 @@ impl App {
             Message::HandedOver(true) => {
                 self.exited = true;
                 iced::exit()
-            }
-            Message::Recovered(failed) => {
-                if let Some(e) = failed {
-                    tracing::warn!("cannot recover interrupted writes: {e}");
-                    self.say(
-                        Level::Error,
-                        format!("Can't undo an interrupted write: {e}"),
-                    );
-                }
-                let waiting = match self.workspace_mut() {
-                    Some(w) => {
-                        w.recovered = true;
-                        std::mem::take(&mut w.waiting)
-                    }
-                    None => Vec::new(),
-                };
-                Task::batch(
-                    waiting
-                        .into_iter()
-                        .map(|p| self.remote_open(p))
-                        .collect::<Vec<_>>(),
-                )
             }
             Message::HandedOver(false) => {
                 self.say(Level::Error, "Patinote is already running for this vault");

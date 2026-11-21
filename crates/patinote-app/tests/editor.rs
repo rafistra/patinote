@@ -247,3 +247,46 @@ fn f05_clicking_past_the_end_of_a_line_in_normal_mode_lands_on_its_last_characte
     send(&mut app, Message::Click(0, 2, false));
     assert_eq!(app.active_cursor(), Some((0, 2)));
 }
+
+#[test]
+fn f06_a_click_in_insert_mode_does_not_touch_the_line_clicked() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO  a b<Esc>");
+    // `o` opens an auto-indented line; nothing is typed on it.
+    keys(&mut app, "o");
+    send(&mut app, Message::Click(0, 3, false));
+    keys(&mut app, "<Esc>");
+    let text = app.active_text().unwrap();
+    assert!(text.starts_with("  a b\n"), "{text:?}");
+    // The empty line `o` opened loses its indent, as with an arrow key.
+    assert!(text.starts_with("  a b\n\n# Ide cepat"), "{text:?}");
+}
+
+#[test]
+fn f05_8_a_read_only_note_does_not_stay_in_insert_mode() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("latin1.md"), b"caf\xE9 [[Rap\n").unwrap();
+    let config = Config {
+        insert_escape: Some("jk".into()),
+        ..Config::default()
+    };
+    let mut app = env.start(env.launch(Some(vault), config));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "latin1.md".into(),
+        }),
+    );
+    let text = app.active_text().unwrap();
+    // A held `j` (part of `jk`) would be typed when its time runs out.
+    keys(&mut app, "$ij");
+    wait(&mut app, Duration::from_millis(1500));
+    assert_eq!(app.active_text().unwrap(), text);
+    assert_eq!(app.active_dirty(), Some(false));
+    assert!(
+        !app.suggestions_open(),
+        "no link suggestions on a read-only note"
+    );
+}

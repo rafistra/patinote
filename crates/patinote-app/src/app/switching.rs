@@ -123,23 +123,32 @@ impl App {
     /// typed (F-07.5).
     pub(super) fn switcher_submit(&mut self) -> Task<Message> {
         if self.modifiers.shift() {
-            let name = self
+            let typed = self
                 .switcher
                 .as_ref()
                 .map(|s| s.query.trim().to_owned())
                 .unwrap_or_default();
-            if name.is_empty() {
+            if typed.is_empty() {
                 return Task::none();
             }
-            // The same name rules as the new note dialog (F-10.2).
-            // `Proyek/Ide` creates the note in a folder: each part is a name.
-            let problem = name
-                .split('/')
+            // `Proyek/Ide` creates the note in a folder: each part is a
+            // name, trimmed, with the new note dialog's rules (F-10.2).
+            let parts: Vec<&str> = typed.split('/').map(str::trim).collect();
+            let name = parts.join("/");
+            let problem = parts
+                .iter()
                 .filter_map(|part| {
-                    if part.trim().is_empty() {
+                    if part.is_empty() {
                         Some((
                             Field::Rejected,
                             "Folder and note names can't be empty".to_owned(),
+                        ))
+                    } else if part.starts_with('.') {
+                        // Hidden folders (`.obsidian`, `.patinote`) are
+                        // never written for a note.
+                        Some((
+                            Field::Rejected,
+                            "Folder and note names can't start with a dot".to_owned(),
                         ))
                     } else {
                         super::files::name_problem(part)

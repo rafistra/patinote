@@ -950,8 +950,9 @@ fn undo(root: &Path, journal: &Journal, entry: &Entry) -> io::Result<()> {
 /// Undoes journal entries left pending by a crash. Run it when a vault is
 /// opened for writing. Returns the ids it rolled back. An entry that cannot
 /// be read or undone does not stop the others; the error names it. A
-/// manifest that cannot be read is renamed `manifest.json.damaged`, so it
-/// is reported once rather than on every start.
+/// manifest that is read but cannot be parsed is renamed
+/// `manifest.json.damaged`, so it is reported once rather than on every
+/// start; one that cannot be read is tried again next time.
 pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
     let _lock = WriteLock::acquire(journal)?;
     let mut done = Vec::new();
@@ -960,15 +961,17 @@ pub fn recover(root: &Path, journal: &Journal) -> io::Result<Vec<String>> {
     // after it half-applied.
     for id in journal.ids()? {
         let undone = (|| {
-            let mut entry = match journal.entry(&id) {
+            let manifest = journal.dir().join(&id).join("manifest.json");
+            // Not read (permissions, an I/O error): tried again next time.
+            let text = fs::read_to_string(&manifest)?;
+            let mut entry: Entry = match serde_json::from_str(&text) {
                 Ok(entry) => entry,
                 Err(e) => {
-                    // Unreadable: nothing can be undone from it. It is set
-                    // aside (blobs kept, for a person to look at) and
-                    // reported this once.
-                    let manifest = journal.dir().join(&id).join("manifest.json");
+                    // Read but damaged: nothing can ever be undone from it.
+                    // It is set aside (blobs kept, for a person to look at)
+                    // and reported this once.
                     let _ = fs::rename(&manifest, manifest.with_extension("json.damaged"));
-                    return Err(e);
+                    return Err(io::Error::other(format!("damaged manifest: {e}")));
                 }
             };
             if entry.status != EntryStatus::Pending {

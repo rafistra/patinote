@@ -339,3 +339,18 @@ fn a_note_asked_for_at_startup_is_handed_to_the_running_app() {
     assert!(opened, "the running app opened the note");
     assert_eq!(open_paths(&first), ["Proyek/Patinote.md"]);
 }
+
+#[test]
+fn a_note_asked_for_a_missing_vault_is_not_opened_in_another_one() {
+    let env = Env::new();
+    let vault = env.vault();
+    let launch = patinote_app::app::Launch {
+        note: Some("Proyek/Patinote.md".into()),
+        ..env.launch(Some(env.path("hilang")), Config::default())
+    };
+    let mut app = env.start(launch);
+    assert!(matches!(app.screen(), Screen::Missing(_)));
+    send(&mut app, Message::FolderChosen(Some(vault)));
+    assert!(matches!(app.screen(), Screen::Vault(_)));
+    assert_eq!(open_paths(&app), Vec::<String>::new());
+}
