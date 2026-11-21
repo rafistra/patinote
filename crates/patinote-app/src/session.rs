@@ -11,6 +11,7 @@ use std::sync::mpsc;
 
 use iced::futures::Stream;
 use iced::futures::channel::{mpsc as async_mpsc, oneshot};
+use iced::futures::stream::{self as futures_stream, StreamExt as _};
 use patinote_core::write::{Journal, recover};
 use patinote_core::{IndexOptions, Progress, location};
 use patinote_index::{OpenOptions, SqliteStore, update_index};
@@ -104,13 +105,15 @@ impl Session {
         let (events, stream) = async_mpsc::unbounded();
         let (changes, change_stream) = async_mpsc::unbounded();
         let worker = paths.clone();
-        let fallback = events.clone();
-        if let Err(e) = std::thread::Builder::new()
+        // When the thread cannot start, its sender is gone and `stream` ends
+        // at once; the fallback events follow.
+        let failed = std::thread::Builder::new()
             .name("patinote-index".into())
             .spawn(move || run(&worker, &rx, &events, watch.then_some(changes)))
-        {
-            not_started(&paths, &fallback, &e);
-        }
+            .err()
+            .map(|e| (paths.clone(), e.to_string()));
+        let stream = stream
+            .chain(futures_stream::iter(failed).flat_map(|(paths, why)| not_started(paths, why)));
         (Self { paths, jobs }, stream, change_stream)
     }
 
@@ -133,19 +136,20 @@ impl Session {
     }
 }
 
-/// The index thread could not start: writes left half-done are undone
-/// here instead (quick, and rare), so notes still open, and the index is
+/// The events of an index thread that could not start: writes left
+/// half-done are undone when the stream is first polled (by the app's
+/// executor, not the UI thread), so notes still open, and the index is
 /// reported failed.
-fn not_started(
-    paths: &VaultPaths,
-    events: &async_mpsc::UnboundedSender<IndexEvent>,
-    e: &std::io::Error,
-) {
-    tracing::error!("cannot start the index thread: {e}");
-    let _ = events.unbounded_send(IndexEvent::Recovered(recover_writes(paths)));
-    let _ = events.unbounded_send(IndexEvent::Failed(format!(
-        "cannot start the index thread: {e}"
-    )));
+fn not_started(paths: VaultPaths, why: String) -> impl Stream<Item = IndexEvent> {
+    futures_stream::once(async move {
+        tracing::error!("cannot start the index thread: {why}");
+        let recovered = recover_writes(&paths);
+        futures_stream::iter([
+            IndexEvent::Recovered(recovered),
+            IndexEvent::Failed(format!("cannot start the index thread: {why}")),
+        ])
+    })
+    .flatten()
 }
 
 /// Undoes writes a crash left half-done; the error, if any, as text.
@@ -290,19 +294,44 @@ mod tests {
     use iced::futures::executor::block_on;
 
     /// Without the index thread, notes still open (they wait for
-    /// `Recovered`) and the index shows as failed.
+    /// `Recovered`) and the index shows as failed. The recovery waits for
+    /// the stream to be polled: it is not done on the UI thread.
     #[test]
     fn a_thread_that_cannot_start_still_reports_recovery() {
+        use patinote_core::write::{Actor, Op, Transaction, commit, expect_current};
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path().join("vault");
         std::fs::create_dir(&vault).unwrap();
+        std::fs::write(vault.join("a.md"), "lama\n").unwrap();
         let paths =
             VaultPaths::resolve(&vault, &dir.path().join("cache"), &dir.path().join("state"))
                 .unwrap();
-        let (tx, rx) = async_mpsc::unbounded();
-        not_started(&paths, &tx, &std::io::Error::other("no threads"));
-        drop(tx);
-        let events: Vec<IndexEvent> = block_on(rx.collect());
+        // A write a crash left half-done.
+        let journal = Journal::for_vault(&paths.state_home, &paths.id);
+        let done = commit(
+            &vault,
+            &journal,
+            &Transaction {
+                actor: Actor::User,
+                ops: vec![Op::Write {
+                    path: "a.md".into(),
+                    content: b"setengah\n".to_vec(),
+                    expect: expect_current(&vault, "a.md").unwrap(),
+                }],
+            },
+        )
+        .unwrap();
+        let manifest = journal.dir().join(&done.id).join("manifest.json");
+        let text = std::fs::read_to_string(&manifest)
+            .unwrap()
+            .replace("\"committed\"", "\"pending\"");
+        std::fs::write(&manifest, text).unwrap();
+
+        let events = not_started(paths, "no threads".into());
+        let disk = || std::fs::read_to_string(vault.join("a.md")).unwrap();
+        assert_eq!(disk(), "setengah\n", "nothing done before polling");
+        let events: Vec<IndexEvent> = block_on(events.collect());
+        assert_eq!(disk(), "lama\n");
         assert!(
             matches!(events[0], IndexEvent::Recovered(None)),
             "{events:?}"

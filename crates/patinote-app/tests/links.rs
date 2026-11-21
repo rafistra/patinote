@@ -266,3 +266,18 @@ fn f08_5_gd_on_a_markdown_heading_link_in_the_same_note_jumps_to_it() {
     assert_eq!(title(&app), "Ide cepat");
     assert_eq!(app.active_cursor().map(|c| c.0), Some(heading));
 }
+
+#[test]
+fn f08_a_click_away_from_a_link_closes_its_suggestions() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[Rap");
+    assert!(app.suggestions_open());
+    send(&mut app, Message::Click(2, 0, false));
+    assert!(!app.suggestions_open(), "the cursor left the link");
+    // Enter now breaks the line where the cursor is, as usual.
+    let lines = app.active_text().unwrap().lines().count();
+    keys(&mut app, "<CR>");
+    assert_eq!(app.active_text().unwrap().lines().count(), lines + 1);
+    assert_eq!(line(&app, 0), "[[Rap]]");
+}

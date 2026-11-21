@@ -655,11 +655,12 @@ impl App {
         if ctrl {
             return self.follow_link();
         }
-        Task::none()
+        // Link suggestions follow the cursor: closed once it leaves the link.
+        self.after_insert_key(None)
     }
 
     /// After the wheel scrolled, the cursor stays inside the visible lines.
-    pub(super) fn scrolled(&mut self, first: usize, last: usize) {
+    pub(super) fn scrolled(&mut self, first: usize, last: usize) -> Task<Message> {
         if let Some(doc) = self.active_document_mut() {
             let mut pos = doc.buffer.cursor();
             if pos.line < first {
@@ -667,12 +668,14 @@ impl App {
             } else if pos.line > last {
                 pos.line = last;
             } else {
-                return;
+                return Task::none();
             }
             let rev = doc.buffer.revision();
             doc.vim.move_cursor(&mut doc.buffer, pos);
             doc.moved_cursor(rev);
+            return self.after_insert_key(None);
         }
+        Task::none()
     }
 
     /// "Open in default app" on a read-only note.
