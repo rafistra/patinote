@@ -269,3 +269,28 @@ fn errors_are_the_cli_error_document() {
     assert_eq!(doc["error"]["code"], "invalid_argument");
     c.close();
 }
+
+/// Configuration warnings are part of a command's JSON; the tool gives them
+/// too, on every call (A-04: identical to the CLI).
+#[test]
+fn a04_2_config_warnings_are_in_tool_results_as_in_the_cli() {
+    let env = Env::new();
+    let vault = env.fixture();
+    let v = vault.to_str().unwrap();
+    env.write("config/patinote/config.toml", "kunci_asing = 1\n");
+    assert_eq!(env.run(&["--vault", v, "index"]).code, 0);
+    let cli = json(&env.run(&["--vault", v, "vault", "info", "--json"]).stdout);
+    assert!(
+        cli["warnings"]
+            .as_array()
+            .is_some_and(|w| w.iter().any(|w| w["code"] == "config")),
+        "{cli}"
+    );
+    let mut c = Client::start(&env, v);
+    for _ in 0..2 {
+        let (is_error, got) = c.call("vault_info", json!({}));
+        assert!(!is_error);
+        assert_eq!(got, cli);
+    }
+    c.close();
+}
