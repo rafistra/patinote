@@ -302,7 +302,14 @@ pub fn init(ctx: &Ctx<'_>, update: bool, agents: &[Agent]) -> Result<AgentsInitO
         }
     }
 
-    for agent in agents {
+    // `--for claude,claude` names one file once.
+    let mut once: Vec<Agent> = Vec::new();
+    for a in agents {
+        if !once.contains(a) {
+            once.push(*a);
+        }
+    }
+    for agent in &once {
         let file = agent.file();
         match std::fs::read_to_string(root.join(file)) {
             Ok(text) if text.contains("AGENTS.md") => out.unchanged.push(file.into()),
@@ -314,7 +321,7 @@ pub fn init(ctx: &Ctx<'_>, update: bool, agents: &[Agent]) -> Result<AgentsInitO
                     "{file} exists and does not mention AGENTS.md; add `@AGENTS.md` to it yourself"
                 ),
             )),
-            Err(_) => {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 ops.push(Op::Write {
                     path: file.into(),
                     content: pointer(*agent).into_bytes(),
@@ -322,6 +329,13 @@ pub fn init(ctx: &Ctx<'_>, update: bool, agents: &[Agent]) -> Result<AgentsInitO
                 });
                 out.written.push(file.into());
             }
+            // There but not readable as text: never replaced.
+            Err(_) => out.warnings.push(warning(
+                "not_written",
+                Some(file),
+                None,
+                format!("{file} exists but can't be read as text; add `@AGENTS.md` to it yourself"),
+            )),
         }
     }
 

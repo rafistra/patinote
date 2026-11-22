@@ -158,3 +158,38 @@ fn a05_2_an_end_marker_mentioned_above_the_generated_part_is_left_alone() {
     );
     assert!(updated.contains("`#topikbaru` (1)"));
 }
+
+/// A `CLAUDE.md` that is not UTF-8 text is left alone with a warning, and
+/// `AGENTS.md` is still written. Naming an agent twice writes it once.
+#[test]
+fn a05_3_an_unreadable_pointer_file_is_a_warning_and_twice_is_once() {
+    let env = Env::new();
+    let vault = env.fixture();
+    std::fs::write(vault.join("CLAUDE.md"), b"caf\xE9\n").unwrap();
+    let v = vault.to_str().unwrap();
+    let r = env.run(&[
+        "--vault",
+        v,
+        "agents",
+        "init",
+        "--for",
+        "claude,gemini,gemini",
+        "--json",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let out = json(&r.stdout);
+    assert_eq!(
+        out["written"],
+        serde_json::json!(["AGENTS.md", "GEMINI.md"])
+    );
+    assert!(
+        out["warnings"]
+            .as_array()
+            .is_some_and(|w| w.iter().any(|w| w["path"] == "CLAUDE.md")),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read(vault.join("CLAUDE.md")).unwrap(),
+        b"caf\xE9\n"
+    );
+}

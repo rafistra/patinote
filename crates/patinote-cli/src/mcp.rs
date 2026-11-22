@@ -37,6 +37,7 @@ pub fn serve(vault: Vault, store: SqliteStore) -> Result<(), Failure> {
         .build()
         .map_err(|e| crate::context::io_failure("cannot start the MCP server", e))?;
     let server = Server {
+        opening: vault.warnings.clone(),
         state: Mutex::new((vault, store)),
     };
     runtime.block_on(async move {
@@ -54,6 +55,9 @@ pub fn serve(vault: Vault, store: SqliteStore) -> Result<(), Failure> {
 
 struct Server {
     state: Mutex<(Vault, SqliteStore)>,
+    /// Warnings from opening the vault (configuration, recovery): the CLI
+    /// reports them with every command, so every call does too.
+    opening: Vec<patinote_core::commands::OutputWarning>,
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +257,7 @@ impl Server {
             .lock()
             .map_err(|_| Failure::new(ErrorCode::IoError, "the server state is unavailable"))?;
         let (vault, store) = &mut *guard;
-        vault.warnings.clear();
+        vault.warnings.clone_from(&self.opening);
         refresh(vault, store, true, &NEVER)?;
         let ctx = Ctx { vault, store };
         Ok(match params.name.as_ref() {
