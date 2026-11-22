@@ -1093,3 +1093,23 @@ fn f05_2_a_rename_waiting_for_the_index_goes_on_when_indexing_fails() {
     );
     assert!(app.exited(), "the quit went on");
 }
+
+/// While the index catches up for a queued rename, a quit says what it
+/// waits for, and goes on once the rename is done.
+#[test]
+fn f05_2_a_quit_during_a_renames_index_catch_up_says_so() {
+    let env = Env::new();
+    let mut app = open(&env);
+    // The catch-up for the rename is started but not run yet.
+    let catch_up = rename_held(&mut app, "Referensi/Daftar bacaan.md", "Bacaan");
+    to_editor(&mut app);
+    command(&mut app, "qa");
+    assert_eq!(
+        app.message().map(|(_, m)| m),
+        Some("Quitting once the index is ready and the rename is done (:q! quits now)")
+    );
+    assert!(!app.exited());
+    run(&mut app, catch_up);
+    assert!(env.path("Vault/Referensi/Bacaan.md").exists());
+    assert!(app.exited(), "the quit went on");
+}
