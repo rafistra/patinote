@@ -32,6 +32,7 @@ use patinote_core::names::stem;
 use patinote_core::write::Journal;
 
 use crate::editor::document::{Document, Save, SaveDone};
+use crate::screens;
 use crate::screens::start::{RECENT_SHOWN, RecentRow, Start, relative_time};
 use crate::screens::welcome;
 use crate::session::{IndexEvent, Lookup, Session, VaultPaths, lookup};
@@ -41,6 +42,7 @@ use crate::theme::styles::{self, Level};
 use crate::theme::tokens::*;
 use crate::widgets::bufferline::{self, Tab};
 use crate::widgets::cmdline::{self, ERROR_MIN_SECONDS};
+use crate::widgets::reveal::reveal;
 use crate::widgets::typed;
 
 /// The id of the command line input.
@@ -1382,10 +1384,23 @@ impl App {
             return self.window_key(text.as_deref());
         }
         if self.explorer_focus {
-            return self.explorer_key(&key, text.as_deref(), modifiers);
+            let before = self.workspace().and_then(|w| w.explorer.selected);
+            let task = self.explorer_key(&key, text.as_deref(), modifiers);
+            if self.workspace().and_then(|w| w.explorer.selected) == before {
+                return task;
+            }
+            return Task::batch([
+                task,
+                reveal(screens::explorer::LIST, screens::explorer::SELECTED),
+            ]);
         }
         if self.focus.is_some() {
-            return self.panel_key(&key, text.as_deref(), modifiers);
+            let before = self.focus;
+            let task = self.panel_key(&key, text.as_deref(), modifiers);
+            if self.focus == before || self.focus.is_none() {
+                return task;
+            }
+            return Task::batch([task, reveal(screens::panel::LIST, screens::panel::FOCUSED)]);
         }
         // `Ctrl+Shift+O` opens the quick switcher anywhere (F-07).
         if modifiers.control()

@@ -8,6 +8,11 @@ use crate::theme::styles;
 use crate::theme::tokens::*;
 use crate::widgets::{label, typed};
 
+/// The id of the panel's scrolling list.
+pub const LIST: &str = "panel-list";
+/// The id of the focused item, scrolled into view when it moves.
+pub const FOCUSED: &str = "panel-focused";
+
 /// One heading in the outline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutlineItem {
@@ -197,7 +202,8 @@ impl<Message: Clone> Panel<Message> {
             .padding(Padding::from([SPACE_4, 0.0]))
             .on_press((self.on_outline)(i))
             .style(styles::list_button(focused));
-            outline = outline.push(item);
+            let item = container(item);
+            outline = outline.push(if focused { item.id(FOCUSED) } else { item });
         }
 
         let mut links = Column::new().spacing(SPACE_10);
@@ -206,7 +212,8 @@ impl<Message: Clone> Panel<Message> {
         }
         for (first, group) in groups(&self.backlinks) {
             let focused = matches!(self.focused, Some(Focused::Backlink(i)) if (first..first + group.len()).contains(&i));
-            links = links.push(card(group, focused, false, (self.on_backlink)(first)));
+            let item = container(card(group, focused, false, (self.on_backlink)(first)));
+            links = links.push(if focused { item.id(FOCUSED) } else { item });
         }
 
         let count = self.backlinks.len();
@@ -268,12 +275,16 @@ impl<Message: Clone> Panel<Message> {
                 }
             }
         };
-        container(iced::widget::scrollable(content).height(Length::Fill))
-            .width(self.width)
-            .height(Length::Fill)
-            .padding(PAD_PANEL)
-            .style(styles::side_panel)
-            .into()
+        container(
+            iced::widget::scrollable(content)
+                .id(LIST)
+                .height(Length::Fill),
+        )
+        .width(self.width)
+        .height(Length::Fill)
+        .padding(PAD_PANEL)
+        .style(styles::side_panel)
+        .into()
     }
 }
 
