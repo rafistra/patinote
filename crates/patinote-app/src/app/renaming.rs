@@ -336,13 +336,14 @@ impl App {
                 .filter_map(|b| b.doc.as_ref())
                 .chain(&w.closing)
                 .any(|d| matches!(d.save, Save::Running(_)));
-            if w.vault_busy || saving {
+            if w.vault_busy {
                 break;
             }
-            // A rename plans its link updates from the index: while the
-            // index is still being built it waits (and saves go on), rather
-            // than holding saves behind that work. Changes after it wait
-            // too, so the order stays.
+            // A rename plans its link updates from the index. While the
+            // index is still being built it waits; then the index catches
+            // up in a job of its own. Saves go on during both, rather than
+            // waiting behind that work. Changes after it wait too, so the
+            // order stays.
             let needs_index = matches!(
                 w.vault_ops.front(),
                 Some(VaultOp::RenameNote { .. } | VaultOp::RenameFolder { .. })
@@ -350,9 +351,27 @@ impl App {
             if needs_index && matches!(w.index, super::IndexStatus::Indexing { .. }) {
                 break;
             }
+            if needs_index && !w.caught_up && matches!(w.index, super::IndexStatus::Ready) {
+                if !w.catching_up {
+                    w.catching_up = true;
+                    let root = w.session.paths.root.clone();
+                    tasks.push(Task::perform(
+                        w.session.query(move |store| {
+                            let _ =
+                                update_index(store, &root, &IndexOptions::default(), &mut |_| {});
+                        }),
+                        |_| Message::IndexCaughtUp,
+                    ));
+                }
+                break;
+            }
+            if saving {
+                break;
+            }
             let Some(op) = w.vault_ops.pop_front() else {
                 break;
             };
+            w.caught_up = false;
             tasks.push(match op {
                 VaultOp::RenameNote { from, to } => self.rename_note(from, to),
                 VaultOp::RenameFolder { from, to } => self.rename_folder(from, to),
@@ -361,6 +380,29 @@ impl App {
             });
         }
         Task::batch(tasks)
+    }
+
+    /// A quit that waited for saves and queued changes goes on once none
+    /// is left.
+    pub(super) fn quit_if_waiting(&mut self) -> Task<Message> {
+        if self.quitting && !self.unsaved() && !self.save_failed() && !self.exited {
+            self.quit(false)
+        } else {
+            Task::none()
+        }
+    }
+
+    /// Whether a queued rename waits for the index to be built.
+    pub(super) fn rename_waits_for_index(&self) -> bool {
+        self.workspace().is_some_and(|w| {
+            matches!(w.index, super::IndexStatus::Indexing { .. })
+                && w.vault_ops.iter().any(|op| {
+                    matches!(
+                        op,
+                        VaultOp::RenameNote { .. } | VaultOp::RenameFolder { .. }
+                    )
+                })
+        })
     }
 
     /// A vault change landed: notes closed meanwhile are saved, then the
@@ -384,9 +426,7 @@ impl App {
             tasks.push(self.autosave(true));
         }
         tasks.push(self.pump_vault_ops());
-        if self.quitting && !self.unsaved() && !self.save_failed() && !self.exited {
-            tasks.push(self.quit(false));
-        }
+        tasks.push(self.quit_if_waiting());
         Task::batch(tasks)
     }
 
@@ -467,17 +507,6 @@ impl App {
             },
         );
         save.chain(job)
-    }
-
-    /// Runs a vault change that needs no index (the trash, a Syncthing
-    /// choice) in the background; ends with `Message::FilesChanged(gone, …)`,
-    /// which refreshes the index afterwards.
-    pub(super) fn vault_job(
-        &self,
-        gone: Vec<String>,
-        write: impl FnOnce() -> Result<(), String> + Send + 'static,
-    ) -> Task<Message> {
-        Task::future(async move { Message::FilesChanged(gone, write()) })
     }
 
     /// Changes still queued follow a note or folder that moved (`to`); one
@@ -680,4 +709,14 @@ impl VaultOp {
             Self::Sync { pair, .. } => &pair.copy,
         }
     }
+}
+
+/// Runs a vault change that needs no index (the trash, a Syncthing choice)
+/// in the background; ends with `Message::FilesChanged(gone, …)`, which
+/// refreshes the index afterwards.
+pub(super) fn vault_job(
+    gone: Vec<String>,
+    write: impl FnOnce() -> Result<(), String> + Send + 'static,
+) -> Task<Message> {
+    Task::future(async move { Message::FilesChanged(gone, write()) })
 }

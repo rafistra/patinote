@@ -195,6 +195,10 @@ pub struct Workspace {
     /// Vault changes asked for, run one at a time, in order, each once no
     /// save runs.
     vault_ops: std::collections::VecDeque<renaming::VaultOp>,
+    /// Before a queued rename holds saves, the index catches up in a job
+    /// of its own (saves go on meanwhile): one runs, or one is done.
+    catching_up: bool,
+    caught_up: bool,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -263,6 +267,8 @@ pub enum Message {
     ChooseFolder,
     FolderChosen(Option<PathBuf>),
     RetryVault,
+    /// The index caught up before a queued rename (`App::pump_vault_ops`).
+    IndexCaughtUp,
     /// An event from the index thread of the vault opened `n`th
     /// ([`App`]'s `opened`); events of a vault since closed are dropped.
     Index(u64, IndexEvent),
@@ -597,6 +603,8 @@ impl App {
             closing: Vec::new(),
             vault_busy: false,
             vault_ops: std::collections::VecDeque::new(),
+            catching_up: false,
+            caught_up: false,
             selected: 0,
             candidates: Vec::new(),
             attachments: Vec::new(),
@@ -938,6 +946,12 @@ impl App {
             }
             if self.unsaved() || self.waiting_on_vim() {
                 self.quitting = true;
+                if self.rename_waits_for_index() {
+                    self.say(
+                        Level::Warning,
+                        "Quitting once the index is ready and the rename is done (:q! quits now)",
+                    );
+                }
                 return pending;
             }
         }
@@ -976,6 +990,13 @@ impl App {
                 self.open_vault(&folder)
             }
             Message::FolderChosen(None) => Task::none(),
+            Message::IndexCaughtUp => {
+                if let Some(w) = self.workspace_mut() {
+                    w.catching_up = false;
+                    w.caught_up = true;
+                }
+                self.pump_vault_ops()
+            }
             Message::RetryVault => match &self.screen {
                 Screen::Missing(path) => {
                     let path = path.clone();
@@ -1016,6 +1037,11 @@ impl App {
                 }
                 if let Some(why) = failed {
                     self.say(Level::Error, why);
+                    // A rename that waited for the index runs now and
+                    // reports that the index is not available, rather than
+                    // waiting for good.
+                    let pumped = self.pump_vault_ops();
+                    return Task::batch([pumped, self.quit_if_waiting()]);
                 }
                 if ready {
                     // Notes restored or opened before the index was ready
@@ -1026,6 +1052,7 @@ impl App {
                         self.load_conflicts(),
                         // A rename asked for while indexing goes now.
                         self.pump_vault_ops(),
+                        self.quit_if_waiting(),
                     ])
                 } else {
                     Task::none()
