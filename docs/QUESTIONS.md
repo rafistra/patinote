@@ -232,3 +232,14 @@ Melapor ke repositori Iced berarti mengirim tulisan ke layanan luar atas nama pe
 
 Rekomendasi agent: A. Tambalannya kecil dan mudah dibuang, dan dengan itu gulir mendekati satu frame tanpa mengorbankan target buka dan RAM.
 **Jawaban:** A (21 November 2026). Salinan bertambal ada di `vendor/iced_tiny_skia/` (cara membuangnya di `README.md` folder itu). Dilaporkan ke Iced atas izin pemilik: [iced-rs/iced#3556](https://github.com/iced-rs/iced/issues/3556). Catatan: `master` Iced sudah mengganti `tiny_skia` dengan `vello_cpu`, jadi perbaikan hanya mungkin datang lewat rilis 0.14.x. Bila tidak ada, salinan ini dibuang saat Patinote pindah ke versi Iced berikutnya.
+
+## Q-019 · Nama file NFD di disk (22 November 2026)
+
+**Konteks:** PRD F-01: "Nama file dibandingkan dalam bentuk Unicode NFC; nama asli di disk tidak diubah." Pemindai menyimpan setiap path dalam NFC (`0001` bagian 3, tabel `notes`), lalu semua pembacaan dan penulisan memakai `root.join(path_nfc)`. Di Linux, `Cafe\u{301}.md` (NFD, sering muncul pada file dari macOS) dan `Café.md` (NFC) adalah dua file yang berbeda. Akibatnya catatan bernama NFD terindeks kosong, tidak bisa dibuka di aplikasi maupun `patinote read`, dan saat disimpan dari aplikasi muncul file NFC kedua di sebelahnya.
+**Pilihan:**
+- A. Simpan nama asli di disk di indeks: kolom baru `disk_path` di tabel `notes` (migrasi `0002`), diisi pemindai. Semua akses file (indeks, aplikasi, CLI, jalur tulis) memakai nama itu, sedangkan `path` NFC tetap menjadi kunci dan dipakai untuk perbandingan. Perlu mengubah skema indeks.
+- B. Tanpa mengubah skema: satu fungsi core `on_disk(root, path)` yang mengembalikan path biasa bila file itu ada, dan bila tidak, mencari nama asli dengan membaca folder dan membandingkan dalam NFC. Semua akses file lewat fungsi itu. Jalur cepat tidak berubah; biayanya hanya muncul pada nama yang memang tidak NFC.
+- C. Belum ditangani di Gerbang 1; dicatat sebagai keterbatasan.
+
+Rekomendasi agent: B. Skema tidak berubah, perbaikannya terkumpul di satu fungsi, dan vault yang semua namanya NFC tidak terkena biaya tambahan. A lebih rapi bila nanti ada kebutuhan lain akan nama asli di indeks.
+**Jawaban:** —
