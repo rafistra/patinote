@@ -286,3 +286,26 @@ fn f03_4_links_stored_before_a_stop_are_resolved_by_the_next_run() {
     index(&root, &mut store);
     assert_eq!(resolved(&store), resolved(&whole));
 }
+
+/// A note that could not be read is read again on the next run, even when
+/// its size and mtime did not change (a chmod changes neither).
+#[test]
+fn f01_5_a_note_unreadable_once_is_read_again_next_time() {
+    if fs::metadata("/proc/self")
+        .map(|m| std::os::unix::fs::MetadataExt::uid(&m) == 0)
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "secret.md", b"[[Tujuan]] isi");
+    let file = dir.path().join("secret.md");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).unwrap();
+    let mut store = MemoryStore::default();
+    index(dir.path(), &mut store);
+    assert!(store.files["secret.md"].note.is_none());
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+    index(dir.path(), &mut store);
+    assert!(store.files["secret.md"].warnings.is_empty());
+    assert!(store.files["secret.md"].note.is_some(), "read this time");
+}

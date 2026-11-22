@@ -14,9 +14,10 @@
 //! folder, then from the vault root, then with the rules above.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::model::LinkKind;
-use crate::names::{fold, link_key, stem};
+use crate::names::{fold, link_key, nfc, stem};
 use crate::scan::FileKind;
 
 /// A file links can point to.
@@ -52,6 +53,9 @@ pub struct Resolver {
     targets: Vec<Target>,
     /// Folded full path → target.
     by_path: HashMap<String, usize>,
+    /// Folded full paths shared by several targets (names that differ only
+    /// in case) → all of them. Rare, so kept apart from `by_path`.
+    same_path: HashMap<String, Vec<usize>>,
     /// Folded note stem, or folded attachment file name → targets.
     by_name: HashMap<String, Vec<usize>>,
     /// Folded alias → notes.
@@ -81,7 +85,18 @@ impl Resolver {
             ..Self::default()
         };
         for (i, t) in r.targets.iter().enumerate() {
-            r.by_path.insert(fold(&t.path), i);
+            match r.by_path.entry(fold(&t.path)) {
+                Entry::Vacant(e) => {
+                    e.insert(i);
+                }
+                Entry::Occupied(e) => {
+                    let first = *e.get();
+                    r.same_path
+                        .entry(e.key().clone())
+                        .or_insert_with(|| vec![first])
+                        .push(i);
+                }
+            }
             let name = match t.kind {
                 FileKind::Note => fold(stem(&t.path)),
                 _ => fold(file_name(&t.path)),
@@ -110,12 +125,11 @@ impl Resolver {
             });
         }
         if (kind == LinkKind::Markdown || (kind == LinkKind::Embed && looks_like_path(target)))
-            && let Some(i) = self.markdown_path(source, target)
+            && let Some(candidates) = self.markdown_path(source, target)
         {
-            let path = self.targets[i].path.as_str();
             return Some(Resolved {
-                path,
-                candidates: vec![path],
+                path: candidates[0],
+                candidates,
             });
         }
         let key = link_key(target.trim_start_matches('/'));
@@ -159,8 +173,10 @@ impl Resolver {
 
     /// A Markdown link destination as a path: relative to the source folder,
     /// then from the vault root (only the root with a leading `/`), with
-    /// `.md` added when there is no extension.
-    fn markdown_path(&self, source: &str, target: &str) -> Option<usize> {
+    /// `.md` added when there is no extension. Every file it names, the one
+    /// written exactly (in case) first: names that differ only in case are
+    /// all candidates, so the link is ambiguous.
+    fn markdown_path<'a>(&'a self, source: &str, target: &str) -> Option<Vec<&'a str>> {
         let dir = source.rsplit_once('/').map_or("", |(d, _)| d);
         // `/Rapat.md` is from the vault root only.
         let relative = if target.starts_with('/') {
@@ -171,14 +187,34 @@ impl Resolver {
         let rooted = normalize(target);
         for candidate in [relative, rooted].into_iter().flatten() {
             let folded = fold(&candidate);
-            if let Some(&i) = self.by_path.get(&folded) {
-                return Some(i);
-            }
-            if !file_name(&folded).contains('.')
+            let (key, i, md) = if let Some(&i) = self.by_path.get(&folded) {
+                (folded, i, false)
+            } else if !file_name(&folded).contains('.')
                 && let Some(&i) = self.by_path.get(&format!("{folded}.md"))
             {
-                return Some(i);
-            }
+                (folded, i, true)
+            } else {
+                continue;
+            };
+            let shared = if self.same_path.is_empty() {
+                None
+            } else if md {
+                self.same_path.get(&format!("{key}.md"))
+            } else {
+                self.same_path.get(&key)
+            };
+            let Some(all) = shared else {
+                return Some(vec![self.targets[i].path.as_str()]);
+            };
+            // Names that differ only in case: the one written first.
+            let written = if md {
+                format!("{}.md", nfc(&candidate))
+            } else {
+                nfc(&candidate)
+            };
+            let mut paths: Vec<&str> = all.iter().map(|&i| self.targets[i].path.as_str()).collect();
+            paths.sort_by_key(|p| (*p != written, *p));
+            return Some(paths);
         }
         None
     }
@@ -282,6 +318,29 @@ mod tests {
             t("Café Bandung.md", &[]),
             t("Proyek/Patinote/Desain antarmuka induk.md", &[]),
         ])
+    }
+
+    /// Two notes whose names differ only in case (PRD F-01): a path link
+    /// goes to the one written, and is ambiguous like a wikilink.
+    #[test]
+    fn a_path_link_to_case_only_names_is_ambiguous_and_takes_the_exact_one() {
+        let r = Resolver::new([t("Rapat.md", &[]), t("rapat.md", &[]), t("Lain.md", &[])]);
+        for (written, want) in [
+            ("Rapat.md", "Rapat.md"),
+            ("rapat.md", "rapat.md"),
+            ("Rapat", "Rapat.md"),
+            ("rapat", "rapat.md"),
+        ] {
+            let got = r.resolve("Lain.md", LinkKind::Markdown, written).unwrap();
+            assert_eq!(got.path, want, "{written}");
+            assert!(got.is_ambiguous(), "{written}");
+        }
+        // One name only: not ambiguous, whatever the case written.
+        let got = r
+            .resolve("Rapat.md", LinkKind::Markdown, "LAIN.md")
+            .unwrap();
+        assert_eq!(got.path, "Lain.md");
+        assert!(!got.is_ambiguous());
     }
 
     fn path<'a>(r: &'a Resolver, src: &'a str, kind: LinkKind, target: &str) -> Option<&'a str> {
