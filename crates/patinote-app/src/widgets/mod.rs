@@ -3,6 +3,7 @@
 pub mod banner;
 pub mod bufferline;
 pub mod cmdline;
+pub mod reveal;
 pub mod statusline;
 pub mod tabbar;
 

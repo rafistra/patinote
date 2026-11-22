@@ -12,6 +12,10 @@ use crate::widgets::{label, typed};
 
 /// The id of the explorer's name input.
 pub const INPUT: &str = "explorer-input";
+/// The id of the explorer's scrolling list.
+pub const LIST: &str = "explorer-list";
+/// The id of the selected row, scrolled into view when it moves.
+pub const SELECTED: &str = "explorer-selected";
 
 /// An input in the tree: a new note or folder in a folder, or a new name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,7 +137,7 @@ impl<Message: Clone> View<Message> {
             } else {
                 TEXT_SECONDARY
             };
-            tree = tree.push(
+            let item = container(
                 button(typed(text, TYPE_UI_SMALL).color(color))
                     .width(Length::Fill)
                     .padding(Padding {
@@ -147,6 +151,7 @@ impl<Message: Clone> View<Message> {
                         selected || (self.selected.is_none() && active),
                     )),
             );
+            tree = tree.push(if selected { item.id(SELECTED) } else { item });
             if let Some(e) = self
                 .editing
                 .as_ref()
@@ -209,7 +214,7 @@ impl<Message: Clone> View<Message> {
             tags,
         ]);
         container(column![
-            iced::widget::scrollable(body).height(Length::Fill),
+            iced::widget::scrollable(body).id(LIST).height(Length::Fill),
             container(
                 typed(
                     "a new · A folder · r rename · m move · d delete",
