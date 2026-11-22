@@ -320,7 +320,8 @@ impl App {
     /// trash meanwhile, and never races the links a rename rewrites.
     pub(super) fn queue_vault_op(&mut self, op: VaultOp) -> Task<Message> {
         if let Some(w) = self.workspace_mut() {
-            w.vault_ops.push_back(op);
+            w.vault_op_seq += 1;
+            w.vault_ops.push_back((w.vault_op_seq, op));
         }
         self.pump_vault_ops()
     }
@@ -344,34 +345,48 @@ impl App {
             // up in a job of its own. Saves go on during both, rather than
             // waiting behind that work. Changes after it wait too, so the
             // order stays.
-            let needs_index = matches!(
-                w.vault_ops.front(),
-                Some(VaultOp::RenameNote { .. } | VaultOp::RenameFolder { .. })
-            );
-            if needs_index && matches!(w.index, super::IndexStatus::Indexing { .. }) {
-                break;
-            }
-            if needs_index && !w.caught_up && matches!(w.index, super::IndexStatus::Ready) {
-                if !w.catching_up {
-                    w.catching_up = true;
-                    let root = w.session.paths.root.clone();
-                    tasks.push(Task::perform(
-                        w.session.query(move |store| {
-                            let _ =
-                                update_index(store, &root, &IndexOptions::default(), &mut |_| {});
-                        }),
-                        |_| Message::IndexCaughtUp,
-                    ));
+            let front = w.vault_ops.front().map(|(id, op)| (*id, op.needs_index()));
+            if let Some((id, true)) = front {
+                if matches!(w.index, super::IndexStatus::Indexing { .. }) {
+                    break;
                 }
-                break;
+                // Caught up for this very change, or catch up now. A
+                // catch-up for a change that is no longer first counts for
+                // nothing.
+                let ready = matches!(w.index, super::IndexStatus::Ready);
+                match w.catch_up {
+                    Some((for_id, true)) if for_id == id => {}
+                    _ if !ready => {}
+                    Some((for_id, false)) if for_id == id => break,
+                    _ => {
+                        w.catch_up = Some((id, false));
+                        let root = w.session.paths.root.clone();
+                        tasks.push(Task::perform(
+                            w.session.query(move |store| {
+                                update_index(store, &root, &IndexOptions::default(), &mut |_| {})
+                                    .map(|_| ())
+                                    .map_err(|e| e.to_string())
+                            }),
+                            move |result| {
+                                Message::IndexCaughtUp(
+                                    id,
+                                    result.unwrap_or_else(|| {
+                                        Err("the index is not available".into())
+                                    }),
+                                )
+                            },
+                        ));
+                        break;
+                    }
+                }
             }
             if saving {
                 break;
             }
-            let Some(op) = w.vault_ops.pop_front() else {
+            let Some((_, op)) = w.vault_ops.pop_front() else {
                 break;
             };
-            w.caught_up = false;
+            w.catch_up = None;
             tasks.push(match op {
                 VaultOp::RenameNote { from, to } => self.rename_note(from, to),
                 VaultOp::RenameFolder { from, to } => self.rename_folder(from, to),
@@ -380,6 +395,33 @@ impl App {
             });
         }
         Task::batch(tasks)
+    }
+
+    /// The index caught up before the queued change `id`. If it failed,
+    /// that rename is refused now, before it holds any save.
+    pub(super) fn caught_up(&mut self, id: u64, result: Result<(), String>) -> Task<Message> {
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
+        if w.catch_up != Some((id, false)) {
+            return Task::none(); // for a change no longer waiting
+        }
+        match result {
+            Ok(()) => w.catch_up = Some((id, true)),
+            Err(e) => {
+                w.catch_up = None;
+                if w.vault_ops.front().is_some_and(|(first, _)| *first == id)
+                    && let Some((_, op)) = w.vault_ops.pop_front()
+                {
+                    let target = op.target().to_owned();
+                    self.say(
+                        super::Level::Error,
+                        format!("Can't rename \"{target}\": the index could not be updated: {e}"),
+                    );
+                }
+            }
+        }
+        Task::batch([self.pump_vault_ops(), self.quit_if_waiting()])
     }
 
     /// A quit that waited for saves and queued changes goes on once none
@@ -392,16 +434,13 @@ impl App {
         }
     }
 
-    /// Whether a queued rename waits for the index to be built.
+    /// Whether a queued rename waits for the index: being built, or
+    /// catching up for it.
     pub(super) fn rename_waits_for_index(&self) -> bool {
         self.workspace().is_some_and(|w| {
-            matches!(w.index, super::IndexStatus::Indexing { .. })
-                && w.vault_ops.iter().any(|op| {
-                    matches!(
-                        op,
-                        VaultOp::RenameNote { .. } | VaultOp::RenameFolder { .. }
-                    )
-                })
+            let building = matches!(w.index, super::IndexStatus::Indexing { .. })
+                && w.vault_ops.iter().any(|(_, op)| op.needs_index());
+            building || matches!(w.catch_up, Some((_, false)))
         })
     }
 
@@ -525,7 +564,7 @@ impl App {
         };
         let mut dropped = Vec::new();
         let ops = std::mem::take(&mut w.vault_ops);
-        for mut op in ops {
+        for (id, mut op) in ops {
             let kept = match &mut op {
                 // The destination follows too: a note renamed inside the
                 // folder that moved stays in it.
@@ -536,7 +575,7 @@ impl App {
                 VaultOp::Sync { pair, .. } => follow(&mut pair.original) & follow(&mut pair.copy),
             };
             if kept {
-                w.vault_ops.push_back(op);
+                w.vault_ops.push_back((id, op));
             } else {
                 dropped.push(op.target().to_owned());
             }
@@ -701,6 +740,11 @@ pub enum VaultOp {
 }
 
 impl VaultOp {
+    /// A rename plans its link updates from the index.
+    fn needs_index(&self) -> bool {
+        matches!(self, Self::RenameNote { .. } | Self::RenameFolder { .. })
+    }
+
     /// The path the change is about, for messages.
     fn target(&self) -> &str {
         match self {
