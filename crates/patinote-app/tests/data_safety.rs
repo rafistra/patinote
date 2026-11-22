@@ -693,3 +693,51 @@ fn a_closed_note_whose_save_runs_when_it_is_renamed_is_saved_at_the_new_path() {
     assert!(disk(&env, "Inbox/Ide baru.md").starts_with("sebelas\n"));
     assert!(!env.path("Vault").join(NOTE).exists());
 }
+
+/// A closed note renamed while its save runs, then a new note at its old
+/// path: each save result finds its own note.
+#[test]
+fn a_new_note_at_a_renamed_notes_old_path_keeps_its_own_save() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduabelas<Esc>");
+    let first = start_autosave(&mut app);
+    command(&mut app, "q");
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    // A new note where the old one was.
+    explorer_key(&mut app, "Inbox", "a");
+    send(&mut app, Message::InlineInput("Ide cepat".into()));
+    send(&mut app, Message::InlineSubmit);
+    keys(&mut app, "tigabelas<Esc>");
+    let second = start_autosave(&mut app);
+    run(&mut app, second);
+    run(&mut app, first);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert_eq!(disk(&env, NOTE), "tigabelas");
+    assert!(disk(&env, "Inbox/Ide baru.md").starts_with("duabelas\n"));
+    assert_eq!(app.buffer_text(NOTE).as_deref(), Some("tigabelas"));
+    assert_eq!(app.message().map(|(l, _)| l), None, "{:?}", app.message());
+}
+
+/// Changed outside, then renamed while a save runs: the redone save at the
+/// new path is refused too, and the banner shows (F-11).
+#[test]
+fn a_change_from_outside_before_a_rename_still_shows_the_banner() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOempatbelas<Esc>");
+    let save = start_autosave(&mut app);
+    std::fs::write(env.path("Vault").join(NOTE), "dari luar\n").unwrap();
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    run(&mut app, save);
+    assert_eq!(
+        disk(&env, "Inbox/Ide baru.md"),
+        "dari luar\n",
+        "not overwritten"
+    );
+    assert!(app.external_title().is_some(), "the banner is up");
+}

@@ -375,16 +375,7 @@ impl App {
     /// The jump list and recent notes follow a note or folder that moved
     /// (`to`); entries in one sent to the trash (`None`) are dropped.
     pub(super) fn paths_moved(&mut self, from: &str, to: Option<&str>) {
-        let prefix = format!("{from}/");
-        // `Some(new path)` (or `Some(None)`: gone) for an affected path.
-        let map = |p: &str| -> Option<Option<String>> {
-            if p == from {
-                Some(to.map(str::to_owned))
-            } else {
-                p.strip_prefix(&prefix)
-                    .map(|rest| to.map(|t| format!("{t}/{rest}")))
-            }
-        };
+        let map = |p: &str| moved_path(p, from, to);
         let jumps = std::mem::take(&mut self.jumps);
         let mut at = self.jump_at;
         for (i, (p, c)) in jumps.into_iter().enumerate() {
@@ -429,15 +420,8 @@ impl App {
         let mut reload = Vec::new();
         let mut compare = Vec::new();
         if let Some(w) = self.workspace_mut() {
-            let prefix = format!("{from}/");
             for b in &mut w.buffers {
-                let new_path = if b.path == from {
-                    Some(to.clone())
-                } else {
-                    b.path
-                        .strip_prefix(&prefix)
-                        .map(|rest| format!("{to}/{rest}"))
-                };
+                let new_path = moved_path(&b.path, &from, Some(&to)).flatten();
                 let rewritten = changed.contains(&b.path)
                     || new_path.as_ref().is_some_and(|p| changed.contains(p));
                 let moved = new_path.is_some();
@@ -449,11 +433,6 @@ impl App {
                     // new path. When the move also rewrote its links, the
                     // disk differs and the usual banner lets the user pick.
                     Some(d) if d.dirty() => {
-                        if matches!(d.save, crate::editor::document::Save::Running(_))
-                            && d.path != b.path
-                        {
-                            d.saving_at.get_or_insert(d.path.clone());
-                        }
                         d.path = b.path.clone();
                         if rewritten {
                             compare.push(b.path.clone());
@@ -464,22 +443,13 @@ impl App {
                 }
             }
         }
-        // Notes closed while their save runs follow too, so that save's
-        // result still finds them.
+        // Notes closed while their save runs follow too: the rest of their
+        // text is saved at the new path. When the move also rewrote their
+        // links, that save is refused and the note comes back with the
+        // banner, as an open one would.
         if let Some(w) = self.workspace_mut() {
-            let prefix = format!("{from}/");
             for d in &mut w.closing {
-                let new_path = if d.path == from {
-                    Some(to.clone())
-                } else {
-                    d.path
-                        .strip_prefix(&prefix)
-                        .map(|rest| format!("{to}/{rest}"))
-                };
-                if let Some(p) = new_path {
-                    if matches!(d.save, crate::editor::document::Save::Running(_)) {
-                        d.saving_at.get_or_insert(d.path.clone());
-                    }
+                if let Some(p) = moved_path(&d.path, &from, Some(&to)).flatten() {
                     d.path = p;
                 }
             }
@@ -515,4 +485,14 @@ impl App {
                 .chain([refresh, self.save_vault_state()]),
         )
     }
+}
+
+/// Where `path` is after `from` moved to `to` (`None`: to the trash):
+/// `None` when the move did not touch it, `Some(None)` when it went.
+fn moved_path(path: &str, from: &str, to: Option<&str>) -> Option<Option<String>> {
+    if path == from {
+        return Some(to.map(str::to_owned));
+    }
+    let rest = path.strip_prefix(from)?.strip_prefix('/')?;
+    Some(to.map(|t| format!("{t}/{rest}")))
 }
