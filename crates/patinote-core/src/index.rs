@@ -149,8 +149,14 @@ pub fn index_vault<S: Store>(
         .iter()
         .filter_map(|f| {
             let old = known.remove(&f.path);
+            // A file stored without a hash was not read (unreadable, or gone
+            // meanwhile): read it again, unless it is too large to read.
+            let read_last_time = |o: &FileState| o.hash.is_some() || f.size > MAX_PARSE_BYTES;
             let same = old.as_ref().is_some_and(|o| {
-                o.size == f.size && o.mtime_ns == f.mtime_ns && o.excluded == f.excluded
+                o.size == f.size
+                    && o.mtime_ns == f.mtime_ns
+                    && o.excluded == f.excluded
+                    && read_last_time(o)
             });
             if same && !options.full {
                 report.unchanged += 1;
