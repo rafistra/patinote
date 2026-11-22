@@ -35,5 +35,9 @@ harness = false
 name = "scan"
 harness = false
 
+[[bench]]
+name = "write"
+harness = false
+
 [lints]
 workspace = true

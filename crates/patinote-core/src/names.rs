@@ -33,12 +33,19 @@ pub fn disk_rel(root: &Path, rel: &str) -> String {
         let here = dir.join(part);
         let name = if fs::symlink_metadata(&here).is_ok() {
             Some(part.to_owned())
+        } else if part.is_ascii() {
+            // An ASCII name has no other form to look for (a few signs,
+            // like the Kelvin sign, normalize to ASCII; they are not
+            // looked up): it does not exist yet.
+            None
         } else {
             let want = nfc(part);
             fs::read_dir(&dir).ok().and_then(|entries| {
                 entries.filter_map(Result::ok).find_map(|e| {
                     let n = e.file_name().into_string().ok()?;
-                    (n != part && nfc(&n) == want).then_some(n)
+                    // An ASCII name is its own NFC form, so it can't be
+                    // another form of this non-ASCII one.
+                    (!n.is_ascii() && n != part && nfc(&n) == want).then_some(n)
                 })
             })
         };

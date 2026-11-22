@@ -464,6 +464,26 @@ impl App {
                 }
             }
         }
+        // Notes closed while their save runs follow too, so that save's
+        // result still finds them.
+        if let Some(w) = self.workspace_mut() {
+            let prefix = format!("{from}/");
+            for d in &mut w.closing {
+                let new_path = if d.path == from {
+                    Some(to.clone())
+                } else {
+                    d.path
+                        .strip_prefix(&prefix)
+                        .map(|rest| format!("{to}/{rest}"))
+                };
+                if let Some(p) = new_path {
+                    if matches!(d.save, crate::editor::document::Save::Running(_)) {
+                        d.saving_at.get_or_insert(d.path.clone());
+                    }
+                    d.path = p;
+                }
+            }
+        }
         self.paths_moved(&from, Some(&to));
         let tasks: Vec<Task<Message>> = reload
             .into_iter()

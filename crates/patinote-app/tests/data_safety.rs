@@ -648,3 +648,48 @@ fn a_new_note_typed_into_and_emptied_is_not_written_and_does_not_block_quitting(
 fn wait_saves(app: &mut App) {
     common::wait(app, Duration::from_secs(2));
 }
+
+#[test]
+fn quitting_goes_on_when_a_save_overtaken_by_a_rename_lands() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsepuluh<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Character("w".into()),
+        iced::keyboard::Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(&mut app, "l");
+    let quit = command_held(&mut app, "qa");
+    run(&mut app, quit);
+    assert!(!app.exited(), "waits for the save");
+    // The save started before the rename lands: it is redone at the new
+    // path at once, and the quit goes on without waiting for a timer.
+    run(&mut app, save);
+    assert!(disk(&env, "Inbox/Ide baru.md").starts_with("sepuluh\n"));
+    assert!(app.exited());
+}
+
+#[test]
+fn a_closed_note_whose_save_runs_when_it_is_renamed_is_saved_at_the_new_path() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsebelas<Esc>");
+    let save = start_autosave(&mut app);
+    // Closed while its save runs: it waits in `closing`.
+    command(&mut app, "q");
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert_eq!(app.message().map(|(l, _)| l), None, "{:?}", app.message());
+    assert!(disk(&env, "Inbox/Ide baru.md").starts_with("sebelas\n"));
+    assert!(!env.path("Vault").join(NOTE).exists());
+}

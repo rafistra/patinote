@@ -431,31 +431,59 @@ fn diff(path: &str, old: &[u8], new: &[u8]) -> Option<String> {
 
 /// Checks a transaction and describes it, without writing anything.
 pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
-    plan_with(root, &on_disk_tx(root, tx), true)
+    let mut plan = plan_with(root, &on_disk_tx(root, tx), true).map_err(nfc_error)?;
+    for op in &mut plan.ops {
+        op.path = crate::names::nfc(&op.path);
+        op.to = op.to.as_deref().map(crate::names::nfc);
+    }
+    Ok(plan)
 }
 
 /// `tx` with every path as it is named on disk (Q-019: a name stored in
 /// NFD is written in place, not next to a new NFC copy). Borrowed when
 /// every path already is.
 fn on_disk_tx<'a>(root: &Path, tx: &'a Transaction) -> std::borrow::Cow<'a, Transaction> {
-    let disk = |p: &str| crate::names::disk_rel(root, p);
-    if tx
+    use crate::names::{disk_rel, nfc};
+    let disk = |p: &str| disk_rel(root, p);
+    // Each path looked up once; `None` when it is already the name on disk.
+    let mapped: Vec<Vec<Option<String>>> = tx
         .ops
         .iter()
-        .all(|op| op.paths().iter().all(|p| disk(p) == *p))
-    {
+        .map(|op| {
+            let found = match op {
+                // Renaming a name to its own NFC form: only the folder is
+                // looked up, or `to` would be found to be `from` itself.
+                Op::Move { from, to, .. } if nfc(from) == nfc(to) => {
+                    let to = match to.rsplit_once('/') {
+                        Some((dir, name)) => format!("{}/{name}", disk(dir)),
+                        None => to.clone(),
+                    };
+                    vec![disk(from), to]
+                }
+                _ => op.paths().iter().map(|p| disk(p)).collect(),
+            };
+            found
+                .into_iter()
+                .zip(op.paths())
+                .map(|(d, p)| (d != p).then_some(d))
+                .collect()
+        })
+        .collect();
+    if mapped.iter().flatten().all(Option::is_none) {
         return std::borrow::Cow::Borrowed(tx);
     }
+    let pick = |m: &Option<String>, p: &String| m.clone().unwrap_or_else(|| p.clone());
     let ops = tx
         .ops
         .iter()
-        .map(|op| match op {
+        .zip(&mapped)
+        .map(|(op, m)| match op {
             Op::Write {
                 path,
                 content,
                 expect,
             } => Op::Write {
-                path: disk(path),
+                path: pick(&m[0], path),
                 content: content.clone(),
                 expect: expect.clone(),
             },
@@ -465,13 +493,13 @@ fn on_disk_tx<'a>(root: &Path, tx: &'a Transaction) -> std::borrow::Cow<'a, Tran
                 content,
                 expect,
             } => Op::Move {
-                from: disk(from),
-                to: disk(to),
+                from: pick(&m[0], from),
+                to: pick(&m[1], to),
                 content: content.clone(),
                 expect: expect.clone(),
             },
             Op::Trash { path, expect } => Op::Trash {
-                path: disk(path),
+                path: pick(&m[0], path),
                 expect: expect.clone(),
             },
         })
@@ -480,6 +508,33 @@ fn on_disk_tx<'a>(root: &Path, tx: &'a Transaction) -> std::borrow::Cow<'a, Tran
         actor: tx.actor.clone(),
         ops,
     })
+}
+
+/// An error with its vault paths as the index names them (NFC), not as a
+/// name stored in NFD is on disk.
+fn nfc_error(e: WriteError) -> WriteError {
+    use crate::names::nfc;
+    match e {
+        WriteError::InvalidPath { path, reason } => WriteError::InvalidPath {
+            path: nfc(&path),
+            reason,
+        },
+        WriteError::Conflict { paths } => WriteError::Conflict {
+            paths: paths.iter().map(|p| nfc(p)).collect(),
+        },
+        WriteError::DestinationExists { path } => {
+            WriteError::DestinationExists { path: nfc(&path) }
+        }
+        WriteError::RolledBack { path, source } => WriteError::RolledBack {
+            path: nfc(&path),
+            source,
+        },
+        WriteError::RollbackFailed { path, source } => WriteError::RollbackFailed {
+            path: nfc(&path),
+            source,
+        },
+        io @ WriteError::Io { .. } => io,
+    }
 }
 
 /// [`plan`]; the diffs only with `preview` (a commit has no use for them,
@@ -851,6 +906,14 @@ impl Drop for WriteLock {
 
 /// Applies a transaction completely or not at all (see the module docs).
 pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Committed, WriteError> {
+    commit_on_disk(root, journal, tx).map_err(nfc_error)
+}
+
+fn commit_on_disk(
+    root: &Path,
+    journal: &Journal,
+    tx: &Transaction,
+) -> Result<Committed, WriteError> {
     let _lock = WriteLock::acquire(journal).map_err(io_err(&journal.dir))?;
     let tx = &*on_disk_tx(root, tx);
     let plan = plan_with(root, tx, false)?;
@@ -992,7 +1055,7 @@ pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Commit
     }
 
     entry.status = EntryStatus::Committed;
-    if let Err(source) = mark_committed(journal, &entry) {
+    if let Err(source) = mark(journal, &entry) {
         // Still pending, the entry would be undone at the next start, after
         // the write was reported done. Undo it now and say it failed.
         let path = tx
@@ -1004,7 +1067,12 @@ pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Commit
         return match undo(root, journal, &entry) {
             Ok(()) => {
                 entry.status = EntryStatus::RolledBack;
-                let _ = journal.write_manifest(&entry);
+                // Left pending, the entry would undo a later save of the
+                // same bytes at the next start: when it can't be marked,
+                // it goes (it is undone; nothing in it is needed).
+                if mark(journal, &entry).is_err() && fs::remove_dir_all(&entry_dir).is_err() {
+                    return Err(WriteError::RollbackFailed { path, source });
+                }
                 Err(WriteError::RolledBack { path, source })
             }
             Err(_) => Err(WriteError::RollbackFailed { path, source }),
@@ -1020,13 +1088,17 @@ pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Commit
 #[cfg(test)]
 thread_local! {
     /// Makes the next "committed" mark fail, as on a full disk.
-    static FAIL_MARK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_MARKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-/// Writes the manifest of a finished entry, trying twice.
-fn mark_committed(journal: &Journal, entry: &Entry) -> io::Result<()> {
+/// Writes the manifest of a finished (or undone) entry, trying twice.
+fn mark(journal: &Journal, entry: &Entry) -> io::Result<()> {
     #[cfg(test)]
-    if FAIL_MARK.with(|f| f.replace(false)) {
+    if FAIL_MARKS.with(|f| {
+        let n = f.get();
+        f.set(n.saturating_sub(1));
+        n > 0
+    }) {
         return Err(io::Error::other("no space left on device"));
     }
     journal
@@ -1215,13 +1287,40 @@ mod tests {
                 expect: expect_current(&root, "a.md").unwrap(),
             }],
         };
-        FAIL_MARK.with(|f| f.set(true));
+        FAIL_MARKS.with(|f| f.set(1));
         let err = commit(&root, &journal, &tx).unwrap_err();
         assert!(matches!(err, WriteError::RolledBack { .. }), "{err:?}");
         assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "lama\n");
         // Nothing left for the next start to undo, and the retry works.
         assert_eq!(recover(&root, &journal).unwrap(), Vec::<String>::new());
         commit(&root, &journal, &tx).unwrap();
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "baru\n");
+    }
+
+    /// The disk stays full: the "rolled back" mark fails too. The entry must
+    /// not stay pending, or the next start would undo a later save of the
+    /// same text.
+    #[test]
+    fn a_rollback_whose_mark_fails_leaves_nothing_to_undo_later() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("a.md"), "lama\n").unwrap();
+        let journal = Journal::new(dir.path().join("journal"));
+        let tx = Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: "a.md".into(),
+                content: b"baru\n".to_vec(),
+                expect: expect_current(&root, "a.md").unwrap(),
+            }],
+        };
+        FAIL_MARKS.with(|f| f.set(2));
+        assert!(commit(&root, &journal, &tx).is_err());
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "lama\n");
+        // Space freed: the same text saved again, then a restart.
+        commit(&root, &journal, &tx).unwrap();
+        recover(&root, &journal).unwrap();
         assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "baru\n");
     }
 }

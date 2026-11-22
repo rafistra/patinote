@@ -551,10 +551,25 @@ impl App {
         // A read after a save that worked: it must not hold up the rest.
         let mut recheck = None;
         let mut next = Task::none();
+        // Refused at a path a rename or move took away while it ran: nothing
+        // changed outside, so it is saved again at the new path at once.
+        let overtaken = |doc: &mut Document| {
+            doc.saving_at.take().is_some()
+                && matches!(
+                    done.result,
+                    Err(crate::editor::document::SaveFailure::Changed)
+                )
+        };
         if let Some(w) = self.workspace_mut() {
-            if let Some(i) = w.closing.iter().position(|d| d.path == done.path) {
+            let (root, journal) = (w.session.paths.root.clone(), w.journal.clone());
+            let saved_at = |d: &Document| d.saving_at.as_ref().unwrap_or(&d.path) == &done.path;
+            if let Some(i) = w.closing.iter().position(saved_at) {
                 let mut doc = w.closing.remove(i);
-                doc.finish_save(&done, now);
+                if overtaken(&mut doc) {
+                    doc.save = Save::Idle;
+                } else {
+                    doc.finish_save(&done, now);
+                }
                 if doc.dirty() && doc.save == Save::Idle {
                     // Typed into before it was closed, after this save
                     // started: save the rest, still closed.
@@ -592,23 +607,17 @@ impl App {
                 .buffers
                 .iter_mut()
                 .filter_map(|b| b.doc.as_mut())
-                .find(|d| d.saving_at.as_ref().unwrap_or(&d.path) == &done.path)
+                .find(|d| saved_at(d))
             {
-                if doc.saving_at.take().is_some()
-                    && matches!(
-                        done.result,
-                        Err(crate::editor::document::SaveFailure::Changed)
-                    )
-                {
-                    // Started before the note moved: refused at the old path,
-                    // which is gone. Nothing changed outside; it is saved
-                    // again at the new path.
-                    doc.save = Save::Idle;
-                    return Task::none();
-                }
-                doc.finish_save(&done, now);
-                message = landed_message(doc);
                 let changed_meanwhile = std::mem::take(&mut doc.recheck);
+                if overtaken(doc) {
+                    doc.save = Save::Idle;
+                    let job = doc.start_save(&root, &journal);
+                    next = Task::future(async move { Message::Saved(job.run()) });
+                } else {
+                    doc.finish_save(&done, now);
+                    message = landed_message(doc);
+                }
                 if doc.save == Save::Changed {
                     // The hash on disk differs (F-11.3): read it for the banner.
                     reread = Some(doc.path.clone());
@@ -641,13 +650,13 @@ impl App {
             if self.save_failed() {
                 // Never quit with text that is not on disk.
                 self.quitting = false;
-                return recheck;
+                return Task::batch([recheck, next]);
             }
             if !self.unsaved() {
                 return Task::batch([recheck, self.quit(false)]);
             }
         }
-        recheck
+        Task::batch([recheck, next])
     }
 
     fn save_failed(&self) -> bool {
