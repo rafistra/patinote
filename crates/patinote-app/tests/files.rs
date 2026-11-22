@@ -9,6 +9,7 @@ use std::time::Duration;
 use common::{Env, command, keys, leader, press, send, wait};
 use patinote_app::app::{App, Message};
 use patinote_core::config::Config;
+use patinote_core::ipc::Request;
 
 fn start(env: &Env) -> App {
     env.start(env.launch(Some(env.vault()), Config::default()))
@@ -354,4 +355,71 @@ fn f10_5_deleting_a_note_left_of_the_active_one_keeps_the_active_one() {
     press(&mut app, "Enter");
     assert!(!env.path("Vault/Inbox/Ide cepat.md").exists());
     assert_eq!(app.title(), "Rapat — Patinote");
+}
+
+#[test]
+fn f10_2_names_that_start_with_a_dot_are_refused() {
+    let env = Env::new();
+    let mut app = start(&env);
+    leader(&mut app, "n");
+    send(&mut app, Message::DialogInput(".draft".into()));
+    send(&mut app, Message::DialogSubmit);
+    assert!(app.dialog_open(), "hidden notes are never written");
+    assert!(app.active_text().is_none());
+    // In the explorer too.
+    send(&mut app, Message::DialogInput(String::new()));
+    keys(&mut app, "<Esc>");
+    explorer_key(&mut app, "Proyek", "a");
+    send(&mut app, Message::InlineInput(".rahasia".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert!(app.active_text().is_none());
+}
+
+#[test]
+fn f09_5_jumps_and_recent_notes_follow_a_moved_folder() {
+    let env = Env::new();
+    let mut app = start(&env);
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Proyek/Patinote.md".into(),
+        }),
+    );
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Inbox/Ide cepat.md".into(),
+        }),
+    );
+    explorer_key(&mut app, "Proyek", "r");
+    send(&mut app, Message::InlineInput("Lama".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert!(
+        env.path("Vault/Lama/Patinote.md").exists(),
+        "{:?}",
+        app.message()
+    );
+    // Back to the editor; Ctrl+O goes back to the note at its new path.
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Character("w".into()),
+        iced::keyboard::Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(&mut app, "l");
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Character("o".into()),
+        iced::keyboard::Modifiers::CTRL,
+        None,
+        false,
+    );
+    assert_eq!(app.title(), "Patinote — Patinote");
+    assert!(
+        !app.buffer_titles().iter().any(|t| t.is_empty()),
+        "{:?}",
+        app.buffer_titles()
+    );
+    assert_eq!(app.message(), None, "{:?}", app.message());
 }

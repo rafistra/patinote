@@ -77,6 +77,13 @@ pub enum Dialog {
 
 /// The problem with a typed name, for the input's look and message.
 pub fn name_problem(value: &str) -> Option<(Field, String)> {
+    // Hidden files and folders are never written (`write::check_path`).
+    if value.trim().starts_with('.') && !matches!(value.trim(), "." | "..") {
+        return Some((
+            Field::Rejected,
+            "Folder and note names can't start with a dot".into(),
+        ));
+    }
     match explorer::check_name(value) {
         NameCheck::Ok => None,
         NameCheck::Warning(c) => Some((Field::Warning, explorer::warning(c))),
@@ -770,6 +777,9 @@ impl App {
         if let Err(e) = result {
             self.say(Level::Error, format!("Can't change the vault: {e}"));
             return Task::none();
+        }
+        for g in &gone {
+            self.paths_moved(g, None);
         }
         if let Some(w) = self.workspace_mut() {
             let (shown, was) = (w.active_buffer().map(|b| b.id), w.active);

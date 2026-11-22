@@ -902,7 +902,7 @@ impl App {
         let Some(mut doc) = buffer.doc else {
             return Task::none();
         };
-        if discard || !doc.dirty() || doc.read_only.is_some() {
+        if discard || !doc.needs_saving() {
             return Task::none();
         }
         // Unsaved text is kept until it is on disk. A save already running

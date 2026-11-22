@@ -462,7 +462,7 @@ impl App {
                 || w.buffers
                     .iter()
                     .filter_map(|b| b.doc.as_ref())
-                    .any(|d| d.dirty() && d.read_only.is_none())
+                    .any(Document::needs_saving)
         })
     }
 
@@ -480,8 +480,7 @@ impl App {
             .filter_map(|b| b.doc.as_ref())
             .chain(&w.closing)
             .find(|d| {
-                d.dirty()
-                    && d.read_only.is_none()
+                d.needs_saving()
                     && within(&d.path)
                     && match d.save {
                         Save::Changed => true,
@@ -593,8 +592,20 @@ impl App {
                 .buffers
                 .iter_mut()
                 .filter_map(|b| b.doc.as_mut())
-                .find(|d| d.path == done.path)
+                .find(|d| d.saving_at.as_ref().unwrap_or(&d.path) == &done.path)
             {
+                if doc.saving_at.take().is_some()
+                    && matches!(
+                        done.result,
+                        Err(crate::editor::document::SaveFailure::Changed)
+                    )
+                {
+                    // Started before the note moved: refused at the old path,
+                    // which is gone. Nothing changed outside; it is saved
+                    // again at the new path.
+                    doc.save = Save::Idle;
+                    return Task::none();
+                }
                 doc.finish_save(&done, now);
                 message = landed_message(doc);
                 let changed_meanwhile = std::mem::take(&mut doc.recheck);

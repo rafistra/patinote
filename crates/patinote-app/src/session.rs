@@ -118,20 +118,21 @@ impl Session {
     }
 
     /// Runs `f` on the index thread. `None` when the index is not available.
+    /// Nothing is sent before the future is first polled, so a task chained
+    /// after another (`save.chain(query)`) really runs after it.
     pub fn query<T, F>(&self, f: F) -> impl Future<Output = Option<T>> + use<T, F>
     where
         T: Send + 'static,
         F: FnOnce(&mut SqliteStore) -> T + Send + 'static,
     {
-        let (tx, rx) = oneshot::channel();
-        let sent = self.jobs.send(Box::new(move |store| {
-            let _ = tx.send(f(store));
-        }));
+        let jobs = self.jobs.clone();
         async move {
-            match sent {
-                Ok(()) => rx.await.ok(),
-                Err(_) => None,
-            }
+            let (tx, rx) = oneshot::channel();
+            jobs.send(Box::new(move |store| {
+                let _ = tx.send(f(store));
+            }))
+            .ok()?;
+            rx.await.ok()
         }
     }
 }
@@ -337,5 +338,27 @@ mod tests {
             "{events:?}"
         );
         assert!(matches!(events[1], IndexEvent::Failed(_)), "{events:?}");
+    }
+
+    /// A query waits to be polled: chained after a save, it runs after it.
+    #[test]
+    fn a_query_runs_only_once_polled() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        let paths =
+            VaultPaths::resolve(&vault, &dir.path().join("cache"), &dir.path().join("state"))
+                .unwrap();
+        let (session, events) = Session::open(paths);
+        let _: Vec<IndexEvent> = block_on(events.collect());
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&ran);
+        let query = session.query(move |_| flag.store(true, Ordering::SeqCst));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!ran.load(Ordering::SeqCst), "not before it is polled");
+        assert_eq!(block_on(query), Some(()));
+        assert!(ran.load(Ordering::SeqCst));
     }
 }
