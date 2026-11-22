@@ -427,7 +427,7 @@ impl App {
         let tasks: Vec<Task<Message>> = reload
             .into_iter()
             .filter_map(|p| {
-                let file = self.workspace()?.session.paths.root.join(&p);
+                let root = self.workspace()?.session.paths.root.clone();
                 if let Some(w) = self.workspace_mut()
                     && let Some(b) = w.buffers.iter_mut().find(|b| b.path == p)
                 {
@@ -442,10 +442,7 @@ impl App {
                         b.doc = None;
                     }
                 }
-                Some(Task::future(async move {
-                    let bytes = std::fs::read(&file).map_err(|e| e.to_string());
-                    Message::NoteLoaded(p, bytes)
-                }))
+                Some(super::read_note(root, p))
             })
             .collect();
         let compare: Vec<Task<Message>> = compare.into_iter().map(|p| self.read_disk(p)).collect();

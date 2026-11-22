@@ -707,3 +707,102 @@ fn a_journal_entry_that_cannot_be_read_for_now_is_tried_again() {
         "undone on the next try"
     );
 }
+
+/// Committing does not build the preview diff (`plan` does): a large note
+/// with every line changed saves without stalling or overflowing the stack.
+#[test]
+fn committing_a_large_rewrite_does_not_diff_it() {
+    let v = vault();
+    let old: String = (0..300_000).map(|i| format!("{}\n", i % 3)).collect();
+    v.write("besar.md", &old);
+    let new: String = (0..300_000)
+        .map(|i| {
+            if i % 2 == 0 {
+                format!("x{}\n", i % 3)
+            } else {
+                format!("{}\n", i % 3)
+            }
+        })
+        .collect();
+    v.commit(vec![write_op("besar.md", &new, v.expect("besar.md"))])
+        .unwrap();
+    assert_eq!(v.read("besar.md").as_deref(), Some(new.as_str()));
+}
+
+#[test]
+fn moving_onto_an_existing_name_says_so() {
+    let v = vault();
+    v.write("A.md", "a\n");
+    v.write("B.md", "b\n");
+    let err = v
+        .commit(vec![Op::Move {
+            from: "A.md".into(),
+            to: "B.md".into(),
+            content: None,
+            expect: v.expect("A.md"),
+        }])
+        .unwrap_err();
+    assert!(
+        matches!(&err, WriteError::DestinationExists { path } if path == "B.md"),
+        "{err:?}"
+    );
+    assert_eq!(err.to_string(), "B.md already exists");
+    assert_eq!(v.read("A.md").as_deref(), Some("a\n"));
+}
+
+/// A folder in the vault that links outside it: nothing is written
+/// through it. One that links to another folder of the vault is fine.
+#[test]
+fn nothing_is_written_through_a_folder_link_that_leaves_the_vault() {
+    let v = vault();
+    let outside = v._dir.path().join("luar");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("Catatan.md"), "luar\n").unwrap();
+    std::os::unix::fs::symlink(&outside, v.root.join("Bersama")).unwrap();
+    let err = v
+        .commit(vec![write_op(
+            "Bersama/Catatan.md",
+            "diubah\n",
+            v.expect("Bersama/Catatan.md"),
+        )])
+        .unwrap_err();
+    assert!(matches!(err, WriteError::InvalidPath { .. }), "{err:?}");
+    assert_eq!(
+        fs::read_to_string(outside.join("Catatan.md")).unwrap(),
+        "luar\n"
+    );
+    // New files, moves and the trash go through the same check.
+    assert!(
+        v.commit(vec![write_op("Bersama/Baru/x.md", "x\n", Expect::Absent)])
+            .is_err()
+    );
+    assert!(!outside.join("Baru").exists());
+    v.write("a.md", "a\n");
+    assert!(
+        v.commit(vec![Op::Move {
+            from: "a.md".into(),
+            to: "Bersama/a.md".into(),
+            content: None,
+            expect: v.expect("a.md"),
+        }])
+        .is_err()
+    );
+    assert!(
+        v.commit(vec![Op::Trash {
+            path: "Bersama/Catatan.md".into(),
+            expect: v.expect("Bersama/Catatan.md"),
+        }])
+        .is_err()
+    );
+    assert!(outside.join("Catatan.md").exists());
+
+    v.write("Proyek/p.md", "p\n");
+    std::os::unix::fs::symlink(v.root.join("Proyek"), v.root.join("Alias")).unwrap();
+    v.commit(vec![write_op(
+        "Alias/p.md",
+        "p baru\n",
+        v.expect("Alias/p.md"),
+    )])
+    .unwrap();
+    assert_eq!(v.read("Proyek/p.md").as_deref(), Some("p baru\n"));
+}

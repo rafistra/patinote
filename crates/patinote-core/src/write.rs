@@ -172,6 +172,9 @@ pub enum WriteError {
     /// Files changed since they were read; nothing was written.
     #[error("files changed since they were read: {}", paths.join(", "))]
     Conflict { paths: Vec<String> },
+    /// A move's destination is taken; nothing was written.
+    #[error("{path} already exists")]
+    DestinationExists { path: String },
     /// I/O failed before the vault was touched.
     #[error("cannot write {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
@@ -246,6 +249,45 @@ fn check_link(root: &Path, path: &str) -> Result<(), WriteError> {
         .map_err(|_| bad("the note links to a file outside the vault"))?;
     check_path(&rel.to_string_lossy())
         .map_err(|_| bad("the note links to a file the vault may not write"))
+}
+
+/// The folder `path` is in must be the vault's own, even through links:
+/// the nearest folder of it that exists, resolved, is inside the vault and
+/// not hidden. A folder that links elsewhere is never written through.
+fn check_folder(root: &Path, path: &str) -> Result<(), WriteError> {
+    let bad = |reason| WriteError::InvalidPath {
+        path: path.to_owned(),
+        reason,
+    };
+    let canonical_root = fs::canonicalize(root).map_err(io_err(root))?;
+    let mut dir = Path::new(path).parent();
+    while let Some(rel) = dir {
+        let full = root.join(rel);
+        if fs::symlink_metadata(&full).is_ok() {
+            let real = fs::canonicalize(&full)
+                .map_err(|_| bad("the folder links to one that does not exist"))?;
+            let inside = real
+                .strip_prefix(&canonical_root)
+                .map_err(|_| bad("the folder links outside the vault"))?;
+            if inside.as_os_str().is_empty() {
+                return Ok(());
+            }
+            // As a folder: `.patinote/` holds settings, `.patinote` alone is no note.
+            return check_path(&format!("{}/x", inside.to_string_lossy()))
+                .map_err(|_| bad("the folder links to one the vault may not write"));
+        }
+        dir = rel.parent();
+    }
+    Ok(())
+}
+
+/// Whether the vault may write `path` (an existing note or a new one):
+/// a vault path, not hidden, and not reached through a link to a file or
+/// folder outside the vault. A note it refuses opens read-only.
+pub fn check_writable(root: &Path, path: &str) -> Result<(), WriteError> {
+    check_path(path)?;
+    check_folder(root, path)?;
+    check_link(root, path)
 }
 
 /// The hash [`Expect::Hash`] compares against: blake3 of the file's bytes.
@@ -388,7 +430,16 @@ fn diff(path: &str, old: &[u8], new: &[u8]) -> Option<String> {
 
 /// Checks a transaction and describes it, without writing anything.
 pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
+    plan_with(root, tx, true)
+}
+
+/// [`plan`]; the diffs only with `preview` (a commit has no use for them,
+/// and a large rewrite takes long to diff).
+fn plan_with(root: &Path, tx: &Transaction, preview: bool) -> Result<Plan, WriteError> {
     validate(tx)?;
+    let diff = |path: &str, old: &[u8], new: &[u8]| {
+        if preview { diff(path, old, new) } else { None }
+    };
     let now = SystemTime::now();
     let mut ops = Vec::with_capacity(tx.ops.len());
     for op in &tx.ops {
@@ -398,9 +449,14 @@ pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
                 content,
                 expect,
             } => {
+                check_folder(root, path)?;
                 check_link(root, path)?;
                 let ok = matches(root, path, expect).map_err(io_err(&root.join(path)))?;
-                let old = fs::read(root.join(path)).unwrap_or_default();
+                let old = if preview {
+                    fs::read(root.join(path)).unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
                 PlannedOp {
                     action: if *expect == Expect::Absent {
                         "create"
@@ -430,10 +486,13 @@ pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
                         reason: "the note is a link; its own links can't change while it moves",
                     });
                 }
+                check_folder(root, from)?;
+                check_folder(root, to)?;
                 let ok = matches(root, from, expect).map_err(io_err(&root.join(from)))?;
                 let taken = fs::symlink_metadata(root.join(to)).is_ok();
                 let diff = content
                     .as_ref()
+                    .filter(|_| preview)
                     .and_then(|c| diff(from, &fs::read(root.join(from)).unwrap_or_default(), c));
                 PlannedOp {
                     action: "move",
@@ -450,6 +509,7 @@ pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
                 }
             }
             Op::Trash { path, expect } => {
+                check_folder(root, path)?;
                 let ok = matches(root, path, expect).map_err(io_err(&root.join(path)))?;
                 PlannedOp {
                     action: "trash",
@@ -743,7 +803,15 @@ impl Drop for WriteLock {
 /// Applies a transaction completely or not at all (see the module docs).
 pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Committed, WriteError> {
     let _lock = WriteLock::acquire(journal).map_err(io_err(&journal.dir))?;
-    let plan = plan(root, tx)?;
+    let plan = plan_with(root, tx, false)?;
+    if let Some(to) = plan
+        .ops
+        .iter()
+        .find(|o| o.conflict == Some(Conflict::DestinationExists))
+        .and_then(|o| o.to.clone())
+    {
+        return Err(WriteError::DestinationExists { path: to });
+    }
     let conflicts: Vec<String> = plan.conflicts().into_iter().map(str::to_owned).collect();
     if !conflicts.is_empty() {
         return Err(WriteError::Conflict { paths: conflicts });
@@ -874,10 +942,44 @@ pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Commit
     }
 
     entry.status = EntryStatus::Committed;
-    journal.write_manifest(&entry).map_err(io_err(&entry_dir))?;
+    if let Err(source) = mark_committed(journal, &entry) {
+        // Still pending, the entry would be undone at the next start, after
+        // the write was reported done. Undo it now and say it failed.
+        let path = tx
+            .ops
+            .first()
+            .map(|o| o.paths()[0].to_owned())
+            .unwrap_or_default();
+        entry.status = EntryStatus::Pending;
+        return match undo(root, journal, &entry) {
+            Ok(()) => {
+                entry.status = EntryStatus::RolledBack;
+                let _ = journal.write_manifest(&entry);
+                Err(WriteError::RolledBack { path, source })
+            }
+            Err(_) => Err(WriteError::RollbackFailed { path, source }),
+        };
+    }
     // Retention problems never fail a write that already happened.
     let _ = journal.prune(now);
     Ok(Committed { id, changed })
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Makes the next "committed" mark fail, as on a full disk.
+    static FAIL_MARK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Writes the manifest of a finished entry, trying twice.
+fn mark_committed(journal: &Journal, entry: &Entry) -> io::Result<()> {
+    #[cfg(test)]
+    if FAIL_MARK.with(|f| f.replace(false)) {
+        return Err(io::Error::other("no space left on device"));
+    }
+    journal
+        .write_manifest(entry)
+        .or_else(|_| journal.write_manifest(entry))
 }
 
 /// Undoes whatever of `entry` is applied, in reverse order. It checks the
@@ -1041,5 +1143,33 @@ mod tests {
     fn actors() {
         assert_eq!(Actor::Agent("claude".into()).as_label(), "agent:claude");
         assert_eq!(Actor::User.as_label(), "user");
+    }
+
+    /// The write landed but its "committed" mark did not: it is undone and
+    /// reported failed, rather than reported done and undone at the next
+    /// start.
+    #[test]
+    fn a_write_whose_commit_mark_fails_is_undone_and_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("a.md"), "lama\n").unwrap();
+        let journal = Journal::new(dir.path().join("journal"));
+        let tx = Transaction {
+            actor: Actor::User,
+            ops: vec![Op::Write {
+                path: "a.md".into(),
+                content: b"baru\n".to_vec(),
+                expect: expect_current(&root, "a.md").unwrap(),
+            }],
+        };
+        FAIL_MARK.with(|f| f.set(true));
+        let err = commit(&root, &journal, &tx).unwrap_err();
+        assert!(matches!(err, WriteError::RolledBack { .. }), "{err:?}");
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "lama\n");
+        // Nothing left for the next start to undo, and the retry works.
+        assert_eq!(recover(&root, &journal).unwrap(), Vec::<String>::new());
+        commit(&root, &journal, &tx).unwrap();
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "baru\n");
     }
 }
