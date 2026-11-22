@@ -3,6 +3,7 @@
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use patinote_core::store::Hash;
@@ -48,8 +49,15 @@ pub enum External {
     Deleted,
 }
 
+/// Numbers documents, so a save's result finds the document it was started
+/// for whatever its path is by then (renames, moves, a new note at the old
+/// path).
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
 /// An open note.
 pub struct Document {
+    /// Unique for the life of the app; never reused.
+    pub id: u64,
     pub path: String,
     pub buffer: vim::Buffer,
     pub format: Format,
@@ -67,9 +75,6 @@ pub struct Document {
     pub external: Option<External>,
     /// The disk changed while a save ran: read it again once the save lands.
     pub recheck: bool,
-    /// The path a save still running was started at, when a rename or move
-    /// changed `path` meanwhile: its result is this note's.
-    pub saving_at: Option<String>,
     kinds: Vec<LineKind>,
     kinds_rev: u64,
     /// Words in the note, with the buffer revision they were counted at.
@@ -84,6 +89,7 @@ impl Document {
         let rev = buffer.revision();
         let kinds = line_kinds(buffer.lines());
         Self {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             path,
             buffer,
             format: opened.format,
@@ -95,7 +101,6 @@ impl Document {
             vim,
             external: None,
             recheck: false,
-            saving_at: None,
             kinds,
             kinds_rev: rev,
             words: Cell::new(None),
@@ -194,6 +199,7 @@ impl Document {
         let rev = self.buffer.revision();
         self.save = Save::Running(rev);
         SaveJob {
+            doc: self.id,
             root: root.to_path_buf(),
             journal: journal.clone(),
             path: self.path.clone(),
@@ -226,6 +232,8 @@ impl Document {
 /// A save to run on a background thread.
 #[derive(Debug, Clone)]
 pub struct SaveJob {
+    /// The [`Document::id`] it saves.
+    doc: u64,
     root: PathBuf,
     journal: Journal,
     pub path: String,
@@ -250,6 +258,9 @@ pub enum SaveFailure {
 /// The result of a [`SaveJob`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SaveDone {
+    /// The [`Document::id`] it saved.
+    pub doc: u64,
+    /// Where it was written (the document may have moved since).
     pub path: String,
     pub rev: u64,
     /// The new hash on disk.
@@ -281,6 +292,7 @@ impl SaveJob {
             }
         };
         SaveDone {
+            doc: self.doc,
             path: self.path,
             rev: self.rev,
             result,

@@ -900,3 +900,31 @@ fn a_note_named_in_nfd_can_be_renamed_to_its_nfc_form() {
         .collect();
     assert_eq!(names, ["Café.md"]);
 }
+
+/// The preview of a note named in NFD names it in NFC throughout; a
+/// rename to its own NFC form lists it once as changed.
+#[test]
+fn previews_and_changes_of_nfd_names_are_consistent() {
+    let v = vault();
+    v.write("Cafe\u{301}.md", "lama\n");
+    let p = plan(
+        &v.root,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![write_op("Café.md", "baru\n", v.expect("Café.md"))],
+        },
+    )
+    .unwrap();
+    let diff = p.ops[0].diff.clone().unwrap();
+    assert!(diff.contains("Café.md"), "{diff}");
+    assert!(!diff.contains("Cafe\u{301}"), "{diff}");
+    let done = v
+        .commit(vec![Op::Move {
+            from: "Cafe\u{301}.md".into(),
+            to: "Café.md".into(),
+            content: None,
+            expect: v.expect("Cafe\u{301}.md"),
+        }])
+        .unwrap();
+    assert_eq!(done.changed, ["Café.md"]);
+}

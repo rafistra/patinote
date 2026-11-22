@@ -433,8 +433,13 @@ fn diff(path: &str, old: &[u8], new: &[u8]) -> Option<String> {
 pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
     let mut plan = plan_with(root, &on_disk_tx(root, tx), true).map_err(nfc_error)?;
     for op in &mut plan.ops {
-        op.path = crate::names::nfc(&op.path);
-        op.to = op.to.as_deref().map(crate::names::nfc);
+        let to = op.to.as_deref().map(crate::names::nfc);
+        // Renamed to its own NFC form: the source keeps its name on disk,
+        // or the preview would read "Café.md → Café.md".
+        if to.as_deref() != Some(crate::names::nfc(&op.path).as_str()) {
+            op.path = crate::names::nfc(&op.path);
+        }
+        op.to = to;
     }
     Ok(plan)
 }
@@ -569,7 +574,7 @@ fn plan_with(root: &Path, tx: &Transaction, preview: bool) -> Result<Plan, Write
                     },
                     path: path.clone(),
                     to: None,
-                    diff: diff(path, &old, content),
+                    diff: diff(&crate::names::nfc(path), &old, content),
                     conflict: (!ok).then_some(Conflict::Changed),
                 }
             }
@@ -594,10 +599,10 @@ fn plan_with(root: &Path, tx: &Transaction, preview: bool) -> Result<Plan, Write
                 check_folder(root, to)?;
                 let ok = matches(root, from, expect).map_err(io_err(&root.join(from)))?;
                 let taken = fs::symlink_metadata(root.join(to)).is_ok();
-                let diff = content
-                    .as_ref()
-                    .filter(|_| preview)
-                    .and_then(|c| diff(from, &fs::read(root.join(from)).unwrap_or_default(), c));
+                let diff = content.as_ref().filter(|_| preview).and_then(|c| {
+                    let old = fs::read(root.join(from)).unwrap_or_default();
+                    diff(&crate::names::nfc(from), &old, c)
+                });
                 PlannedOp {
                     action: "move",
                     path: from.clone(),
@@ -1044,12 +1049,10 @@ fn commit_on_disk(
         if let Err(source) = result {
             let path = op.paths()[0].to_owned();
             return match undo(root, journal, &entry) {
-                Ok(()) => {
-                    entry.status = EntryStatus::RolledBack;
-                    let _ = journal.write_manifest(&entry);
+                Ok(()) if close_undone(journal, &mut entry) => {
                     Err(WriteError::RolledBack { path, source })
                 }
-                Err(_) => Err(WriteError::RollbackFailed { path, source }),
+                _ => Err(WriteError::RollbackFailed { path, source }),
             };
         }
     }
@@ -1065,23 +1068,24 @@ fn commit_on_disk(
             .unwrap_or_default();
         entry.status = EntryStatus::Pending;
         return match undo(root, journal, &entry) {
-            Ok(()) => {
-                entry.status = EntryStatus::RolledBack;
-                // Left pending, the entry would undo a later save of the
-                // same bytes at the next start: when it can't be marked,
-                // it goes (it is undone; nothing in it is needed).
-                if mark(journal, &entry).is_err() && fs::remove_dir_all(&entry_dir).is_err() {
-                    return Err(WriteError::RollbackFailed { path, source });
-                }
+            Ok(()) if close_undone(journal, &mut entry) => {
                 Err(WriteError::RolledBack { path, source })
             }
-            Err(_) => Err(WriteError::RollbackFailed { path, source }),
+            _ => Err(WriteError::RollbackFailed { path, source }),
         };
     }
     // Retention problems never fail a write that already happened.
     let _ = journal.prune(now);
     // Reported as the index names them (NFC).
-    let changed = changed.iter().map(|p| crate::names::nfc(p)).collect();
+    // A rename from an NFD name to its NFC form names one path twice.
+    let mut nfc_changed: Vec<String> = Vec::with_capacity(changed.len());
+    for p in &changed {
+        let p = crate::names::nfc(p);
+        if !nfc_changed.contains(&p) {
+            nfc_changed.push(p);
+        }
+    }
+    let changed = nfc_changed;
     Ok(Committed { id, changed })
 }
 
@@ -1089,6 +1093,24 @@ fn commit_on_disk(
 thread_local! {
     /// Makes the next "committed" mark fail, as on a full disk.
     static FAIL_MARKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// After an entry was undone: marks it rolled back, so the next start does
+/// not undo a later write of the same bytes. When even that can't be
+/// written (a full disk), the entry goes instead: its manifest first, so a
+/// half-removed entry is never read as pending; the rest is not needed.
+/// False when neither worked and the entry is still pending.
+fn close_undone(journal: &Journal, entry: &mut Entry) -> bool {
+    entry.status = EntryStatus::RolledBack;
+    if mark(journal, entry).is_ok() {
+        return true;
+    }
+    let dir = journal.dir.join(&entry.id);
+    if fs::remove_file(dir.join("manifest.json")).is_err() {
+        return false;
+    }
+    let _ = fs::remove_dir_all(&dir);
+    true
 }
 
 /// Writes the manifest of a finished (or undone) entry, trying twice.
@@ -1294,6 +1316,48 @@ mod tests {
         // Nothing left for the next start to undo, and the retry works.
         assert_eq!(recover(&root, &journal).unwrap(), Vec::<String>::new());
         commit(&root, &journal, &tx).unwrap();
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "baru\n");
+    }
+
+    /// Writing the vault fails halfway (a folder refuses it) and the disk is
+    /// full: the undone entry can't be marked. It must not stay pending.
+    #[test]
+    fn an_undone_write_that_cant_be_marked_is_not_undone_again_later() {
+        if fs::metadata("/proc/self")
+            .map(|m| std::os::unix::fs::MetadataExt::uid(&m) == 0)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        fs::create_dir_all(root.join("ro")).unwrap();
+        fs::write(root.join("a.md"), "lama\n").unwrap();
+        fs::write(root.join("ro/b.md"), "b\n").unwrap();
+        let journal = Journal::new(dir.path().join("journal"));
+        let write = |path: &str, text: &str| Op::Write {
+            path: path.into(),
+            content: text.as_bytes().to_vec(),
+            expect: expect_current(&root, path).unwrap(),
+        };
+        let both = Transaction {
+            actor: Actor::User,
+            ops: vec![write("a.md", "baru\n"), write("ro/b.md", "b baru\n")],
+        };
+        fs::set_permissions(root.join("ro"), fs::Permissions::from_mode(0o555)).unwrap();
+        FAIL_MARKS.with(|f| f.set(1));
+        let err = commit(&root, &journal, &both).unwrap_err();
+        fs::set_permissions(root.join("ro"), fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(matches!(err, WriteError::RolledBack { .. }), "{err:?}");
+        assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "lama\n");
+        // The same text saved again, then a restart.
+        let again = Transaction {
+            actor: Actor::User,
+            ops: vec![write("a.md", "baru\n")],
+        };
+        commit(&root, &journal, &again).unwrap();
+        recover(&root, &journal).unwrap();
         assert_eq!(fs::read_to_string(root.join("a.md")).unwrap(), "baru\n");
     }
 

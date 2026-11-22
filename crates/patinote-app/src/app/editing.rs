@@ -551,21 +551,25 @@ impl App {
         // A read after a save that worked: it must not hold up the rest.
         let mut recheck = None;
         let mut next = Task::none();
-        // Refused at a path a rename or move took away while it ran: nothing
-        // changed outside, so it is saved again at the new path at once.
-        let overtaken = |doc: &mut Document| {
-            doc.saving_at.take().is_some()
+        // Started before a rename or move took its path, and refused there
+        // (the file is gone): it is saved again at the new path at once. A
+        // real change from outside still shows: that save expects the hash
+        // this one did.
+        let overtaken = |doc: &Document| {
+            doc.path != done.path
                 && matches!(
                     done.result,
                     Err(crate::editor::document::SaveFailure::Changed)
                 )
         };
+        // Found by document, not path: the path may have moved since, or
+        // a new note may have taken the old one.
+        let ours = |d: &Document| d.id == done.doc;
         if let Some(w) = self.workspace_mut() {
             let (root, journal) = (w.session.paths.root.clone(), w.journal.clone());
-            let saved_at = |d: &Document| d.saving_at.as_ref().unwrap_or(&d.path) == &done.path;
-            if let Some(i) = w.closing.iter().position(saved_at) {
+            if let Some(i) = w.closing.iter().position(ours) {
                 let mut doc = w.closing.remove(i);
-                if overtaken(&mut doc) {
+                if overtaken(&doc) {
                     doc.save = Save::Idle;
                 } else {
                     doc.finish_save(&done, now);
@@ -607,23 +611,24 @@ impl App {
                 .buffers
                 .iter_mut()
                 .filter_map(|b| b.doc.as_mut())
-                .find(|d| saved_at(d))
+                .find(|d| ours(d))
             {
-                let changed_meanwhile = std::mem::take(&mut doc.recheck);
                 if overtaken(doc) {
+                    // A change seen meanwhile is read once this save lands.
                     doc.save = Save::Idle;
                     let job = doc.start_save(&root, &journal);
                     next = Task::future(async move { Message::Saved(job.run()) });
                 } else {
+                    let changed_meanwhile = std::mem::take(&mut doc.recheck);
                     doc.finish_save(&done, now);
                     message = landed_message(doc);
-                }
-                if doc.save == Save::Changed {
-                    // The hash on disk differs (F-11.3): read it for the banner.
-                    reread = Some(doc.path.clone());
-                } else if changed_meanwhile {
-                    // The disk changed while the save ran: look again.
-                    recheck = Some(doc.path.clone());
+                    if doc.save == Save::Changed {
+                        // The hash on disk differs (F-11.3): read it for the banner.
+                        reread = Some(doc.path.clone());
+                    } else if changed_meanwhile {
+                        // The disk changed while the save ran: look again.
+                        recheck = Some(doc.path.clone());
+                    }
                 }
             }
         }
