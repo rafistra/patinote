@@ -335,6 +335,27 @@ impl App {
         self.run_moves(moves, Some((from.clone(), to.clone())), from, to)
     }
 
+    /// A save landed: a move waiting for saves starts once none runs.
+    pub(super) fn saves_landed(&mut self) -> Task<Message> {
+        let Some(w) = self.workspace_mut() else {
+            return Task::none();
+        };
+        let running = w
+            .buffers
+            .iter()
+            .filter_map(|b| b.doc.as_ref())
+            .chain(&w.closing)
+            .any(|d| matches!(d.save, crate::editor::document::Save::Running(_)));
+        match (running, w.deferred_move.take()) {
+            (false, Some(m)) => self.run_moves(m.moves, m.folder, m.from, m.to),
+            (true, m) => {
+                w.deferred_move = m;
+                Task::none()
+            }
+            (false, None) => Task::none(),
+        }
+    }
+
     fn run_moves(
         &mut self,
         moves: Vec<Moved>,
@@ -342,6 +363,23 @@ impl App {
         from: String,
         to: String,
     ) -> Task<Message> {
+        // A save still running would land at a path that moved, or race the
+        // links the move rewrites: the move waits for it (`saves_landed`).
+        if let Some(w) = self.workspace_mut()
+            && w.buffers
+                .iter()
+                .filter_map(|b| b.doc.as_ref())
+                .chain(&w.closing)
+                .any(|d| matches!(d.save, crate::editor::document::Save::Running(_)))
+        {
+            w.deferred_move = Some(DeferredMove {
+                moves,
+                folder,
+                from,
+                to,
+            });
+            return Task::none();
+        }
         // Text that cannot be saved would be lost when its note is read
         // again after the move: settle it first.
         if let Some(p) = self.unsaved_stuck(|_| true, true) {
@@ -495,4 +533,13 @@ fn moved_path(path: &str, from: &str, to: Option<&str>) -> Option<Option<String>
     }
     let rest = path.strip_prefix(from)?.strip_prefix('/')?;
     Some(to.map(|t| format!("{t}/{rest}")))
+}
+
+/// A rename or move waiting for running saves to land.
+#[derive(Debug)]
+pub struct DeferredMove {
+    moves: Vec<Moved>,
+    folder: Option<(String, String)>,
+    from: String,
+    to: String,
 }

@@ -296,7 +296,19 @@ impl App {
             .workspace()
             .is_some_and(|w| w.closing.iter().any(|d| d.path == path))
         {
-            return self.open_note(path);
+            let open = self.open_note(path);
+            if insert
+                && let Some(doc) = self.active_document_mut()
+                && doc.vim.mode() == vim::Mode::Normal
+            {
+                doc.vim.handle(
+                    &mut doc.buffer,
+                    vim::Key::Char('i'),
+                    std::time::Instant::now(),
+                    1,
+                );
+            }
+            return open;
         }
         let leave = self.autosave(true);
         let insert_escape = self.config.insert_escape.clone();
