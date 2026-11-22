@@ -96,6 +96,9 @@ pub struct App {
     leader: bool,
     /// Link suggestions after `[[` (F-08).
     autocomplete: Option<linking::Autocomplete>,
+    /// Bumped whenever the user closes the suggestions (a click, the wheel,
+    /// Esc): headings asked for before then are dropped when they arrive.
+    dismissed: u64,
     /// The picker for an ambiguous link (F-08, mockup 12).
     picker: Option<linking::Picker>,
     /// A heading or block to show once its note has loaded: (path, subpath).
@@ -296,7 +299,7 @@ pub enum Message {
     Followed(String, usize, linking::Followed),
     /// Heading or block suggestions: the link's start column, what was
     /// typed, and (level, text); level 0 is a block.
-    Headings(usize, String, Vec<(u8, String)>),
+    Headings(u64, usize, String, Vec<(u8, String)>),
     /// A link suggestion was clicked.
     Suggest(usize),
     /// A note was picked for an ambiguous link.
@@ -397,6 +400,7 @@ impl App {
             modifiers: Modifiers::default(),
             leader: false,
             autocomplete: None,
+            dismissed: 0,
             picker: None,
             pending_jump: None,
             pending_cursor: HashMap::new(),
@@ -1240,8 +1244,10 @@ impl App {
                 Task::none()
             }
             Message::Followed(name, col, followed) => self.followed(name, col, followed),
-            Message::Headings(start, typed, found) => {
-                self.headings_loaded(start, typed, found);
+            Message::Headings(dismissed, start, typed, found) => {
+                if dismissed == self.dismissed {
+                    self.headings_loaded(start, typed, found);
+                }
                 Task::none()
             }
             Message::Suggest(i) => self.accept_suggestion(i),

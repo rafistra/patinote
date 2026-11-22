@@ -268,7 +268,7 @@ fn f08_5_gd_on_a_markdown_heading_link_in_the_same_note_jumps_to_it() {
 }
 
 #[test]
-fn f08_1_a_click_away_from_a_link_closes_its_suggestions() {
+fn f08_click_away_from_a_link_closes_its_suggestions() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggO[[Rap");
@@ -283,7 +283,7 @@ fn f08_1_a_click_away_from_a_link_closes_its_suggestions() {
 }
 
 #[test]
-fn f08_1_a_click_inside_a_finished_link_opens_no_suggestions() {
+fn f08_click_inside_a_finished_link_opens_no_suggestions() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggO[[Rapat|catatan rapat<Esc>");
@@ -297,7 +297,7 @@ fn f08_1_a_click_inside_a_finished_link_opens_no_suggestions() {
 }
 
 #[test]
-fn f08_1_suggestions_closed_with_esc_stay_closed_after_a_click() {
+fn f08_click_does_not_reopen_suggestions_closed_with_esc() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggO[[Rap<Esc>");
@@ -308,7 +308,7 @@ fn f08_1_suggestions_closed_with_esc_stay_closed_after_a_click() {
 }
 
 #[test]
-fn f08_1_a_ctrl_click_away_from_a_link_closes_its_suggestions() {
+fn f08_ctrl_click_away_from_a_link_closes_its_suggestions() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggO[[Rap");
@@ -318,18 +318,36 @@ fn f08_1_a_ctrl_click_away_from_a_link_closes_its_suggestions() {
 }
 
 #[test]
-fn f08_1_a_click_onto_another_link_does_not_carry_the_suggestions() {
+fn f08_click_onto_another_link_does_not_carry_the_suggestions() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggOlihat [[Desain indeks Patinote#Ta<Esc>");
     keys(&mut app, "o[[Rap");
     assert!(app.suggestions_open());
-    // The click lands inside the heading link on line 0; whatever
-    // suggestions show must not be the ones for `[[Rap`.
-    let held = app.update(Message::Click(0, 20, false));
-    assert!(!app.suggestions_open(), "closed at once");
-    common::run(&mut app, held);
+    send(&mut app, Message::Click(0, 20, false));
     assert!(!app.suggestions_open());
+}
+
+/// Heading suggestions asked for before a click, Esc or scroll closed them
+/// do not open them again when they arrive.
+#[test]
+fn f08_late_headings_do_not_reopen_closed_suggestions() {
+    for close in ["click", "esc", "scroll"] {
+        let env = Env::new();
+        let mut app = open(&env, "Inbox/Ide cepat.md");
+        keys(&mut app, "ggO[[Desain indeks Patinote#T");
+        let late = common::press_held(&mut app, "a");
+        let (l, c) = app.active_cursor().unwrap();
+        match close {
+            "click" => send(&mut app, Message::Click(l, c, false)),
+            "esc" => keys(&mut app, "<Esc>"),
+            // The wheel moved the view down past the cursor's line.
+            _ => send(&mut app, Message::Scrolled(l + 1, l + 5)),
+        }
+        assert!(!app.suggestions_open(), "{close}");
+        common::run(&mut app, late);
+        assert!(!app.suggestions_open(), "{close}: reopened");
+    }
 }
 
 #[test]
@@ -342,6 +360,7 @@ fn f08_4_headings_that_arrive_for_another_link_are_dropped() {
     send(
         &mut app,
         Message::Headings(
+            0,
             2,
             "Desain indeks Patinote#".into(),
             vec![(2, "Tabel inti".into())],

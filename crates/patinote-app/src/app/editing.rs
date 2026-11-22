@@ -654,7 +654,7 @@ impl App {
         }
         // As in Vim, moving the cursor ends the completion: suggestions
         // close, and only typing opens them again.
-        self.autocomplete = None;
+        self.dismiss_suggestions();
         if ctrl {
             return self.follow_link();
         }
@@ -675,7 +675,7 @@ impl App {
             let rev = doc.buffer.revision();
             doc.vim.move_cursor(&mut doc.buffer, pos);
             doc.moved_cursor(rev);
-            self.autocomplete = None;
+            self.dismiss_suggestions();
         }
         Task::none()
     }
