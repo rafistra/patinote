@@ -433,13 +433,8 @@ fn diff(path: &str, old: &[u8], new: &[u8]) -> Option<String> {
 pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
     let mut plan = plan_with(root, &on_disk_tx(root, tx), true).map_err(nfc_error)?;
     for op in &mut plan.ops {
-        let to = op.to.as_deref().map(crate::names::nfc);
-        // Renamed to its own NFC form: the source keeps its name on disk,
-        // or the preview would read "Café.md → Café.md".
-        if to.as_deref() != Some(crate::names::nfc(&op.path).as_str()) {
-            op.path = crate::names::nfc(&op.path);
-        }
-        op.to = to;
+        op.path = crate::names::nfc(&op.path);
+        op.to = op.to.as_deref().map(crate::names::nfc);
     }
     Ok(plan)
 }
@@ -765,6 +760,26 @@ impl Journal {
         self.prune_with(now, &Retention::PRD)
     }
 
+    /// Removes entry folders with no manifest that are over an hour old:
+    /// what is left when removing an undone entry stopped halfway. They
+    /// hold old note text that nothing reads. A younger one may be an entry
+    /// still being written, so it stays.
+    fn sweep_orphans(&self, now: SystemTime) {
+        let Ok(dirs) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        for d in dirs.filter_map(Result::ok) {
+            let path = d.path();
+            let old = d
+                .metadata()
+                .and_then(|m| m.modified())
+                .is_ok_and(|t| now.duration_since(t).is_ok_and(|age| age.as_secs() > 3600));
+            if old && path.is_dir() && !path.join("manifest.json").exists() {
+                let _ = fs::remove_dir_all(&path);
+            }
+        }
+    }
+
     /// Applies `rules`. Pending entries are never removed. Returns the ids removed.
     pub fn prune_with(&self, now: SystemTime, rules: &Retention) -> io::Result<Vec<String>> {
         let now_s = now.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
@@ -802,6 +817,7 @@ impl Journal {
         for id in &remove {
             fs::remove_dir_all(self.dir.join(id))?;
         }
+        self.sweep_orphans(now);
         Ok(remove.into_iter().collect())
     }
 }
@@ -1078,14 +1094,12 @@ fn commit_on_disk(
     let _ = journal.prune(now);
     // Reported as the index names them (NFC).
     // A rename from an NFD name to its NFC form names one path twice.
-    let mut nfc_changed: Vec<String> = Vec::with_capacity(changed.len());
-    for p in &changed {
-        let p = crate::names::nfc(p);
-        if !nfc_changed.contains(&p) {
-            nfc_changed.push(p);
-        }
-    }
-    let changed = nfc_changed;
+    let mut seen = std::collections::HashSet::with_capacity(changed.len());
+    let changed: Vec<String> = changed
+        .iter()
+        .map(|p| crate::names::nfc(p))
+        .filter(|p| seen.insert(p.clone()))
+        .collect();
     Ok(Committed { id, changed })
 }
 
