@@ -593,3 +593,58 @@ fn a_late_recovery_from_the_previous_vault_does_not_load_the_new_one_early() {
     assert_eq!(disk(&env, NOTE), before, "recovered");
     assert_eq!(app.buffer_text(NOTE).as_deref(), Some(before.as_str()));
 }
+
+#[test]
+fn a_save_still_running_when_its_note_is_renamed_lands_at_the_new_path() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsembilan<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    assert!(env.path("Vault/Inbox/Ide baru.md").exists(), "moved");
+    // The save started before the rename lands only now.
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert!(disk(&env, "Inbox/Ide baru.md").starts_with("sembilan\n"));
+    assert!(!env.path("Vault").join(NOTE).exists(), "not written back");
+    assert_eq!(
+        app.external_title(),
+        None,
+        "no banner: nothing changed outside"
+    );
+    common::press_with(
+        &mut app,
+        iced::keyboard::Key::Character("w".into()),
+        iced::keyboard::Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(&mut app, "l");
+    command(&mut app, "qa");
+    assert!(app.exited());
+}
+
+#[test]
+fn a_new_note_typed_into_and_emptied_is_not_written_and_does_not_block_quitting() {
+    for quit in ["q", "qa"] {
+        let env = Env::new();
+        let mut app = open(&env);
+        keys(&mut app, "ggO[[Belum ada<Esc><Esc>0lgd");
+        assert_eq!(app.active_text().as_deref(), Some(""));
+        keys(&mut app, "ia");
+        press(&mut app, "BackSpace");
+        keys(&mut app, "<Esc>");
+        command(&mut app, quit);
+        wait_saves(&mut app);
+        assert!(!env.path("Vault/Belum ada.md").exists(), "{quit}");
+        if quit == "qa" {
+            assert!(app.exited(), "quit");
+        }
+    }
+}
+
+fn wait_saves(app: &mut App) {
+    common::wait(app, Duration::from_secs(2));
+}

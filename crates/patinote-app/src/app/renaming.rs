@@ -368,6 +368,42 @@ impl App {
         save.chain(job)
     }
 
+    /// The jump list and recent notes follow a note or folder that moved
+    /// (`to`); entries in one sent to the trash (`None`) are dropped.
+    pub(super) fn paths_moved(&mut self, from: &str, to: Option<&str>) {
+        let prefix = format!("{from}/");
+        // `Some(new path)` (or `Some(None)`: gone) for an affected path.
+        let map = |p: &str| -> Option<Option<String>> {
+            if p == from {
+                Some(to.map(str::to_owned))
+            } else {
+                p.strip_prefix(&prefix)
+                    .map(|rest| to.map(|t| format!("{t}/{rest}")))
+            }
+        };
+        let jumps = std::mem::take(&mut self.jumps);
+        let mut at = self.jump_at;
+        for (i, (p, c)) in jumps.into_iter().enumerate() {
+            match map(&p) {
+                None => self.jumps.push((p, c)),
+                Some(Some(new)) => self.jumps.push((new, c)),
+                Some(None) if i < self.jump_at => at -= 1,
+                Some(None) => {}
+            }
+        }
+        self.jump_at = at.min(self.jumps.len());
+        if let Some(w) = self.workspace_mut() {
+            w.state.recent.retain_mut(|r| match map(&r.path) {
+                None => true,
+                Some(Some(new)) => {
+                    r.path = new;
+                    true
+                }
+                Some(None) => false,
+            });
+        }
+    }
+
     /// After a rename or move: open buffers follow the note to its new path,
     /// and notes whose links changed are read again from disk.
     pub(super) fn moved(
@@ -409,6 +445,11 @@ impl App {
                     // new path. When the move also rewrote its links, the
                     // disk differs and the usual banner lets the user pick.
                     Some(d) if d.dirty() => {
+                        if matches!(d.save, crate::editor::document::Save::Running(_))
+                            && d.path != b.path
+                        {
+                            d.saving_at.get_or_insert(d.path.clone());
+                        }
                         d.path = b.path.clone();
                         if rewritten {
                             compare.push(b.path.clone());
@@ -418,12 +459,8 @@ impl App {
                     _ => {}
                 }
             }
-            for r in &mut w.state.recent {
-                if r.path == from {
-                    r.path = to.clone();
-                }
-            }
         }
+        self.paths_moved(&from, Some(&to));
         let tasks: Vec<Task<Message>> = reload
             .into_iter()
             .filter_map(|p| {

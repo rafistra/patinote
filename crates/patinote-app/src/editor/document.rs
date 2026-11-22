@@ -67,6 +67,9 @@ pub struct Document {
     pub external: Option<External>,
     /// The disk changed while a save ran: read it again once the save lands.
     pub recheck: bool,
+    /// The path a save still running was started at, when a rename or move
+    /// changed `path` meanwhile: its result is this note's.
+    pub saving_at: Option<String>,
     kinds: Vec<LineKind>,
     kinds_rev: u64,
     /// Words in the note, with the buffer revision they were counted at.
@@ -92,6 +95,7 @@ impl Document {
             vim,
             external: None,
             recheck: false,
+            saving_at: None,
             kinds,
             kinds_rev: rev,
             words: Cell::new(None),
@@ -157,15 +161,19 @@ impl Document {
         }
     }
 
+    /// Text that belongs on disk and is not there: edited, editable, and
+    /// not a new note left blank (it stays off the disk, F-08.6).
+    pub fn needs_saving(&self) -> bool {
+        self.dirty()
+            && self.read_only.is_none()
+            && !(self.disk_hash.is_none() && self.buffer.text().trim().is_empty())
+    }
+
     /// Whether autosave should run now: unsaved, idle for a second (or
     /// `force`, for switching notes, losing focus and quitting), and not
     /// already saving. A failed save is retried every few seconds.
     pub fn should_save(&self, now: Instant, force: bool) -> bool {
-        if !self.dirty() || self.read_only.is_some() {
-            return false;
-        }
-        // A new note stays off the disk until it has text (F-08.6).
-        if self.disk_hash.is_none() && self.buffer.text().trim().is_empty() {
+        if !self.needs_saving() {
             return false;
         }
         match &self.save {

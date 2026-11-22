@@ -165,6 +165,7 @@ pub fn press_held(app: &mut App, ch: &str) -> Task<Message> {
     let key = match ch {
         "Enter" => Key::Named(key::Named::Enter),
         "Escape" => Key::Named(key::Named::Escape),
+        "BackSpace" => Key::Named(key::Named::Backspace),
         c => Key::Character(c.into()),
     };
     let text = (ch.chars().count() == 1).then(|| ch.into());
