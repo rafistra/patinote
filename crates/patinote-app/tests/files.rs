@@ -423,3 +423,14 @@ fn f09_5_jumps_and_recent_notes_follow_a_moved_folder() {
     );
     assert_eq!(app.message(), None, "{:?}", app.message());
 }
+
+#[test]
+fn f10_2_a_hidden_folder_inside_a_typed_name_is_refused() {
+    let env = Env::new();
+    let mut app = start(&env);
+    leader(&mut app, "n");
+    send(&mut app, Message::DialogInput("Inbox/.coretan".into()));
+    send(&mut app, Message::DialogSubmit);
+    assert!(app.dialog_open());
+    assert!(app.active_text().is_none());
+}

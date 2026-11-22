@@ -559,7 +559,10 @@ fn reload(doc: &mut Document, bytes: &[u8]) {
     doc.buffer.replace_text(&opened.text);
     doc.buffer.set_cursor(cursor);
     doc.format = opened.format;
-    doc.read_only = opened.read_only;
+    // Outside the vault stays so: `file::open` only knows about the bytes.
+    if doc.read_only != Some(file::ReadOnly::Outside) {
+        doc.read_only = opened.read_only;
+    }
     doc.disk_hash = Some(opened.hash);
     doc.saved_rev = doc.buffer.revision();
     doc.save = Save::Idle;

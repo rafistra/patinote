@@ -383,3 +383,40 @@ fn f05_a_note_named_in_nfd_opens_and_saves_in_place() {
     );
     assert!(std::fs::symlink_metadata(vault.join("Café.md")).is_err());
 }
+
+/// Read again after a change from outside, a note outside the vault stays
+/// read-only.
+#[test]
+fn f05_8_a_note_outside_the_vault_stays_read_only_after_a_reload() {
+    let env = Env::new();
+    let vault = env.vault();
+    let outside = env.path("luar");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("Catatan.md"), "luar\n").unwrap();
+    std::os::unix::fs::symlink(outside.join("Catatan.md"), vault.join("Tautan.md")).unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Tautan.md".into(),
+        }),
+    );
+    std::fs::write(outside.join("Catatan.md"), "luar baru\n").unwrap();
+    send(
+        &mut app,
+        Message::External(patinote_core::Change {
+            paths: vec!["Tautan.md".into()],
+            rescan: false,
+            mode: patinote_core::WatchMode::Events,
+        }),
+    );
+    assert_eq!(
+        app.active_text().as_deref(),
+        Some("luar baru\n"),
+        "reloaded"
+    );
+    assert_eq!(
+        app.banner_title().as_deref(),
+        Some("Read-only: this note is outside the vault.")
+    );
+}

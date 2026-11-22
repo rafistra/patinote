@@ -854,3 +854,49 @@ fn writing_a_note_named_in_nfd_changes_that_file() {
     .unwrap();
     assert!(fs::symlink_metadata(v.root.join("Re\u{301}sume\u{301}/a.md")).is_err());
 }
+
+/// Errors and previews name paths as the index does (NFC), even when the
+/// file is stored in NFD (Q-019).
+#[test]
+fn errors_about_a_note_named_in_nfd_use_its_nfc_path() {
+    let v = vault();
+    v.write("Cafe\u{301}.md", "lama\n");
+    let stale = v.expect("Café.md");
+    v.write("Cafe\u{301}.md", "dari luar\n");
+    let err = v
+        .commit(vec![write_op("Café.md", "baru\n", stale)])
+        .unwrap_err();
+    assert!(
+        matches!(&err, WriteError::Conflict { paths } if paths == &["Café.md"]),
+        "{err:?}"
+    );
+    let p = plan(
+        &v.root,
+        &Transaction {
+            actor: Actor::User,
+            ops: vec![write_op("Café.md", "baru\n", v.expect("Café.md"))],
+        },
+    )
+    .unwrap();
+    assert_eq!(p.ops[0].path, "Café.md");
+}
+
+/// A name stored in NFD can be renamed to its NFC form.
+#[test]
+fn a_note_named_in_nfd_can_be_renamed_to_its_nfc_form() {
+    let v = vault();
+    v.write("Cafe\u{301}.md", "kopi\n");
+    v.commit(vec![Op::Move {
+        from: "Cafe\u{301}.md".into(),
+        to: "Café.md".into(),
+        content: None,
+        expect: v.expect("Cafe\u{301}.md"),
+    }])
+    .unwrap();
+    let names: Vec<String> = fs::read_dir(&v.root)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|n| n.ends_with(".md"))
+        .collect();
+    assert_eq!(names, ["Café.md"]);
+}
