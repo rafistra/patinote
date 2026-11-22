@@ -15,7 +15,9 @@ use patinote_core::write::{Actor, Expect, Journal, commit, expect_current};
 use patinote_core::{FileKind, Resolver};
 
 use crate::editor::document::Save;
-use patinote_index::SqliteStore;
+use patinote_core::IndexOptions;
+use patinote_core::store::Store;
+use patinote_index::{SqliteStore, update_index};
 
 use super::files::Dialog;
 use super::{App, Message};
@@ -357,8 +359,11 @@ impl App {
         if let Some(w) = self.workspace_mut() {
             w.vault_busy = false;
             let (root, journal) = (w.session.paths.root.clone(), w.journal.clone());
+            // Held while it ran: also one whose last save failed or met a
+            // conflict. Saved now; if that fails again, `save_landed` brings
+            // it back with its message.
             for d in &mut w.closing {
-                if d.dirty() && d.save == Save::Idle {
+                if d.dirty() && !matches!(d.save, Save::Running(_)) {
                     let job = d.start_save(&root, &journal);
                     tasks.push(Task::future(async move { Message::Saved(job.run()) }));
                 }
@@ -389,13 +394,10 @@ impl App {
 
     /// Renames or moves a folder with everything in it. Attachments are
     /// among the moves, so links to them follow too.
+    /// The files are listed from the index when the move runs, so a note
+    /// saved there or moved in by the change before is among them.
     fn rename_folder(&mut self, from: String, to: String) -> Task<Message> {
-        let files: Vec<String> = self
-            .workspace()
-            .map(|w| w.explorer.tree.files_under(&from))
-            .unwrap_or_default();
-        let moves = relink::folder_moves(&from, &to, &files);
-        self.run_moves(moves, Some((from.clone(), to.clone())), from, to)
+        self.run_moves(Vec::new(), Some((from.clone(), to.clone())), from, to)
     }
 
     fn run_moves(
@@ -425,14 +427,104 @@ impl App {
         let root: PathBuf = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let job = Task::perform(
-            w.session
-                .query(move |store| commit_moves(store, &root, &journal, &moves, folder)),
+            w.session.query(move |store| {
+                let moves = match &folder {
+                    Some((from, to)) => {
+                        let prefix = format!("{from}/");
+                        let files: Vec<String> = store
+                            .file_states()
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|f| f.path)
+                            .filter(|p| p.starts_with(&prefix))
+                            .collect();
+                        relink::folder_moves(from, to, &files)
+                    }
+                    None => moves,
+                };
+                let result = commit_moves(store, &root, &journal, &moves, folder);
+                // The index is brought up to date in the same job, so the
+                // next change (`vault_ops`) plans from what is on disk.
+                if result.is_ok() {
+                    let _ = update_index(store, &root, &IndexOptions::default(), &mut |_| {});
+                }
+                result
+            }),
             move |result| {
                 let result = result.unwrap_or_else(|| Err("the index is not available".into()));
                 Message::Moved(from.clone(), to.clone(), result)
             },
         );
         save.chain(job)
+    }
+
+    /// Runs a vault change (`write`) on the index thread and brings the
+    /// index up to date in the same job, so the next queued change plans
+    /// from what is on disk. Ends with `Message::FilesChanged(gone, …)`.
+    pub(super) fn vault_job(
+        &self,
+        gone: Vec<String>,
+        write: impl FnOnce() -> Result<(), String> + Send + 'static,
+    ) -> Task<Message> {
+        let Some(w) = self.workspace() else {
+            return Task::none();
+        };
+        let root = w.session.paths.root.clone();
+        Task::perform(
+            w.session.query(move |store| {
+                let result = write();
+                if result.is_ok() {
+                    let _ = update_index(store, &root, &IndexOptions::default(), &mut |_| {});
+                }
+                result
+            }),
+            move |result| {
+                Message::FilesChanged(
+                    gone.clone(),
+                    result.unwrap_or_else(|| Err("the index is not available".into())),
+                )
+            },
+        )
+    }
+
+    /// Changes still queued follow a note or folder that moved (`to`); one
+    /// about something sent to the trash (`None`) is dropped, and says so.
+    pub(super) fn queued_paths_moved(&mut self, from: &str, to: Option<&str>) {
+        let Some(w) = self.workspace_mut() else {
+            return;
+        };
+        let follow = |p: &mut String| match moved_path(p, from, to) {
+            None => true,
+            Some(Some(new)) => {
+                *p = new;
+                true
+            }
+            Some(None) => false,
+        };
+        let mut dropped = Vec::new();
+        let ops = std::mem::take(&mut w.vault_ops);
+        for mut op in ops {
+            let kept = match &mut op {
+                // The destination follows too: a note renamed inside the
+                // folder that moved stays in it.
+                VaultOp::RenameNote { from, to } | VaultOp::RenameFolder { from, to } => {
+                    follow(from) & follow(to)
+                }
+                VaultOp::Trash { path } => follow(path),
+                VaultOp::Sync { pair, .. } => follow(&mut pair.original) & follow(&mut pair.copy),
+            };
+            if kept {
+                w.vault_ops.push_back(op);
+            } else {
+                dropped.push(op.target().to_owned());
+            }
+        }
+        for p in dropped {
+            self.say(
+                super::Level::Error,
+                format!("Can't change \"{p}\": it was deleted"),
+            );
+        }
     }
 
     /// The jump list and recent notes follow a note or folder that moved
@@ -515,6 +607,7 @@ impl App {
             }
         }
         self.paths_moved(&from, Some(&to));
+        self.queued_paths_moved(&from, Some(&to));
         let tasks: Vec<Task<Message>> = reload
             .into_iter()
             .filter_map(|p| {
@@ -578,4 +671,15 @@ pub enum VaultOp {
         choice: super::external::Choice,
         pair: Box<super::external::SyncPair>,
     },
+}
+
+impl VaultOp {
+    /// The path the change is about, for messages.
+    fn target(&self) -> &str {
+        match self {
+            Self::RenameNote { from, .. } | Self::RenameFolder { from, .. } => from,
+            Self::Trash { path } => path,
+            Self::Sync { pair, .. } => &pair.copy,
+        }
+    }
 }

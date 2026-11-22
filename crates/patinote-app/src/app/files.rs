@@ -752,8 +752,8 @@ impl App {
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let p = path.clone();
-        let job = Task::future(async move {
-            let result = expect_current(&root, &p)
+        let job = self.vault_job(vec![p.clone()], move || {
+            expect_current(&root, &p)
                 .map_err(|e| e.to_string())
                 .and_then(|expect| {
                     let tx = Transaction {
@@ -766,8 +766,7 @@ impl App {
                     commit(&root, &journal, &tx)
                         .map(|_| ())
                         .map_err(|e| e.to_string())
-                });
-            Message::FilesChanged(vec![p], result)
+                })
         });
         save.chain(job)
     }
@@ -785,6 +784,7 @@ impl App {
         }
         for g in &gone {
             self.paths_moved(g, None);
+            self.queued_paths_moved(g, None);
         }
         if let Some(w) = self.workspace_mut() {
             let (shown, was) = (w.active_buffer().map(|b| b.id), w.active);
