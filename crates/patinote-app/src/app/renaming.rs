@@ -339,6 +339,17 @@ impl App {
             if w.vault_busy || saving {
                 break;
             }
+            // A rename plans its link updates from the index: while the
+            // index is still being built it waits (and saves go on), rather
+            // than holding saves behind that work. Changes after it wait
+            // too, so the order stays.
+            let needs_index = matches!(
+                w.vault_ops.front(),
+                Some(VaultOp::RenameNote { .. } | VaultOp::RenameFolder { .. })
+            );
+            if needs_index && matches!(w.index, super::IndexStatus::Indexing { .. }) {
+                break;
+            }
             let Some(op) = w.vault_ops.pop_front() else {
                 break;
             };
@@ -373,7 +384,7 @@ impl App {
             tasks.push(self.autosave(true));
         }
         tasks.push(self.pump_vault_ops());
-        if self.quitting && !self.unsaved() && !self.save_failed() {
+        if self.quitting && !self.unsaved() && !self.save_failed() && !self.exited {
             tasks.push(self.quit(false));
         }
         Task::batch(tasks)
@@ -428,12 +439,18 @@ impl App {
         let journal = w.journal.clone();
         let job = Task::perform(
             w.session.query(move |store| {
+                // The plan comes from the index: first brought up to date
+                // (notes just saved, the change before this one), here, in
+                // the same job. A rename with no up-to-date index, or no
+                // list of a folder's files, would break links: refused.
+                update_index(store, &root, &IndexOptions::default(), &mut |_| {})
+                    .map_err(|e| format!("the index could not be updated: {e}"))?;
                 let moves = match &folder {
                     Some((from, to)) => {
                         let prefix = format!("{from}/");
                         let files: Vec<String> = store
                             .file_states()
-                            .unwrap_or_default()
+                            .map_err(|e| format!("the index could not be read: {e}"))?
                             .into_iter()
                             .map(|f| f.path)
                             .filter(|p| p.starts_with(&prefix))
@@ -442,13 +459,7 @@ impl App {
                     }
                     None => moves,
                 };
-                let result = commit_moves(store, &root, &journal, &moves, folder);
-                // The index is brought up to date in the same job, so the
-                // next change (`vault_ops`) plans from what is on disk.
-                if result.is_ok() {
-                    let _ = update_index(store, &root, &IndexOptions::default(), &mut |_| {});
-                }
-                result
+                commit_moves(store, &root, &journal, &moves, folder)
             }),
             move |result| {
                 let result = result.unwrap_or_else(|| Err("the index is not available".into()));
@@ -458,33 +469,15 @@ impl App {
         save.chain(job)
     }
 
-    /// Runs a vault change (`write`) on the index thread and brings the
-    /// index up to date in the same job, so the next queued change plans
-    /// from what is on disk. Ends with `Message::FilesChanged(gone, …)`.
+    /// Runs a vault change that needs no index (the trash, a Syncthing
+    /// choice) in the background; ends with `Message::FilesChanged(gone, …)`,
+    /// which refreshes the index afterwards.
     pub(super) fn vault_job(
         &self,
         gone: Vec<String>,
         write: impl FnOnce() -> Result<(), String> + Send + 'static,
     ) -> Task<Message> {
-        let Some(w) = self.workspace() else {
-            return Task::none();
-        };
-        let root = w.session.paths.root.clone();
-        Task::perform(
-            w.session.query(move |store| {
-                let result = write();
-                if result.is_ok() {
-                    let _ = update_index(store, &root, &IndexOptions::default(), &mut |_| {});
-                }
-                result
-            }),
-            move |result| {
-                Message::FilesChanged(
-                    gone.clone(),
-                    result.unwrap_or_else(|| Err("the index is not available".into())),
-                )
-            },
-        )
+        Task::future(async move { Message::FilesChanged(gone, write()) })
     }
 
     /// Changes still queued follow a note or folder that moved (`to`); one
@@ -519,12 +512,17 @@ impl App {
                 dropped.push(op.target().to_owned());
             }
         }
-        for p in dropped {
-            self.say(
-                super::Level::Error,
-                format!("Can't change \"{p}\": it was deleted"),
-            );
-        }
+        // One message for all of them, naming what was deleted.
+        let message = match dropped.as_slice() {
+            [] => return,
+            [one] if one == from => format!("Can't change \"{one}\": it was deleted"),
+            [one] => format!("Can't change \"{one}\": \"{from}\" was deleted"),
+            many => format!(
+                "{} changes were not made: \"{from}\" was deleted",
+                many.len()
+            ),
+        };
+        self.say(super::Level::Error, message);
     }
 
     /// The jump list and recent notes follow a note or folder that moved
