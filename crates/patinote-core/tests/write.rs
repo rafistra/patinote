@@ -946,6 +946,8 @@ fn pruning_sweeps_entry_folders_without_a_manifest() {
         fs::create_dir_all(d).unwrap();
         fs::write(d.join("before-0"), "isi lama\n").unwrap();
     }
+    // A crash while writing the manifest left its temporary file.
+    fs::write(old.join(".manifest.json.patinote-123-4.tmp"), "{").unwrap();
     fs::File::open(&old)
         .unwrap()
         .set_modified(now - Duration::from_secs(2 * 3600))

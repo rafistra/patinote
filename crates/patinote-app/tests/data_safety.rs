@@ -776,3 +776,133 @@ fn f10_1_a_new_note_made_again_while_saving_opens_in_insert_mode() {
     // `i` at the cursor, which Esc left on the last letter.
     assert_eq!(disk(&env, "Inbox/Baru.md"), "satduau");
 }
+
+// --- Saves and vault changes never overlap ----------------------------------
+
+/// Renames the note at `path` through the dialog, without running what it
+/// starts.
+fn rename_held(app: &mut App, path: &str, name: &str) -> Task<Message> {
+    explorer_key(app, path, "r");
+    send(app, Message::DialogInput(name.into()));
+    app.update(Message::DialogSubmit)
+}
+
+/// Back from the explorer to the editor.
+fn to_editor(app: &mut App) {
+    common::press_with(
+        app,
+        iced::keyboard::Key::Character("w".into()),
+        iced::keyboard::Modifiers::CTRL,
+        None,
+        false,
+    );
+    press(app, "l");
+}
+
+/// `:q` while a rename runs: the note's save waits for the rename and
+/// lands at the new path, with no conflict.
+#[test]
+fn f10_6_closing_a_note_while_it_is_renamed_saves_it_at_the_new_path() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOtujuhbelas<Esc>");
+    let rename = rename_held(&mut app, NOTE, "Ide baru");
+    to_editor(&mut app);
+    keys(&mut app, "ggOdelapanbelas<Esc>");
+    let close = command_held(&mut app, "q");
+    run(&mut app, close);
+    run(&mut app, rename);
+    common::wait(&mut app, Duration::from_secs(2));
+    let text = disk(&env, "Inbox/Ide baru.md");
+    assert!(text.starts_with("delapanbelas\ntujuhbelas\n"), "{text:?}");
+    assert!(!env.path("Vault").join(NOTE).exists());
+    assert_eq!(app.message().map(|(l, _)| l), None, "{:?}", app.message());
+}
+
+/// Two renames asked for while a save runs both happen, in order.
+#[test]
+fn f10_6_two_renames_while_a_save_runs_both_happen() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOsembilanbelas<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    explorer_key(&mut app, "Referensi/Daftar bacaan.md", "r");
+    send(&mut app, Message::DialogInput("Bacaan".into()));
+    send(&mut app, Message::DialogSubmit);
+    run(&mut app, save);
+    assert!(disk(&env, "Inbox/Ide baru.md").starts_with("sembilanbelas\n"));
+    assert!(env.path("Vault/Referensi/Bacaan.md").exists());
+    assert!(!env.path("Vault/Referensi/Daftar bacaan.md").exists());
+}
+
+/// A folder move that waited lists the folder when it runs: a note saved
+/// there meanwhile moves with its links updated.
+#[test]
+fn f10_7_a_folder_move_that_waited_includes_the_note_saved_meanwhile() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("Tautan.md"), "[b](Inbox/Baru.md)\n").unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    explorer_key(&mut app, "Inbox", "a");
+    send(&mut app, Message::InlineInput("Baru".into()));
+    send(&mut app, Message::InlineSubmit);
+    keys(&mut app, "duapuluh<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Inbox", "r");
+    send(&mut app, Message::InlineInput("Kotak".into()));
+    send(&mut app, Message::InlineSubmit);
+    run(&mut app, save);
+    assert_eq!(disk(&env, "Kotak/Baru.md"), "duapuluh");
+    assert_eq!(disk(&env, "Tautan.md"), "[b](Kotak/Baru.md)\n");
+}
+
+/// Deleting a folder while a new note in it has its first save running:
+/// the delete waits, the note goes to the trash with the folder, and the
+/// folder does not come back.
+#[test]
+fn f10_5_deleting_a_folder_waits_for_a_new_notes_first_save() {
+    let env = Env::new();
+    let mut app = open(&env);
+    explorer_key(&mut app, "Inbox", "a");
+    send(&mut app, Message::InlineInput("Baru".into()));
+    send(&mut app, Message::InlineSubmit);
+    keys(&mut app, "duasatu<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Inbox", "d");
+    press(&mut app, "Enter");
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert!(!env.path("Vault/Inbox").exists(), "the folder stays gone");
+    assert!(env.path("Vault/.trash/Inbox/Baru.md").exists());
+}
+
+/// A rename waits for a closed note's save; the note is made again at the
+/// old path meanwhile. The same note comes back (with its text), and the
+/// rename then moves it with everything typed.
+#[test]
+fn f05_2_a_note_made_again_while_its_rename_waits_moves_with_its_text() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduadua<Esc>");
+    let save = start_autosave(&mut app);
+    command(&mut app, "q");
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide baru".into()));
+    send(&mut app, Message::DialogSubmit);
+    explorer_key(&mut app, "Inbox", "a");
+    send(&mut app, Message::InlineInput("Ide cepat".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert!(
+        app.active_text().unwrap().starts_with("duadua\n"),
+        "the same note"
+    );
+    keys(&mut app, "<Esc>ggOduatiga<Esc>");
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    let text = disk(&env, "Inbox/Ide baru.md");
+    assert!(text.starts_with("duatiga\nduadua\n"), "{text:?}");
+    assert!(!env.path("Vault").join(NOTE).exists());
+}
