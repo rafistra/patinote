@@ -699,7 +699,7 @@ impl App {
     pub(super) fn open_externally(&mut self) {
         let Some(w) = self.workspace() else { return };
         let Some(b) = w.active_buffer() else { return };
-        let file = w.session.paths.root.join(&b.path);
+        let file = patinote_core::names::on_disk(&w.session.paths.root, &b.path);
         if let Err(e) = fonts::external_command("xdg-open").arg(file).spawn() {
             self.say(Level::Error, format!("Can't open the default app: {e}"));
         }

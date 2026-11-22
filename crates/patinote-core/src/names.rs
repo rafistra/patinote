@@ -1,6 +1,9 @@
 //! Name normalization shared by the index and the link resolver
 //! (docs/design/0001, section 4).
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use unicode_normalization::UnicodeNormalization;
 
 /// Lowercase NFC form used for case-insensitive matching of paths, names,
@@ -12,6 +15,51 @@ pub fn fold(s: &str) -> String {
 /// NFC form, as paths are stored (F-01).
 pub fn nfc(s: &str) -> String {
     s.nfc().collect()
+}
+
+/// The vault path `rel` (NFC, as the index keeps it) as it is named on
+/// disk, relative to `root`. A file or folder whose name is stored in
+/// another form (NFD, common from macOS) is found by reading its folder;
+/// parts that do not exist yet are kept as given. Nothing is read when the
+/// path exists as written (Q-019).
+pub fn disk_rel(root: &Path, rel: &str) -> String {
+    if fs::symlink_metadata(root.join(rel)).is_ok() {
+        return rel.to_owned();
+    }
+    let mut dir = root.to_path_buf();
+    let mut out: Vec<String> = Vec::new();
+    let mut parts = rel.split('/');
+    while let Some(part) = parts.next() {
+        let here = dir.join(part);
+        let name = if fs::symlink_metadata(&here).is_ok() {
+            Some(part.to_owned())
+        } else {
+            let want = nfc(part);
+            fs::read_dir(&dir).ok().and_then(|entries| {
+                entries.filter_map(Result::ok).find_map(|e| {
+                    let n = e.file_name().into_string().ok()?;
+                    (n != part && nfc(&n) == want).then_some(n)
+                })
+            })
+        };
+        match name {
+            Some(n) => {
+                dir.push(&n);
+                out.push(n);
+            }
+            None => {
+                out.push(part.to_owned());
+                out.extend(parts.map(str::to_owned));
+                break;
+            }
+        }
+    }
+    out.join("/")
+}
+
+/// [`disk_rel`] joined to `root`: the file to open for vault path `rel`.
+pub fn on_disk(root: &Path, rel: &str) -> PathBuf {
+    root.join(disk_rel(root, rel))
 }
 
 /// The key a link target is matched with: folded, without a `.md` extension.

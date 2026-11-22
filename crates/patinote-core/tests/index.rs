@@ -309,3 +309,20 @@ fn f01_5_a_note_unreadable_once_is_read_again_next_time() {
     assert!(store.files["secret.md"].warnings.is_empty());
     assert!(store.files["secret.md"].note.is_some(), "read this time");
 }
+
+/// A name stored in NFD on disk (common from macOS) is indexed with its
+/// text under the NFC path (PRD F-01: compared in NFC, the name on disk is
+/// left as it is).
+#[test]
+fn f01_a_note_named_in_nfd_is_indexed_with_its_text() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "Cafe\u{301}.md", b"[[Tujuan]] isi");
+    write(dir.path(), "Re\u{301}sume\u{301}/a.md", b"[[Lain]]");
+    let mut store = MemoryStore::default();
+    index(dir.path(), &mut store);
+    let cafe = &store.files["Café.md"];
+    assert!(cafe.warnings.is_empty(), "{:?}", cafe.warnings);
+    assert!(cafe.note.is_some(), "read");
+    assert!(cafe.hash.is_some());
+    assert!(store.files["Résumé/a.md"].note.is_some());
+}

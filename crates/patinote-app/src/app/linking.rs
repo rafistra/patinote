@@ -217,7 +217,10 @@ impl App {
                 open
             }
             Followed::Attachment(path) => {
-                let Some(full) = self.workspace().map(|w| w.session.paths.root.join(&path)) else {
+                let Some(full) = self
+                    .workspace()
+                    .map(|w| patinote_core::names::on_disk(&w.session.paths.root, &path))
+                else {
                     return Task::none();
                 };
                 self.open_externally_path(&full.to_string_lossy())
@@ -277,7 +280,7 @@ impl App {
         // opens as it is; an empty buffer over it would overwrite it.
         if self
             .workspace()
-            .is_some_and(|w| w.session.paths.root.join(&path).is_file())
+            .is_some_and(|w| patinote_core::names::on_disk(&w.session.paths.root, &path).is_file())
         {
             return self.open_note(path);
         }

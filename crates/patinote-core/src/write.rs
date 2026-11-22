@@ -286,6 +286,7 @@ fn check_folder(root: &Path, path: &str) -> Result<(), WriteError> {
 /// folder outside the vault. A note it refuses opens read-only.
 pub fn check_writable(root: &Path, path: &str) -> Result<(), WriteError> {
     check_path(path)?;
+    let path = &crate::names::disk_rel(root, path);
     check_folder(root, path)?;
     check_link(root, path)
 }
@@ -324,7 +325,7 @@ fn tree(dir: &Path) -> io::Result<BTreeMap<String, Hash>> {
 
 /// The current state of a vault path, to build an [`Op`]'s expectation.
 pub fn expect_current(root: &Path, path: &str) -> io::Result<Expect> {
-    let full = root.join(path);
+    let full = crate::names::on_disk(root, path);
     match fs::symlink_metadata(&full) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Expect::Absent),
         Err(e) => Err(e),
@@ -430,7 +431,55 @@ fn diff(path: &str, old: &[u8], new: &[u8]) -> Option<String> {
 
 /// Checks a transaction and describes it, without writing anything.
 pub fn plan(root: &Path, tx: &Transaction) -> Result<Plan, WriteError> {
-    plan_with(root, tx, true)
+    plan_with(root, &on_disk_tx(root, tx), true)
+}
+
+/// `tx` with every path as it is named on disk (Q-019: a name stored in
+/// NFD is written in place, not next to a new NFC copy). Borrowed when
+/// every path already is.
+fn on_disk_tx<'a>(root: &Path, tx: &'a Transaction) -> std::borrow::Cow<'a, Transaction> {
+    let disk = |p: &str| crate::names::disk_rel(root, p);
+    if tx
+        .ops
+        .iter()
+        .all(|op| op.paths().iter().all(|p| disk(p) == *p))
+    {
+        return std::borrow::Cow::Borrowed(tx);
+    }
+    let ops = tx
+        .ops
+        .iter()
+        .map(|op| match op {
+            Op::Write {
+                path,
+                content,
+                expect,
+            } => Op::Write {
+                path: disk(path),
+                content: content.clone(),
+                expect: expect.clone(),
+            },
+            Op::Move {
+                from,
+                to,
+                content,
+                expect,
+            } => Op::Move {
+                from: disk(from),
+                to: disk(to),
+                content: content.clone(),
+                expect: expect.clone(),
+            },
+            Op::Trash { path, expect } => Op::Trash {
+                path: disk(path),
+                expect: expect.clone(),
+            },
+        })
+        .collect();
+    std::borrow::Cow::Owned(Transaction {
+        actor: tx.actor.clone(),
+        ops,
+    })
 }
 
 /// [`plan`]; the diffs only with `preview` (a commit has no use for them,
@@ -803,6 +852,7 @@ impl Drop for WriteLock {
 /// Applies a transaction completely or not at all (see the module docs).
 pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Committed, WriteError> {
     let _lock = WriteLock::acquire(journal).map_err(io_err(&journal.dir))?;
+    let tx = &*on_disk_tx(root, tx);
     let plan = plan_with(root, tx, false)?;
     if let Some(to) = plan
         .ops
@@ -962,6 +1012,8 @@ pub fn commit(root: &Path, journal: &Journal, tx: &Transaction) -> Result<Commit
     }
     // Retention problems never fail a write that already happened.
     let _ = journal.prune(now);
+    // Reported as the index names them (NFC).
+    let changed = changed.iter().map(|p| crate::names::nfc(p)).collect();
     Ok(Committed { id, changed })
 }
 

@@ -371,7 +371,10 @@ impl App {
     }
 
     fn open_externally_file(&mut self, path: &str) -> Task<Message> {
-        let Some(full) = self.workspace().map(|w| w.session.paths.root.join(path)) else {
+        let Some(full) = self
+            .workspace()
+            .map(|w| patinote_core::names::on_disk(&w.session.paths.root, path))
+        else {
             return Task::none();
         };
         if let Err(e) = crate::fonts::external_command("xdg-open").arg(full).spawn() {

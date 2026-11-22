@@ -400,3 +400,15 @@ fn f01_8_a_6_mb_note_is_listed_but_not_found_by_search() {
     );
     assert_eq!(search["total"], 0);
 }
+
+/// A note named in NFD on disk is read by its name (Q-019).
+#[test]
+fn a_note_named_in_nfd_is_read() {
+    let env = Env::new();
+    let vault = env.fixture();
+    std::fs::write(vault.join("Cafe\u{301}.md"), "kopi\n").unwrap();
+    let v = vault.to_str().unwrap();
+    let r = env.run(&["--vault", v, "read", "Café", "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(json(&r.stdout)["content"], "kopi");
+}

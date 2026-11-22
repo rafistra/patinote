@@ -555,7 +555,7 @@ impl App {
         let mut buffers = Vec::new();
         let mut active = None;
         for (id, path) in state.buffers.iter().enumerate() {
-            if !root.join(path).is_file() {
+            if !patinote_core::names::on_disk(&root, path).is_file() {
                 continue;
             }
             // Positions move down past a note that is gone.
@@ -840,7 +840,7 @@ impl App {
     fn remote_open(&mut self, path: String) -> Task<Message> {
         let is_note = self.workspace().is_some_and(|w| {
             patinote_core::write::check_path(&path).is_ok()
-                && w.session.paths.root.join(&path).is_file()
+                && patinote_core::names::on_disk(&w.session.paths.root, &path).is_file()
         });
         if is_note {
             self.open_note(path)
@@ -1781,7 +1781,7 @@ fn ticks() -> impl iced::futures::Stream<Item = Instant> {
 /// Reads a note in the background (`Message::NoteLoaded`).
 pub(crate) fn read_note(root: PathBuf, path: String) -> Task<Message> {
     Task::future(async move {
-        let read = std::fs::read(root.join(&path))
+        let read = std::fs::read(patinote_core::names::on_disk(&root, &path))
             .map(|bytes| {
                 let refused = patinote_core::write::check_writable(&root, &path).is_err();
                 (bytes, refused)
