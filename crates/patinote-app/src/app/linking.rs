@@ -430,6 +430,7 @@ impl App {
     }
 
     fn update_suggestions(&mut self, suggest: Suggest, start: usize) -> Task<Message> {
+        let dismissed = self.dismissed;
         let recent: HashMap<String, usize> = self
             .workspace()
             .map(|w| {
@@ -522,7 +523,9 @@ impl App {
                             .map(|h| (h.level, h.text))
                             .collect::<Vec<_>>()
                     }),
-                    move |h| Message::Headings(start, typed.clone(), h.unwrap_or_default()),
+                    move |h| {
+                        Message::Headings(dismissed, start, typed.clone(), h.unwrap_or_default())
+                    },
                 )
             }
             Suggest::Blocks { note, query } => {
@@ -541,7 +544,9 @@ impl App {
                             .map(|(id, _)| (0, id))
                             .collect::<Vec<_>>()
                     }),
-                    move |b| Message::Headings(start, typed.clone(), b.unwrap_or_default()),
+                    move |b| {
+                        Message::Headings(dismissed, start, typed.clone(), b.unwrap_or_default())
+                    },
                 )
             }
         }
@@ -597,6 +602,13 @@ impl App {
         });
     }
 
+    /// The user closed the suggestions: answers still on their way are
+    /// dropped, so they do not open them again.
+    pub(super) fn dismiss_suggestions(&mut self) {
+        self.autocomplete = None;
+        self.dismissed += 1;
+    }
+
     /// Keys while suggestions are open; `None` lets the key go to Vim.
     pub(super) fn autocomplete_key(
         &mut self,
@@ -608,7 +620,7 @@ impl App {
         let ctrl = |c: &str| modifiers.control() && *key == Key::Character(c.into());
         if *key == Key::Named(Named::Escape) {
             // The first Esc closes the suggestions, the second leaves insert.
-            self.autocomplete = None;
+            self.dismiss_suggestions();
             return Some(Task::none());
         }
         if ctrl("n") || *key == Key::Named(Named::ArrowDown) {

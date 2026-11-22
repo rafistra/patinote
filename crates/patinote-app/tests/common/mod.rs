@@ -155,27 +155,31 @@ pub fn send(app: &mut App, message: Message) {
 }
 
 pub fn press(app: &mut App, ch: &str) {
+    let task = press_held(app, ch);
+    run(app, task);
+}
+
+/// Like [`press`], but returns the key's task instead of running it, to
+/// let its answer arrive late.
+pub fn press_held(app: &mut App, ch: &str) -> Task<Message> {
     let key = match ch {
         "Enter" => Key::Named(key::Named::Enter),
         "Escape" => Key::Named(key::Named::Escape),
         c => Key::Character(c.into()),
     };
     let text = (ch.chars().count() == 1).then(|| ch.into());
-    send(
-        app,
-        Message::Key(
-            keyboard::Event::KeyPressed {
-                key: key.clone(),
-                modified_key: key.clone(),
-                physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
-                location: Location::Standard,
-                modifiers: Modifiers::default(),
-                text,
-                repeat: false,
-            },
-            false,
-        ),
-    );
+    app.update(Message::Key(
+        keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key.clone(),
+            physical_key: key::Physical::Unidentified(key::NativeCode::Unidentified),
+            location: Location::Standard,
+            modifiers: Modifiers::default(),
+            text,
+            repeat: false,
+        },
+        false,
+    ))
 }
 
 pub fn command(app: &mut App, line: &str) {
