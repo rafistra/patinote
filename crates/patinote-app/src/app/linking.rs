@@ -290,6 +290,14 @@ impl App {
         {
             return self.select_buffer(i);
         }
+        // Closed while its first save runs: that note comes back, not a
+        // second, empty one whose save would then be refused.
+        if self
+            .workspace()
+            .is_some_and(|w| w.closing.iter().any(|d| d.path == path))
+        {
+            return self.open_note(path);
+        }
         let leave = self.autosave(true);
         let insert_escape = self.config.insert_escape.clone();
         let Some(w) = self.workspace_mut() else {

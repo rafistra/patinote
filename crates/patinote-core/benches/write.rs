@@ -52,5 +52,47 @@ fn create_note(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, create_note);
+/// A folder move as the app makes it: one move per note, 10,000 in one
+/// transaction (`changed` then lists 20,000 paths).
+fn move_folder(c: &mut Criterion) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().join("vault");
+    std::fs::create_dir_all(root.join("Satu")).expect("folder");
+    let names: Vec<String> = (0..10_000).map(|i| format!("Catatan {i}.md")).collect();
+    for n in &names {
+        std::fs::write(root.join("Satu").join(n), "isi\n").expect("note");
+    }
+    let mut group = c.benchmark_group("write");
+    group.sample_size(10);
+    group.bench_function("move_folder_10k", |b| {
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                let journal_dir = tempfile::tempdir().expect("journal dir");
+                let journal = Journal::new(journal_dir.path().join("journal"));
+                let tx = Transaction {
+                    actor: Actor::User,
+                    ops: names
+                        .iter()
+                        .map(|n| Op::Move {
+                            from: format!("Satu/{n}"),
+                            to: format!("Dua/{n}"),
+                            content: None,
+                            expect: Expect::Hash(patinote_core::write::content_hash(b"isi\n")),
+                        })
+                        .collect(),
+                };
+                let start = Instant::now();
+                commit(&root, &journal, &tx).expect("commit");
+                total += start.elapsed();
+                std::fs::remove_dir(root.join("Satu")).ok();
+                std::fs::rename(root.join("Dua"), root.join("Satu")).expect("back");
+            }
+            total
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(benches, create_note, move_folder);
 criterion_main!(benches);

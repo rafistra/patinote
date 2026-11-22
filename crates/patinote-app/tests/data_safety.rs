@@ -697,7 +697,7 @@ fn a_closed_note_whose_save_runs_when_it_is_renamed_is_saved_at_the_new_path() {
 /// A closed note renamed while its save runs, then a new note at its old
 /// path: each save result finds its own note.
 #[test]
-fn a_new_note_at_a_renamed_notes_old_path_keeps_its_own_save() {
+fn f05_2_a_new_note_at_a_renamed_notes_old_path_keeps_its_own_save() {
     let env = Env::new();
     let mut app = open(&env);
     keys(&mut app, "ggOduabelas<Esc>");
@@ -724,7 +724,7 @@ fn a_new_note_at_a_renamed_notes_old_path_keeps_its_own_save() {
 /// Changed outside, then renamed while a save runs: the redone save at the
 /// new path is refused too, and the banner shows (F-11).
 #[test]
-fn a_change_from_outside_before_a_rename_still_shows_the_banner() {
+fn f11_3_a_change_from_outside_before_a_rename_still_shows_the_banner() {
     let env = Env::new();
     let mut app = open(&env);
     keys(&mut app, "ggOempatbelas<Esc>");
@@ -740,4 +740,46 @@ fn a_change_from_outside_before_a_rename_still_shows_the_banner() {
         "not overwritten"
     );
     assert!(app.external_title().is_some(), "the banner is up");
+}
+
+/// A new note's first save still runs when its folder moves: it lands at
+/// the old path (making the folder again). The file follows the note to
+/// the new folder.
+#[test]
+fn f05_2_a_new_notes_first_save_overtaken_by_a_folder_move_follows_it() {
+    let env = Env::new();
+    let mut app = open(&env);
+    explorer_key(&mut app, "Inbox", "a");
+    send(&mut app, Message::InlineInput("Baru".into()));
+    send(&mut app, Message::InlineSubmit);
+    keys(&mut app, "limabelas<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Inbox", "r");
+    send(&mut app, Message::InlineInput("Kotak".into()));
+    send(&mut app, Message::InlineSubmit);
+    assert!(env.path("Vault/Kotak/Ide cepat.md").exists(), "moved");
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert_eq!(disk(&env, "Kotak/Baru.md"), "limabelas");
+    assert!(!env.path("Vault/Inbox/Baru.md").exists(), "no stray copy");
+    assert_eq!(app.message().map(|(l, _)| l), None, "{:?}", app.message());
+}
+
+/// A new note closed while its first save runs, then made again at once:
+/// the one waiting to be saved comes back, rather than a second, empty one.
+#[test]
+fn f08_6_a_new_note_made_again_while_its_first_save_runs_is_the_same_note() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggO[[Belum ada<Esc><Esc>0lgd");
+    keys(&mut app, "ienambelas<Esc>");
+    let save = start_autosave(&mut app);
+    command(&mut app, "q");
+    assert_eq!(app.title(), "Ide cepat — Patinote");
+    keys(&mut app, "gg0lgd");
+    assert_eq!(app.active_text().as_deref(), Some("enambelas"));
+    run(&mut app, save);
+    common::wait(&mut app, Duration::from_secs(2));
+    assert_eq!(disk(&env, "Belum ada.md"), "enambelas");
+    assert_eq!(app.external_title(), None, "no conflict");
 }

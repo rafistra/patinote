@@ -928,3 +928,29 @@ fn previews_and_changes_of_nfd_names_are_consistent() {
         .unwrap();
     assert_eq!(done.changed, ["Café.md"]);
 }
+
+/// An entry folder left without its manifest (removed after an undo on a
+/// full disk) holds old note text: pruning sweeps it once it is an hour
+/// old. A fresh one may still be being written, so it stays.
+#[test]
+fn pruning_sweeps_entry_folders_without_a_manifest() {
+    let now = SystemTime::now();
+    let v = vault();
+    v.write("a.md", "a\n");
+    v.commit(vec![write_op("a.md", "b\n", v.expect("a.md"))])
+        .unwrap();
+    let old = v.journal.dir().join("00000000000000000001-000001-0001");
+    let fresh = v.journal.dir().join("00000000000000000002-000001-0002");
+    for d in [&old, &fresh] {
+        fs::create_dir_all(d).unwrap();
+        fs::write(d.join("before-0"), "isi lama\n").unwrap();
+    }
+    fs::File::open(&old)
+        .unwrap()
+        .set_modified(now - Duration::from_secs(2 * 3600))
+        .unwrap();
+    v.journal.prune(now).unwrap();
+    assert!(!old.exists(), "swept");
+    assert!(fresh.exists(), "too new to sweep");
+    assert_eq!(v.journal.ids().unwrap().len(), 1, "real entries stay");
+}

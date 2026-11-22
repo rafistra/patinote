@@ -551,6 +551,8 @@ impl App {
         // A read after a save that worked: it must not hold up the rest.
         let mut recheck = None;
         let mut next = Task::none();
+        // A save that landed at the old path after the move: (old, new).
+        let mut stray = None;
         // Started before a rename or move took its path, and refused there
         // (the file is gone): it is saved again at the new path at once. A
         // real change from outside still shows: that save expects the hash
@@ -572,6 +574,9 @@ impl App {
                 if overtaken(&doc) {
                     doc.save = Save::Idle;
                 } else {
+                    if done.result.is_ok() && doc.path != done.path {
+                        stray = Some((done.path.clone(), doc.path.clone()));
+                    }
                     doc.finish_save(&done, now);
                 }
                 if doc.dirty() && doc.save == Save::Idle {
@@ -619,6 +624,9 @@ impl App {
                     let job = doc.start_save(&root, &journal);
                     next = Task::future(async move { Message::Saved(job.run()) });
                 } else {
+                    if done.result.is_ok() && doc.path != done.path {
+                        stray = Some((done.path.clone(), doc.path.clone()));
+                    }
                     let changed_meanwhile = std::mem::take(&mut doc.recheck);
                     doc.finish_save(&done, now);
                     message = landed_message(doc);
@@ -634,6 +642,9 @@ impl App {
         }
         if let Some((level, text)) = message {
             self.say(level, text);
+        }
+        if let Some((from, to)) = stray {
+            next = Task::batch([next, self.move_stray(from, to)]);
         }
         if let Some(path) = reread {
             // A conflict: the text waits for the user, so a quit in progress
@@ -662,6 +673,39 @@ impl App {
             }
         }
         Task::batch([recheck, next])
+    }
+
+    /// A new note's first save ran while its folder moved and wrote the
+    /// old path, making the folder again: the file follows the note to its
+    /// new path, through the write path, in the background.
+    fn move_stray(&mut self, from: String, to: String) -> Task<Message> {
+        let Some(w) = self.workspace() else {
+            return Task::none();
+        };
+        let (root, journal) = (w.session.paths.root.clone(), w.journal.clone());
+        Task::future(async move {
+            use patinote_core::write::{Actor, Op, Transaction, commit, expect_current};
+            let result = expect_current(&root, &from)
+                .map_err(|e| e.to_string())
+                .and_then(|expect| {
+                    commit(
+                        &root,
+                        &journal,
+                        &Transaction {
+                            actor: Actor::User,
+                            ops: vec![Op::Move {
+                                from: from.clone(),
+                                to: to.clone(),
+                                content: None,
+                                expect,
+                            }],
+                        },
+                    )
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+                });
+            Message::FilesChanged(vec![from], result)
+        })
     }
 
     fn save_failed(&self) -> bool {
