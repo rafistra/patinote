@@ -194,13 +194,7 @@ pub struct Workspace {
     vault_busy: bool,
     /// Vault changes asked for, run one at a time, in order, each once no
     /// save runs.
-    /// Each with a number, so a catch-up belongs to one change.
-    vault_ops: std::collections::VecDeque<(u64, renaming::VaultOp)>,
-    /// The number the next queued change gets.
-    vault_op_seq: u64,
-    /// Before a queued rename holds saves, the index catches up in a job
-    /// of its own (saves go on meanwhile).
-    catch_up: Option<renaming::CatchUp>,
+    vault_ops: std::collections::VecDeque<renaming::VaultOp>,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -269,8 +263,6 @@ pub enum Message {
     ChooseFolder,
     FolderChosen(Option<PathBuf>),
     RetryVault,
-    /// The index catch-up job with this number ended (`App::pump_vault_ops`).
-    IndexCaughtUp(u64, Result<(), String>),
     /// An event from the index thread of the vault opened `n`th
     /// ([`App`]'s `opened`); events of a vault since closed are dropped.
     Index(u64, IndexEvent),
@@ -605,8 +597,6 @@ impl App {
             closing: Vec::new(),
             vault_busy: false,
             vault_ops: std::collections::VecDeque::new(),
-            vault_op_seq: 0,
-            catch_up: None,
             selected: 0,
             candidates: Vec::new(),
             attachments: Vec::new(),
@@ -992,7 +982,6 @@ impl App {
                 self.open_vault(&folder)
             }
             Message::FolderChosen(None) => Task::none(),
-            Message::IndexCaughtUp(id, result) => self.caught_up(id, result),
             Message::RetryVault => match &self.screen {
                 Screen::Missing(path) => {
                     let path = path.clone();
