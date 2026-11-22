@@ -482,7 +482,7 @@ impl App {
         let journal = w.journal.clone();
         let use_copy = choice == Choice::UseCopy;
         let (o, c) = (original.clone(), copy.clone());
-        let job = Task::future(async move {
+        let job = self.vault_job(vec![c.clone()], move || {
             let mut ops = Vec::new();
             // Both files must still be what the comparison showed.
             let copy_expect = Expect::Hash(content_hash(&copy_bytes));
@@ -501,10 +501,9 @@ impl App {
                 actor: Actor::User,
                 ops,
             };
-            let result = commit(&root, &journal, &tx)
+            commit(&root, &journal, &tx)
                 .map(|_| ())
-                .map_err(|e| e.to_string());
-            Message::FilesChanged(vec![c], result)
+                .map_err(|e| e.to_string())
         });
         let reread = self.read_disk(original);
         save.chain(job).chain(reread)

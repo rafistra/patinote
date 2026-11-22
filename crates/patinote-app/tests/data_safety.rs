@@ -906,3 +906,89 @@ fn f05_2_a_note_made_again_while_its_rename_waits_moves_with_its_text() {
     assert!(text.starts_with("duatiga\nduadua\n"), "{text:?}");
     assert!(!env.path("Vault").join(NOTE).exists());
 }
+
+/// A note whose save failed while a rename ran, closed before the rename
+/// lands: once it lands, the note is saved again rather than left unseen.
+#[test]
+fn f05_5_a_note_closed_with_a_failed_save_during_a_rename_is_saved_after_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduaempat<Esc>");
+    let folder = env.path("Vault/Inbox");
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let rename = rename_held(&mut app, "Referensi/Daftar bacaan.md", "Bacaan");
+    // The rename's own save of the open note fails; the rename lands later.
+    let landed = common::outputs(rename);
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let (saves, rest): (Vec<_>, Vec<_>) = landed
+        .into_iter()
+        .partition(|m| matches!(m, Message::Saved(_)));
+    for m in saves {
+        send(&mut app, m);
+    }
+    to_editor(&mut app);
+    command(&mut app, "q");
+    for m in rest {
+        send(&mut app, m);
+    }
+    common::wait(&mut app, Duration::from_secs(2));
+    assert!(disk(&env, NOTE).starts_with("duaempat\n"));
+    assert!(env.path("Vault/Referensi/Bacaan.md").exists());
+}
+
+/// A note renamed in a folder whose rename is queued before it: the note's
+/// rename follows the folder.
+#[test]
+fn f10_6_a_queued_rename_follows_the_folder_moved_before_it() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOdualima<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Referensi", "r");
+    send(&mut app, Message::InlineInput("Pustaka".into()));
+    send(&mut app, Message::InlineSubmit);
+    explorer_key(&mut app, "Referensi/Daftar bacaan.md", "r");
+    send(&mut app, Message::DialogInput("Bacaan".into()));
+    send(&mut app, Message::DialogSubmit);
+    run(&mut app, save);
+    assert!(env.path("Vault/Pustaka/Bacaan.md").exists());
+    assert_eq!(app.message().map(|(l, _)| l), None, "{:?}", app.message());
+}
+
+/// A rename queued behind the delete of its folder is dropped, and says so.
+#[test]
+fn f10_3_a_queued_rename_of_a_deleted_note_is_dropped_with_a_message() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduaenam<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Referensi", "d");
+    press(&mut app, "Enter");
+    explorer_key(&mut app, "Referensi/Daftar bacaan.md", "r");
+    send(&mut app, Message::DialogInput("Bacaan".into()));
+    send(&mut app, Message::DialogSubmit);
+    run(&mut app, save);
+    assert!(env.path("Vault/.trash/Referensi/Daftar bacaan.md").exists());
+    assert_eq!(
+        app.message().map(|(_, m)| m),
+        Some("Can't change \"Referensi/Daftar bacaan.md\": it was deleted")
+    );
+}
+
+/// Two renames in a row: the second plans from an index that already has
+/// the first, so links written by the first are updated by the second.
+#[test]
+fn f10_6_renaming_twice_in_a_row_keeps_links_working() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("Tautan.md"), "[[Ide cepat]]\n").unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    explorer_key(&mut app, NOTE, "r");
+    send(&mut app, Message::DialogInput("Ide dua".into()));
+    send(&mut app, Message::DialogSubmit);
+    explorer_key(&mut app, "Inbox/Ide dua.md", "r");
+    send(&mut app, Message::DialogInput("Ide tiga".into()));
+    send(&mut app, Message::DialogSubmit);
+    assert_eq!(disk(&env, "Tautan.md"), "[[Ide tiga]]\n");
+}
