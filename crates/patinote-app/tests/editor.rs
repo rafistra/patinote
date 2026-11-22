@@ -320,3 +320,42 @@ fn f06_7_a_click_types_a_held_key_where_it_was_typed_and_saves_it() {
     let disk = std::fs::read_to_string(env.path("Vault/Inbox/Ide cepat.md")).unwrap();
     assert!(disk.starts_with("# Ide cepatj\n"), "{disk:?}");
 }
+
+/// A note reached through a link out of the vault (a linked folder or a
+/// linked file) opens read-only: the vault never writes outside itself.
+#[test]
+fn f05_8_a_note_outside_the_vault_opens_read_only() {
+    let env = Env::new();
+    let vault = env.vault();
+    let outside = env.path("luar");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("Catatan.md"), "luar\n").unwrap();
+    std::os::unix::fs::symlink(&outside, vault.join("Bersama")).unwrap();
+    std::os::unix::fs::symlink(outside.join("Catatan.md"), vault.join("Tautan.md")).unwrap();
+    let mut app = env.start(env.launch(Some(vault), Config::default()));
+    for path in ["Bersama/Catatan.md", "Tautan.md"] {
+        send(
+            &mut app,
+            Message::Remote(Request::Open { path: path.into() }),
+        );
+        assert_eq!(
+            app.banner_title().as_deref(),
+            Some("Read-only: this note is outside the vault."),
+            "{path}"
+        );
+        keys(&mut app, "ixyz<Esc>");
+        command(&mut app, "w");
+        assert_eq!(
+            std::fs::read_to_string(outside.join("Catatan.md")).unwrap(),
+            "luar\n"
+        );
+    }
+    // A note of the vault itself is not.
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Inbox/Ide cepat.md".into(),
+        }),
+    );
+    assert_eq!(app.banner_title(), None);
+}

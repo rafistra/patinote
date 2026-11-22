@@ -393,7 +393,7 @@ impl App {
     pub(super) fn note_loaded(
         &mut self,
         path: String,
-        result: Result<Vec<u8>, String>,
+        result: Result<(Vec<u8>, bool), String>,
     ) -> Task<Message> {
         let insert_escape = self.config.insert_escape.clone();
         let register = self.clipboard.clone();
@@ -405,13 +405,17 @@ impl App {
             match result {
                 // Reopened while its closing save ran: its text is newer.
                 _ if b.doc.is_some() => loaded = true,
-                Ok(bytes) => {
+                Ok((bytes, refused)) => {
                     let mut engine = vim::Vim::new(vim::Config { insert_escape });
                     if let Some(text) = register {
                         let linewise = text.ends_with('\n');
                         engine.set_register(Register { text, linewise });
                     }
-                    b.doc = Some(Document::new(path.clone(), &bytes, engine));
+                    let mut doc = Document::new(path.clone(), &bytes, engine);
+                    if refused && doc.read_only.is_none() {
+                        doc.read_only = Some(ReadOnly::Outside);
+                    }
+                    b.doc = Some(doc);
                     loaded = true;
                 }
                 Err(e) => error = Some(format!("Can't read \"{path}\": {e}")),
@@ -757,6 +761,9 @@ impl App {
                 body: match why {
                     ReadOnly::TooLarge => "Patinote shows it but doesn't edit or index it.".into(),
                     ReadOnly::NotUtf8 => "Patinote shows it but doesn't edit it.".into(),
+                    ReadOnly::Outside => {
+                        "It's reached through a link. Patinote shows it but doesn't edit it.".into()
+                    }
                 },
                 code: None,
                 actions: vec![Action {

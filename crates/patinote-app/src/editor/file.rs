@@ -32,6 +32,8 @@ pub struct Format {
 pub enum ReadOnly {
     TooLarge,
     NotUtf8,
+    /// Reached through a link to a file or folder outside the vault.
+    Outside,
 }
 
 impl ReadOnly {
@@ -40,6 +42,7 @@ impl ReadOnly {
         match self {
             Self::TooLarge => "Read-only: this note is larger than 5 MB.",
             Self::NotUtf8 => "Read-only: this file isn't UTF-8 text.",
+            Self::Outside => "Read-only: this note is outside the vault.",
         }
     }
 }

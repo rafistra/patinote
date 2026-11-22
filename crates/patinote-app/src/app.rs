@@ -269,7 +269,9 @@ pub enum Message {
     CmdSubmit,
     OpenRecent(usize),
     SelectBuffer(usize),
-    NoteLoaded(String, Result<Vec<u8>, String>),
+    /// A note's bytes, and whether the vault refuses to write it (reached
+    /// through a link outside the vault).
+    NoteLoaded(String, Result<(Vec<u8>, bool), String>),
     Backlinks(String, Vec<patinote_core::commands::Backlink>),
     /// `Enter` (or a click) on an outline item.
     OutlineJump(usize),
@@ -695,14 +697,7 @@ impl App {
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
-        let file = w.session.paths.root.join(&path);
-        let read = {
-            let path = path.clone();
-            Task::future(async move {
-                let bytes = std::fs::read(&file).map_err(|e| e.to_string());
-                Message::NoteLoaded(path, bytes)
-            })
-        };
+        let read = read_note(w.session.paths.root.clone(), path.clone());
         let backlinks = self.load_backlinks(path.clone());
         Task::batch([leave, read, backlinks, self.save_vault_state()])
     }
@@ -817,13 +812,7 @@ impl App {
             .collect();
         let mut tasks: Vec<Task<Message>> = restored
             .into_iter()
-            .map(|p| {
-                let file = root.join(&p);
-                Task::future(async move {
-                    let bytes = std::fs::read(&file).map_err(|e| e.to_string());
-                    Message::NoteLoaded(p, bytes)
-                })
-            })
+            .map(|p| read_note(root.clone(), p))
             .collect();
         for wait in waiting {
             tasks.push(match wait {
@@ -1787,6 +1776,19 @@ fn ticks() -> impl iced::futures::Stream<Item = Instant> {
         .map_err(|e| tracing::warn!("cannot start the timer thread: {e}"))
         .ok();
     rx
+}
+
+/// Reads a note in the background (`Message::NoteLoaded`).
+pub(crate) fn read_note(root: PathBuf, path: String) -> Task<Message> {
+    Task::future(async move {
+        let read = std::fs::read(root.join(&path))
+            .map(|bytes| {
+                let refused = patinote_core::write::check_writable(&root, &path).is_err();
+                (bytes, refused)
+            })
+            .map_err(|e| e.to_string());
+        Message::NoteLoaded(path, read)
+    })
 }
 
 fn welcome_actions() -> welcome::Actions<Message> {
