@@ -350,16 +350,27 @@ impl App {
                 if matches!(w.index, super::IndexStatus::Indexing { .. }) {
                     break;
                 }
-                // Caught up for this very change, or catch up now. A
-                // catch-up for a change that is no longer first counts for
-                // nothing.
+                // Caught up for this very change, or catch up now. One still
+                // running is waited for (even when the index has failed
+                // meanwhile), and serves the change now first if the one it
+                // was for went. A finished one for another change counts
+                // for nothing.
                 let ready = matches!(w.index, super::IndexStatus::Ready);
-                match w.catch_up {
-                    Some((for_id, true)) if for_id == id => {}
+                match &mut w.catch_up {
+                    Some(c) if !c.done => {
+                        c.for_op = id;
+                        break;
+                    }
+                    Some(c) if c.for_op == id => {}
                     _ if !ready => {}
-                    Some((for_id, false)) if for_id == id => break,
                     _ => {
-                        w.catch_up = Some((id, false));
+                        w.vault_op_seq += 1;
+                        let job = w.vault_op_seq;
+                        w.catch_up = Some(CatchUp {
+                            job,
+                            for_op: id,
+                            done: false,
+                        });
                         let root = w.session.paths.root.clone();
                         tasks.push(Task::perform(
                             w.session.query(move |store| {
@@ -369,7 +380,7 @@ impl App {
                             }),
                             move |result| {
                                 Message::IndexCaughtUp(
-                                    id,
+                                    job,
                                     result.unwrap_or_else(|| {
                                         Err("the index is not available".into())
                                     }),
@@ -397,17 +408,18 @@ impl App {
         Task::batch(tasks)
     }
 
-    /// The index caught up before the queued change `id`. If it failed,
-    /// that rename is refused now, before it holds any save.
-    pub(super) fn caught_up(&mut self, id: u64, result: Result<(), String>) -> Task<Message> {
+    /// The index caught up before the queued change it serves. If it
+    /// failed, that rename is refused now, before it holds any save.
+    pub(super) fn caught_up(&mut self, job: u64, result: Result<(), String>) -> Task<Message> {
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
-        if w.catch_up != Some((id, false)) {
-            return Task::none(); // for a change no longer waiting
-        }
+        let Some(c) = w.catch_up.as_mut().filter(|c| c.job == job && !c.done) else {
+            return Task::none();
+        };
+        let id = c.for_op;
         match result {
-            Ok(()) => w.catch_up = Some((id, true)),
+            Ok(()) => c.done = true,
             Err(e) => {
                 w.catch_up = None;
                 if w.vault_ops.front().is_some_and(|(first, _)| *first == id)
@@ -440,7 +452,14 @@ impl App {
         self.workspace().is_some_and(|w| {
             let building = matches!(w.index, super::IndexStatus::Indexing { .. })
                 && w.vault_ops.iter().any(|(_, op)| op.needs_index());
-            building || matches!(w.catch_up, Some((_, false)))
+            // A catch-up for the rename that is still first.
+            let catching_up = w.catch_up.as_ref().is_some_and(|c| {
+                !c.done
+                    && w.vault_ops
+                        .front()
+                        .is_some_and(|(id, op)| *id == c.for_op && op.needs_index())
+            });
+            building || catching_up
         })
     }
 
@@ -763,4 +782,14 @@ pub(super) fn vault_job(
     write: impl FnOnce() -> Result<(), String> + Send + 'static,
 ) -> Task<Message> {
     Task::future(async move { Message::FilesChanged(gone, write()) })
+}
+
+/// An index catch-up before a queued rename.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CatchUp {
+    /// Its job's number (`Message::IndexCaughtUp`).
+    pub job: u64,
+    /// The queued change it serves.
+    pub for_op: u64,
+    pub done: bool,
 }

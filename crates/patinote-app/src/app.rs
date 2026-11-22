@@ -199,9 +199,8 @@ pub struct Workspace {
     /// The number the next queued change gets.
     vault_op_seq: u64,
     /// Before a queued rename holds saves, the index catches up in a job
-    /// of its own (saves go on meanwhile): the change it is for, and
-    /// whether it is done.
-    catch_up: Option<(u64, bool)>,
+    /// of its own (saves go on meanwhile).
+    catch_up: Option<renaming::CatchUp>,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -270,8 +269,7 @@ pub enum Message {
     ChooseFolder,
     FolderChosen(Option<PathBuf>),
     RetryVault,
-    /// The index caught up (or failed to) before the queued rename with
-    /// this number (`App::pump_vault_ops`).
+    /// The index catch-up job with this number ended (`App::pump_vault_ops`).
     IndexCaughtUp(u64, Result<(), String>),
     /// An event from the index thread of the vault opened `n`th
     /// ([`App`]'s `opened`); events of a vault since closed are dropped.

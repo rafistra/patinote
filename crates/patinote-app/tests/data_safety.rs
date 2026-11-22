@@ -1113,3 +1113,25 @@ fn f05_2_a_quit_during_a_renames_index_catch_up_says_so() {
     assert!(env.path("Vault/Referensi/Bacaan.md").exists());
     assert!(app.exited(), "the quit went on");
 }
+
+/// The index catch-up for a queued rename fails: the rename is refused at
+/// once with the reason, and a quit that waited for it goes on.
+#[test]
+fn f05_2_a_failed_index_catch_up_refuses_the_rename() {
+    let env = Env::new();
+    let mut app = open(&env);
+    // Change 1 is the rename; job 2 is its catch-up, held here.
+    let _held = rename_held(&mut app, "Referensi/Daftar bacaan.md", "Bacaan");
+    to_editor(&mut app);
+    command(&mut app, "qa");
+    assert!(!app.exited());
+    send(&mut app, Message::IndexCaughtUp(2, Err("disk full".into())));
+    assert!(!env.path("Vault/Referensi/Bacaan.md").exists(), "refused");
+    assert_eq!(
+        app.message().map(|(_, m)| m),
+        Some(
+            "Can't rename \"Referensi/Daftar bacaan.md\": the index could not be updated: disk full"
+        )
+    );
+    assert!(app.exited(), "the quit went on");
+}
