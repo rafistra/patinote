@@ -752,7 +752,7 @@ impl App {
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let p = path.clone();
-        let job = self.vault_job(vec![p.clone()], move || {
+        let job = super::renaming::vault_job(vec![p.clone()], move || {
             expect_current(&root, &p)
                 .map_err(|e| e.to_string())
                 .and_then(|expect| {

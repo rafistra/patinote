@@ -482,7 +482,7 @@ impl App {
         let journal = w.journal.clone();
         let use_copy = choice == Choice::UseCopy;
         let (o, c) = (original.clone(), copy.clone());
-        let job = self.vault_job(vec![c.clone()], move || {
+        let job = super::renaming::vault_job(vec![c.clone()], move || {
             let mut ops = Vec::new();
             // Both files must still be what the comparison showed.
             let copy_expect = Expect::Hash(content_hash(&copy_bytes));

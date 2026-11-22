@@ -1019,6 +1019,10 @@ fn f05_2_autosave_goes_on_while_a_rename_waits_for_the_index() {
         "saved while waiting"
     );
     run(&mut app, rename);
+    assert!(
+        !env.path("Vault/Referensi/Bacaan.md").exists(),
+        "the rename waits for the index"
+    );
     send(
         &mut app,
         Message::Index(1, patinote_app::session::IndexEvent::Ready { notes: 12 }),
@@ -1053,4 +1057,39 @@ fn f10_3_changes_dropped_by_a_delete_are_named_in_one_message() {
         app.message().map(|(_, m)| m),
         Some("2 changes were not made: \"Referensi\" was deleted")
     );
+}
+
+/// The index fails instead of getting ready: a rename that waited for it is
+/// not left waiting for good (nor is a quit behind it).
+#[test]
+fn f05_2_a_rename_waiting_for_the_index_goes_on_when_indexing_fails() {
+    let env = Env::new();
+    let mut app = open(&env);
+    send(
+        &mut app,
+        Message::Index(
+            1,
+            patinote_app::session::IndexEvent::Progress {
+                done: 0,
+                total: 100,
+            },
+        ),
+    );
+    let rename = rename_held(&mut app, "Referensi/Daftar bacaan.md", "Bacaan");
+    run(&mut app, rename);
+    to_editor(&mut app);
+    command(&mut app, "qa");
+    assert_eq!(
+        app.message().map(|(_, m)| m),
+        Some("Quitting once the index is ready and the rename is done (:q! quits now)")
+    );
+    assert!(!app.exited());
+    send(
+        &mut app,
+        Message::Index(
+            1,
+            patinote_app::session::IndexEvent::Failed("cannot index the vault: test".into()),
+        ),
+    );
+    assert!(app.exited(), "the quit went on");
 }

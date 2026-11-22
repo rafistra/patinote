@@ -549,11 +549,7 @@ impl App {
         let waiting = self.pump_vault_ops();
         // A quit waiting for the queue goes on once it is empty (every
         // change left may have been refused at once).
-        let quit = if self.quitting && !self.unsaved() && !self.save_failed() && !self.exited {
-            self.quit(false)
-        } else {
-            Task::none()
-        };
+        let quit = self.quit_if_waiting();
         Task::batch([reindex, landed, waiting, quit])
     }
 
