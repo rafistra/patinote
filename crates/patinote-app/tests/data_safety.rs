@@ -972,7 +972,7 @@ fn f10_3_a_queued_rename_of_a_deleted_note_is_dropped_with_a_message() {
     assert!(env.path("Vault/.trash/Referensi/Daftar bacaan.md").exists());
     assert_eq!(
         app.message().map(|(_, m)| m),
-        Some("Can't change \"Referensi/Daftar bacaan.md\": it was deleted")
+        Some("Can't change \"Referensi/Daftar bacaan.md\": \"Referensi\" was deleted")
     );
 }
 
@@ -991,4 +991,66 @@ fn f10_6_renaming_twice_in_a_row_keeps_links_working() {
     send(&mut app, Message::DialogInput("Ide tiga".into()));
     send(&mut app, Message::DialogSubmit);
     assert_eq!(disk(&env, "Tautan.md"), "[[Ide tiga]]\n");
+}
+
+/// While the index is still being built, a rename waits and autosave goes
+/// on; once the index is ready the rename runs.
+#[test]
+fn f05_2_autosave_goes_on_while_a_rename_waits_for_the_index() {
+    let env = Env::new();
+    let mut app = open(&env);
+    // The index is (again) being built.
+    send(
+        &mut app,
+        Message::Index(
+            1,
+            patinote_app::session::IndexEvent::Progress {
+                done: 0,
+                total: 100,
+            },
+        ),
+    );
+    let rename = rename_held(&mut app, "Referensi/Daftar bacaan.md", "Bacaan");
+    to_editor(&mut app);
+    keys(&mut app, "ggOduatujuh<Esc>");
+    common::wait(&mut app, Duration::from_secs(2));
+    assert!(
+        disk(&env, NOTE).starts_with("duatujuh\n"),
+        "saved while waiting"
+    );
+    run(&mut app, rename);
+    send(
+        &mut app,
+        Message::Index(1, patinote_app::session::IndexEvent::Ready { notes: 12 }),
+    );
+    assert!(
+        env.path("Vault/Referensi/Bacaan.md").exists(),
+        "renamed once ready"
+    );
+}
+
+/// Several queued changes dropped by one delete: one message says how many
+/// and what was deleted.
+#[test]
+fn f10_3_changes_dropped_by_a_delete_are_named_in_one_message() {
+    let env = Env::new();
+    let mut app = open(&env);
+    keys(&mut app, "ggOduadelapan<Esc>");
+    let save = start_autosave(&mut app);
+    explorer_key(&mut app, "Referensi", "d");
+    press(&mut app, "Enter");
+    for (path, name) in [
+        ("Referensi/Daftar bacaan.md", "Bacaan"),
+        ("Referensi/Daftar sumber indeks.md", "Sumber"),
+    ] {
+        explorer_key(&mut app, path, "r");
+        send(&mut app, Message::DialogInput(name.into()));
+        send(&mut app, Message::DialogSubmit);
+    }
+    run(&mut app, save);
+    assert!(env.path("Vault/.trash/Referensi").exists());
+    assert_eq!(
+        app.message().map(|(_, m)| m),
+        Some("2 changes were not made: \"Referensi\" was deleted")
+    );
 }

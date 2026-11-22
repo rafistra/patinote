@@ -1024,6 +1024,8 @@ impl App {
                         self.load_open_backlinks(),
                         self.load_candidates(),
                         self.load_conflicts(),
+                        // A rename asked for while indexing goes now.
+                        self.pump_vault_ops(),
                     ])
                 } else {
                     Task::none()
