@@ -268,7 +268,7 @@ fn f08_5_gd_on_a_markdown_heading_link_in_the_same_note_jumps_to_it() {
 }
 
 #[test]
-fn f08_a_click_away_from_a_link_closes_its_suggestions() {
+fn f08_1_a_click_away_from_a_link_closes_its_suggestions() {
     let env = Env::new();
     let mut app = open(&env, "Inbox/Ide cepat.md");
     keys(&mut app, "ggO[[Rap");
@@ -280,4 +280,77 @@ fn f08_a_click_away_from_a_link_closes_its_suggestions() {
     keys(&mut app, "<CR>");
     assert_eq!(app.active_text().unwrap().lines().count(), lines + 1);
     assert_eq!(line(&app, 0), "[[Rap]]");
+}
+
+#[test]
+fn f08_1_a_click_inside_a_finished_link_opens_no_suggestions() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[Rapat|catatan rapat<Esc>");
+    keys(&mut app, "<Esc>A");
+    send(&mut app, Message::Click(0, 4, false));
+    assert!(!app.suggestions_open());
+    // Enter breaks the line; the link keeps its alias.
+    keys(&mut app, "<CR>");
+    assert_eq!(line(&app, 0), "[[Ra");
+    assert_eq!(line(&app, 1), "pat|catatan rapat]]");
+}
+
+#[test]
+fn f08_1_suggestions_closed_with_esc_stay_closed_after_a_click() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[Rap<Esc>");
+    assert!(!app.suggestions_open());
+    let (l, c) = app.active_cursor().unwrap();
+    send(&mut app, Message::Click(l, c, false));
+    assert!(!app.suggestions_open());
+}
+
+#[test]
+fn f08_1_a_ctrl_click_away_from_a_link_closes_its_suggestions() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[Rap");
+    assert!(app.suggestions_open());
+    send(&mut app, Message::Click(2, 0, true));
+    assert!(!app.suggestions_open());
+}
+
+#[test]
+fn f08_1_a_click_onto_another_link_does_not_carry_the_suggestions() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggOlihat [[Desain indeks Patinote#Ta<Esc>");
+    keys(&mut app, "o[[Rap");
+    assert!(app.suggestions_open());
+    // The click lands inside the heading link on line 0; whatever
+    // suggestions show must not be the ones for `[[Rap`.
+    let held = app.update(Message::Click(0, 20, false));
+    assert!(!app.suggestions_open(), "closed at once");
+    common::run(&mut app, held);
+    assert!(!app.suggestions_open());
+}
+
+#[test]
+fn f08_4_headings_that_arrive_for_another_link_are_dropped() {
+    let env = Env::new();
+    let mut app = open(&env, "Inbox/Ide cepat.md");
+    keys(&mut app, "ggO[[Patinote#");
+    // A late answer for `[[Desain indeks Patinote#` (typed earlier on
+    // another line at the same column) arrives now.
+    send(
+        &mut app,
+        Message::Headings(
+            2,
+            "Desain indeks Patinote#".into(),
+            vec![(2, "Tabel inti".into())],
+        ),
+    );
+    assert!(
+        !app.suggestion_inserts()
+            .contains(&"Desain indeks Patinote#Tabel inti".to_owned()),
+        "{:?}",
+        app.suggestion_inserts()
+    );
 }

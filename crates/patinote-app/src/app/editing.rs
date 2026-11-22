@@ -652,11 +652,13 @@ impl App {
             doc.vim.move_cursor(&mut doc.buffer, vim::Pos { line, col });
             doc.moved_cursor(rev);
         }
+        // As in Vim, moving the cursor ends the completion: suggestions
+        // close, and only typing opens them again.
+        self.autocomplete = None;
         if ctrl {
             return self.follow_link();
         }
-        // Link suggestions follow the cursor: closed once it leaves the link.
-        self.after_insert_key(None)
+        Task::none()
     }
 
     /// After the wheel scrolled, the cursor stays inside the visible lines.
@@ -673,7 +675,7 @@ impl App {
             let rev = doc.buffer.revision();
             doc.vim.move_cursor(&mut doc.buffer, pos);
             doc.moved_cursor(rev);
-            return self.after_insert_key(None);
+            self.autocomplete = None;
         }
         Task::none()
     }
