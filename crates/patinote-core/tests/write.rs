@@ -940,7 +940,8 @@ fn pruning_sweeps_entry_folders_without_a_manifest() {
     v.commit(vec![write_op("a.md", "b\n", v.expect("a.md"))])
         .unwrap();
     let old = v.journal.dir().join("00000000000000000001-000001-0001");
-    let fresh = v.journal.dir().join("00000000000000000002-000001-0002");
+    let now_ns = now.duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let fresh = v.journal.dir().join(format!("{now_ns:020}-000001-0002"));
     for d in [&old, &fresh] {
         fs::create_dir_all(d).unwrap();
         fs::write(d.join("before-0"), "isi lama\n").unwrap();
@@ -949,8 +950,25 @@ fn pruning_sweeps_entry_folders_without_a_manifest() {
         .unwrap()
         .set_modified(now - Duration::from_secs(2 * 3600))
         .unwrap();
+    // Kept: an entry set aside as damaged (for a person to look at), and
+    // a folder that is no entry at all.
+    let damaged = v.journal.dir().join("00000000000000000003-000001-0003");
+    fs::create_dir_all(&damaged).unwrap();
+    fs::write(damaged.join("manifest.json.damaged"), "{rusak").unwrap();
+    fs::write(damaged.join("before-0"), "isi lama\n").unwrap();
+    let other = v.journal.dir().join("lain");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("catatan"), "x").unwrap();
+    for d in [&damaged, &other] {
+        fs::File::open(d)
+            .unwrap()
+            .set_modified(now - Duration::from_secs(2 * 3600))
+            .unwrap();
+    }
     v.journal.prune(now).unwrap();
     assert!(!old.exists(), "swept");
     assert!(fresh.exists(), "too new to sweep");
+    assert!(damaged.join("before-0").exists(), "set aside, kept");
+    assert!(other.exists(), "not an entry");
     assert_eq!(v.journal.ids().unwrap().len(), 1, "real entries stay");
 }

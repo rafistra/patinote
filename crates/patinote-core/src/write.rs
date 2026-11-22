@@ -760,21 +760,34 @@ impl Journal {
         self.prune_with(now, &Retention::PRD)
     }
 
-    /// Removes entry folders with no manifest that are over an hour old:
-    /// what is left when removing an undone entry stopped halfway. They
-    /// hold old note text that nothing reads. A younger one may be an entry
-    /// still being written, so it stays.
+    /// Removes what is left when removing an undone entry stopped halfway:
+    /// a folder named like an entry id, over an hour old by that id's time,
+    /// with no manifest and nothing but `before-N` blobs (old note text
+    /// nothing reads). A folder with `manifest.json.damaged` was set aside
+    /// for a person to look at, and anything else is not an entry: both
+    /// stay. A younger one may be an entry still being written.
     fn sweep_orphans(&self, now: SystemTime) {
         let Ok(dirs) = fs::read_dir(&self.dir) else {
             return;
         };
+        let now_ns = now.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
         for d in dirs.filter_map(Result::ok) {
+            let Some(name) = d.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            let Some(made_ns) = entry_time_ns(&name) else {
+                continue;
+            };
+            let old = now_ns.saturating_sub(made_ns) > 3600 * 1_000_000_000;
             let path = d.path();
-            let old = d
-                .metadata()
-                .and_then(|m| m.modified())
-                .is_ok_and(|t| now.duration_since(t).is_ok_and(|age| age.as_secs() > 3600));
-            if old && path.is_dir() && !path.join("manifest.json").exists() {
+            let only_blobs = fs::read_dir(&path).is_ok_and(|files| {
+                files.filter_map(Result::ok).all(|f| {
+                    f.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with("before-"))
+                })
+            });
+            if old && only_blobs {
                 let _ = fs::remove_dir_all(&path);
             }
         }
@@ -1107,6 +1120,24 @@ fn commit_on_disk(
 thread_local! {
     /// Makes the next "committed" mark fail, as on a full disk.
     static FAIL_MARKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// The time in an entry id (`<nanoseconds:20>-<pid:6>-<seq:4>`), or
+/// `None` when `name` is not an entry id.
+fn entry_time_ns(name: &str) -> Option<u128> {
+    let mut parts = name.split('-');
+    let (ns, pid, seq) = (parts.next()?, parts.next()?, parts.next()?);
+    let digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+    // The pid is padded to six digits but may be longer.
+    (parts.next().is_none()
+        && ns.len() == 20
+        && digits(ns)
+        && pid.len() >= 6
+        && digits(pid)
+        && seq.len() == 4
+        && digits(seq))
+    .then(|| ns.parse().ok())
+    .flatten()
 }
 
 /// After an entry was undone: marks it rolled back, so the next start does

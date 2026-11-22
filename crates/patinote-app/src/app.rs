@@ -191,6 +191,9 @@ pub struct Workspace {
     /// A rename or move is running: autosave waits, so nothing is written
     /// at a path that is about to move.
     moving: bool,
+    /// A rename or move asked for while a save ran: it starts once no save
+    /// runs, so a save never lands at a path that moved meanwhile.
+    deferred_move: Option<renaming::DeferredMove>,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -592,6 +595,7 @@ impl App {
             active,
             closing: Vec::new(),
             moving: false,
+            deferred_move: None,
             selected: 0,
             candidates: Vec::new(),
             attachments: Vec::new(),
