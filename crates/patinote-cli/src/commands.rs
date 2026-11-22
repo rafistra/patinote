@@ -236,7 +236,7 @@ pub fn read(
     lines: (Option<usize>, Option<usize>),
     max_bytes: Option<usize>,
 ) -> Result<ReadOutput, Failure> {
-    let path = ctx.vault.root.join(&row.path);
+    let path = patinote_core::names::on_disk(&ctx.vault.root, &row.path);
     let bytes =
         std::fs::read(&path).map_err(|e| io_failure(&format!("cannot read {}", row.path), e))?;
     let text = String::from_utf8(bytes).map_err(|_| {

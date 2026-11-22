@@ -359,3 +359,27 @@ fn f05_8_a_note_outside_the_vault_opens_read_only() {
     );
     assert_eq!(app.banner_title(), None);
 }
+
+/// A note whose name is stored in NFD (from macOS) opens with its text and
+/// saves in place, without an NFC copy next to it (Q-019).
+#[test]
+fn f05_a_note_named_in_nfd_opens_and_saves_in_place() {
+    let env = Env::new();
+    let vault = env.vault();
+    std::fs::write(vault.join("Cafe\u{301}.md"), "kopi\n").unwrap();
+    let mut app = env.start(env.launch(Some(vault.clone()), Config::default()));
+    send(
+        &mut app,
+        Message::Remote(Request::Open {
+            path: "Café.md".into(),
+        }),
+    );
+    assert_eq!(app.active_text().as_deref(), Some("kopi\n"));
+    keys(&mut app, "ggOsusu<Esc>");
+    command(&mut app, "w");
+    assert_eq!(
+        std::fs::read_to_string(vault.join("Cafe\u{301}.md")).unwrap(),
+        "susu\nkopi\n"
+    );
+    assert!(std::fs::symlink_metadata(vault.join("Café.md")).is_err());
+}

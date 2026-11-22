@@ -81,7 +81,7 @@ File lengkap: `crates/patinote-index/migrations/0001_init.sql`. Ringkasan:
 | Tabel | Fungsi | Catatan desain |
 | --- | --- | --- |
 | `meta` | Versi aplikasi, path vault, waktu indeks penuh terakhir | |
-| `notes` | Satu baris per file: catatan, lampiran, canvas | Lampiran ikut dicatat karena `[[gambar.png]]` juga link. `path` relatif dengan separator `/` dan Unicode NFC. `excluded = 1` untuk file yang cocok dengan `.patinote/ignore`: hanya tujuan link, tanpa isi FTS, tag, atau link keluar (Q-007) |
+| `notes` | Satu baris per file: catatan, lampiran, canvas | Lampiran ikut dicatat karena `[[gambar.png]]` juga link. `path` relatif dengan separator `/` dan Unicode NFC. Nama di disk yang tidak NFC (misalnya NFD dari macOS) tidak disimpan; setiap akses file mencarinya lewat `names::on_disk`, yang hanya membaca folder bila path NFC tidak ada (Q-019). `excluded = 1` untuk file yang cocok dengan `.patinote/ignore`: hanya tujuan link, tanpa isi FTS, tag, atau link keluar (Q-007) |
 | `aliases` | Dari frontmatter `aliases:` | Dipakai resolver dan autocomplete `[[` |
 | `links` | Semua link keluar | `dst_id NULL` = belum ada catatannya. Posisi byte disimpan agar rename (Fase 3) bisa menulis ulang link dengan presisi tanpa parse ulang |
 | `tags` | Tag inline dan frontmatter | Tag bersarang disimpan utuh (`proyek/patinote`) |

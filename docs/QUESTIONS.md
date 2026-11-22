@@ -242,4 +242,4 @@ Rekomendasi agent: A. Tambalannya kecil dan mudah dibuang, dan dengan itu gulir 
 - C. Belum ditangani di Gerbang 1; dicatat sebagai keterbatasan.
 
 Rekomendasi agent: B. Skema tidak berubah, perbaikannya terkumpul di satu fungsi, dan vault yang semua namanya NFC tidak terkena biaya tambahan. A lebih rapi bila nanti ada kebutuhan lain akan nama asli di indeks.
-**Jawaban:** —
+**Jawaban:** B (22 November 2026). `patinote_core::names::disk_rel` dan `on_disk`; jalur tulis menerjemahkan setiap path transaksi ke nama di disk sebelum `plan`/`commit`.

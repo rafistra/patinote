@@ -176,7 +176,7 @@ impl App {
                     .map(|t| {
                         let file =
                             resolve(t, t.contains('/') || t.contains('.') && !t.contains("[["))
-                                .map(|p| root.join(p))
+                                .map(|p| patinote_core::names::on_disk(&root, &p))
                                 .filter(|p| p.is_file());
                         (t.clone(), file)
                     })

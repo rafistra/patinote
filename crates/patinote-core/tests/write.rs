@@ -806,3 +806,51 @@ fn nothing_is_written_through_a_folder_link_that_leaves_the_vault() {
     .unwrap();
     assert_eq!(v.read("Proyek/p.md").as_deref(), Some("p baru\n"));
 }
+
+/// Writes name the vault's NFC paths; a file or folder stored in NFD is
+/// written in place, never next to a new NFC copy (Q-019).
+#[test]
+fn writing_a_note_named_in_nfd_changes_that_file() {
+    let v = vault();
+    v.write("Cafe\u{301}.md", "lama\n");
+    v.write("Re\u{301}sume\u{301}/a.md", "a\n");
+    let done = v
+        .commit(vec![
+            write_op("Café.md", "baru\n", v.expect("Café.md")),
+            write_op("Résumé/a.md", "a baru\n", v.expect("Résumé/a.md")),
+            write_op("Résumé/b.md", "b\n", Expect::Absent),
+        ])
+        .unwrap();
+    assert_eq!(v.read("Cafe\u{301}.md").as_deref(), Some("baru\n"));
+    assert_eq!(
+        v.read("Re\u{301}sume\u{301}/a.md").as_deref(),
+        Some("a baru\n")
+    );
+    assert_eq!(v.read("Re\u{301}sume\u{301}/b.md").as_deref(), Some("b\n"));
+    assert!(
+        fs::symlink_metadata(v.root.join("Café.md")).is_err(),
+        "no NFC copy"
+    );
+    assert!(
+        fs::symlink_metadata(v.root.join("Résumé")).is_err(),
+        "no NFC folder"
+    );
+    let mut changed = done.changed.clone();
+    changed.sort();
+    assert_eq!(changed, ["Café.md", "Résumé/a.md", "Résumé/b.md"]);
+    // Moves and the trash too.
+    v.commit(vec![Op::Move {
+        from: "Café.md".into(),
+        to: "Kopi.md".into(),
+        content: None,
+        expect: v.expect("Café.md"),
+    }])
+    .unwrap();
+    assert_eq!(v.read("Kopi.md").as_deref(), Some("baru\n"));
+    v.commit(vec![Op::Trash {
+        path: "Résumé/a.md".into(),
+        expect: v.expect("Résumé/a.md"),
+    }])
+    .unwrap();
+    assert!(fs::symlink_metadata(v.root.join("Re\u{301}sume\u{301}/a.md")).is_err());
+}

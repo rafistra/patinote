@@ -52,7 +52,11 @@ fn plan_on_index(store: &SqliteStore, root: &Path, moves: &[Moved]) -> RelinkPla
     }
     let files: Vec<(String, Vec<u8>)> = sources
         .into_iter()
-        .filter_map(|p| std::fs::read(root.join(&p)).ok().map(|b| (p, b)))
+        .filter_map(|p| {
+            std::fs::read(patinote_core::names::on_disk(root, &p))
+                .ok()
+                .map(|b| (p, b))
+        })
         .collect();
     // Every file as it will be after the move, to tell whether a link
     // target still finds exactly one.

@@ -312,7 +312,12 @@ fn read(root: &Path, file: &ScannedFile, old: Option<&FileState>) -> Read {
         }
         return Read::File(Box::new(indexed));
     }
-    let bytes = match fs::read(root.join(&file.path)) {
+    // The name on disk may not be NFC (Q-019): looked up only then.
+    let read = fs::read(root.join(&file.path)).or_else(|e| match e.kind() {
+        io::ErrorKind::NotFound => fs::read(crate::names::on_disk(root, &file.path)),
+        _ => Err(e),
+    });
+    let bytes = match read {
         Ok(b) => b,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Read::File(Box::new(indexed)),
         Err(_) => {

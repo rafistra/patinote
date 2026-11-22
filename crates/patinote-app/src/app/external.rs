@@ -97,8 +97,11 @@ impl App {
         let Some(w) = self.workspace() else {
             return Task::none();
         };
-        let file = w.session.paths.root.join(&path);
-        Task::future(async move { Message::DiskState(path, std::fs::read(&file).ok()) })
+        let root = w.session.paths.root.clone();
+        Task::future(async move {
+            let bytes = std::fs::read(patinote_core::names::on_disk(&root, &path)).ok();
+            Message::DiskState(path, bytes)
+        })
     }
 
     /// What the disk holds for an open note (F-11): unchanged, reloaded, or
@@ -414,8 +417,9 @@ impl App {
         };
         let root = w.session.paths.root.clone();
         Task::future(async move {
-            let original = std::fs::read(root.join(&c.original)).ok();
-            let copy_bytes = std::fs::read(root.join(&c.path)).unwrap_or_default();
+            let original = std::fs::read(patinote_core::names::on_disk(&root, &c.original)).ok();
+            let copy_bytes =
+                std::fs::read(patinote_core::names::on_disk(&root, &c.path)).unwrap_or_default();
             let text = |b: &[u8]| file::open(b).text;
             let sides = diff::sides(
                 &original.as_deref().map(text).unwrap_or_default(),
