@@ -13,6 +13,8 @@ use patinote_core::relink::{self, Moved, RelinkPlan};
 use patinote_core::resolve::Target;
 use patinote_core::write::{Actor, Expect, Journal, commit, expect_current};
 use patinote_core::{FileKind, Resolver};
+
+use crate::editor::document::Save;
 use patinote_index::SqliteStore;
 
 use super::files::Dialog;
@@ -311,8 +313,69 @@ impl App {
         *selected = 0;
     }
 
+    /// Asks for a vault change: it runs after the ones before it, once no
+    /// save runs, so a save never lands at a path that moved or went to the
+    /// trash meanwhile, and never races the links a rename rewrites.
+    pub(super) fn queue_vault_op(&mut self, op: VaultOp) -> Task<Message> {
+        if let Some(w) = self.workspace_mut() {
+            w.vault_ops.push_back(op);
+        }
+        self.pump_vault_ops()
+    }
+
+    /// Starts the next vault change when none runs and no save runs. One
+    /// that is refused at once (a stuck note, say) lets the next one go.
+    pub(super) fn pump_vault_ops(&mut self) -> Task<Message> {
+        let mut tasks = Vec::new();
+        while let Some(w) = self.workspace_mut() {
+            let saving = w
+                .buffers
+                .iter()
+                .filter_map(|b| b.doc.as_ref())
+                .chain(&w.closing)
+                .any(|d| matches!(d.save, Save::Running(_)));
+            if w.vault_busy || saving {
+                break;
+            }
+            let Some(op) = w.vault_ops.pop_front() else {
+                break;
+            };
+            tasks.push(match op {
+                VaultOp::RenameNote { from, to } => self.rename_note(from, to),
+                VaultOp::RenameFolder { from, to } => self.rename_folder(from, to),
+                VaultOp::Trash { path } => self.trash(path),
+                VaultOp::Sync { choice, pair } => self.resolve_sync_now(choice, *pair),
+            });
+        }
+        Task::batch(tasks)
+    }
+
+    /// A vault change landed: notes closed meanwhile are saved, then the
+    /// next change goes, and a quit that waited for it goes on.
+    pub(super) fn vault_op_done(&mut self) -> Task<Message> {
+        let mut tasks = Vec::new();
+        if let Some(w) = self.workspace_mut() {
+            w.vault_busy = false;
+            let (root, journal) = (w.session.paths.root.clone(), w.journal.clone());
+            for d in &mut w.closing {
+                if d.dirty() && d.save == Save::Idle {
+                    let job = d.start_save(&root, &journal);
+                    tasks.push(Task::future(async move { Message::Saved(job.run()) }));
+                }
+            }
+        }
+        if self.quitting {
+            tasks.push(self.autosave(true));
+        }
+        tasks.push(self.pump_vault_ops());
+        if self.quitting && !self.unsaved() && !self.save_failed() {
+            tasks.push(self.quit(false));
+        }
+        Task::batch(tasks)
+    }
+
     /// Renames or moves a note, updating every link to it (F-10.6, F-10.7).
-    pub(super) fn rename_note(&mut self, from: String, to: String) -> Task<Message> {
+    fn rename_note(&mut self, from: String, to: String) -> Task<Message> {
         self.run_moves(
             vec![Moved {
                 from: from.clone(),
@@ -326,34 +389,13 @@ impl App {
 
     /// Renames or moves a folder with everything in it. Attachments are
     /// among the moves, so links to them follow too.
-    pub(super) fn rename_folder(&mut self, from: String, to: String) -> Task<Message> {
+    fn rename_folder(&mut self, from: String, to: String) -> Task<Message> {
         let files: Vec<String> = self
             .workspace()
             .map(|w| w.explorer.tree.files_under(&from))
             .unwrap_or_default();
         let moves = relink::folder_moves(&from, &to, &files);
         self.run_moves(moves, Some((from.clone(), to.clone())), from, to)
-    }
-
-    /// A save landed: a move waiting for saves starts once none runs.
-    pub(super) fn saves_landed(&mut self) -> Task<Message> {
-        let Some(w) = self.workspace_mut() else {
-            return Task::none();
-        };
-        let running = w
-            .buffers
-            .iter()
-            .filter_map(|b| b.doc.as_ref())
-            .chain(&w.closing)
-            .any(|d| matches!(d.save, crate::editor::document::Save::Running(_)));
-        match (running, w.deferred_move.take()) {
-            (false, Some(m)) => self.run_moves(m.moves, m.folder, m.from, m.to),
-            (true, m) => {
-                w.deferred_move = m;
-                Task::none()
-            }
-            (false, None) => Task::none(),
-        }
     }
 
     fn run_moves(
@@ -363,23 +405,6 @@ impl App {
         from: String,
         to: String,
     ) -> Task<Message> {
-        // A save still running would land at a path that moved, or race the
-        // links the move rewrites: the move waits for it (`saves_landed`).
-        if let Some(w) = self.workspace_mut()
-            && w.buffers
-                .iter()
-                .filter_map(|b| b.doc.as_ref())
-                .chain(&w.closing)
-                .any(|d| matches!(d.save, crate::editor::document::Save::Running(_)))
-        {
-            w.deferred_move = Some(DeferredMove {
-                moves,
-                folder,
-                from,
-                to,
-            });
-            return Task::none();
-        }
         // Text that cannot be saved would be lost when its note is read
         // again after the move: settle it first.
         if let Some(p) = self.unsaved_stuck(|_| true, true) {
@@ -396,7 +421,7 @@ impl App {
         };
         // No save starts at a path that is moving; text typed meanwhile is
         // saved at the new path once the move lands.
-        w.moving = true;
+        w.vault_busy = true;
         let root: PathBuf = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let job = Task::perform(
@@ -445,9 +470,6 @@ impl App {
         to: String,
         result: Result<Vec<String>, String>,
     ) -> Task<Message> {
-        if let Some(w) = self.workspace_mut() {
-            w.moving = false;
-        }
         let changed = match result {
             Ok(c) => c,
             Err(e) => {
@@ -535,11 +557,25 @@ fn moved_path(path: &str, from: &str, to: Option<&str>) -> Option<Option<String>
     Some(to.map(|t| format!("{t}/{rest}")))
 }
 
-/// A rename or move waiting for running saves to land.
+/// A change to the vault's files other than a note's own save (F-10, F-11),
+/// queued so that it and saves never overlap (`App::queue_vault_op`).
 #[derive(Debug)]
-pub struct DeferredMove {
-    moves: Vec<Moved>,
-    folder: Option<(String, String)>,
-    from: String,
-    to: String,
+pub enum VaultOp {
+    RenameNote {
+        from: String,
+        to: String,
+    },
+    /// The files under it are listed when it runs, not when asked for.
+    RenameFolder {
+        from: String,
+        to: String,
+    },
+    Trash {
+        path: String,
+    },
+    /// Use copy or Keep original for a Syncthing conflict (F-11.6).
+    Sync {
+        choice: super::external::Choice,
+        pair: Box<super::external::SyncPair>,
+    },
 }

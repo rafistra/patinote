@@ -458,7 +458,10 @@ impl App {
     /// Whether any note has text that is not on disk yet.
     pub(super) fn unsaved(&self) -> bool {
         self.workspace().is_some_and(|w| {
-            !w.closing.is_empty()
+            // A vault change asked for is not done either.
+            w.vault_busy
+                || !w.vault_ops.is_empty()
+                || !w.closing.is_empty()
                 || w.buffers
                     .iter()
                     .filter_map(|b| b.doc.as_ref())
@@ -501,7 +504,7 @@ impl App {
         let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
-        if w.moving {
+        if w.vault_busy {
             return Task::none();
         }
         if force {
@@ -542,9 +545,9 @@ impl App {
             Task::none()
         };
         let landed = self.save_landed(done);
-        // A rename or move waiting for this save starts now.
-        let deferred = self.saves_landed();
-        Task::batch([reindex, landed, deferred])
+        // A vault change waiting for this save starts now.
+        let waiting = self.pump_vault_ops();
+        Task::batch([reindex, landed, waiting])
     }
 
     fn save_landed(&mut self, done: SaveDone) -> Task<Message> {
@@ -555,14 +558,17 @@ impl App {
         let mut recheck = None;
         let mut next = Task::none();
         // Found by document, not path: a new note may have taken the path of
-        // one that was renamed. (A rename never overlaps a save: it waits
-        // for running saves, `saves_landed`.)
+        // one that was renamed. (A vault change never overlaps a save:
+        // `pump_vault_ops`.)
         let ours = |d: &Document| d.id == done.doc;
         if let Some(w) = self.workspace_mut() {
             if let Some(i) = w.closing.iter().position(ours) {
                 let mut doc = w.closing.remove(i);
                 doc.finish_save(&done, now);
-                if doc.dirty() && doc.save == Save::Idle {
+                if doc.dirty() && doc.save == Save::Idle && w.vault_busy {
+                    // The rest waits for the vault change that runs.
+                    w.closing.push(doc);
+                } else if doc.dirty() && doc.save == Save::Idle {
                     // Typed into before it was closed, after this save
                     // started: save the rest, still closed.
                     let job = doc.start_save(&w.session.paths.root, &w.journal);
@@ -645,7 +651,7 @@ impl App {
         Task::batch([recheck, next])
     }
 
-    fn save_failed(&self) -> bool {
+    pub(super) fn save_failed(&self) -> bool {
         self.workspace().is_some_and(|w| {
             w.buffers
                 .iter()

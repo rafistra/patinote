@@ -296,9 +296,11 @@ impl App {
             .workspace()
             .is_some_and(|w| w.closing.iter().any(|d| d.path == path))
         {
-            let open = self.open_note(path);
+            let open = self.open_note(path.clone());
+            // Only that note: it may wait in a queue instead of opening.
             if insert
                 && let Some(doc) = self.active_document_mut()
+                && doc.path == path
                 && doc.vim.mode() == vim::Mode::Normal
             {
                 doc.vim.handle(

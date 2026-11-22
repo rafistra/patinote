@@ -780,11 +780,15 @@ impl Journal {
             };
             let old = now_ns.saturating_sub(made_ns) > 3600 * 1_000_000_000;
             let path = d.path();
+            // Blobs, and the temporary files a crash left while writing
+            // them or the manifest (`.before-0.patinote-….tmp`).
             let only_blobs = fs::read_dir(&path).is_ok_and(|files| {
                 files.filter_map(Result::ok).all(|f| {
-                    f.file_name()
-                        .to_str()
-                        .is_some_and(|n| n.starts_with("before-"))
+                    f.file_name().to_str().is_some_and(|n| {
+                        n.starts_with("before-")
+                            || ((n.starts_with(".before-") || n.starts_with(".manifest.json."))
+                                && n.ends_with(".tmp"))
+                    })
                 })
             });
             if old && only_blobs {

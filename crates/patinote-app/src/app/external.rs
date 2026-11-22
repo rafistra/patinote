@@ -455,21 +455,29 @@ impl App {
             self.say(Level::Error, msg);
             return Task::none();
         }
+        if choice == Choice::OpenBoth {
+            let SyncPair { original, copy, .. } = *pair;
+            let first = self.open_note(original);
+            return Task::batch([first, self.open_note(copy)]);
+        }
+        self.queue_vault_op(super::renaming::VaultOp::Sync { choice, pair })
+    }
+
+    /// Writes the choice for a Syncthing conflict, once no save runs.
+    pub(super) fn resolve_sync_now(&mut self, choice: Choice, pair: SyncPair) -> Task<Message> {
         let SyncPair {
             original,
             copy,
             original_hash,
             copy_bytes,
             ..
-        } = *pair;
-        if choice == Choice::OpenBoth {
-            let first = self.open_note(original);
-            return Task::batch([first, self.open_note(copy)]);
-        }
+        } = pair;
         let save = self.autosave(true);
-        let Some(w) = self.workspace() else {
+        let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
+        // No save starts until the choice lands (`vault_op_done`).
+        w.vault_busy = true;
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let use_copy = choice == Choice::UseCopy;

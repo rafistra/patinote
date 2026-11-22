@@ -188,12 +188,13 @@ pub struct Workspace {
     active: Option<usize>,
     /// Notes closed with unsaved changes, kept until their save lands.
     closing: Vec<Document>,
-    /// A rename or move is running: autosave waits, so nothing is written
-    /// at a path that is about to move.
-    moving: bool,
-    /// A rename or move asked for while a save ran: it starts once no save
-    /// runs, so a save never lands at a path that moved meanwhile.
-    deferred_move: Option<renaming::DeferredMove>,
+    /// A rename, move, trash or sync choice is running. Saves and these
+    /// changes never overlap: no save starts while one runs, and none
+    /// starts while a save runs (`App::pump_vault_ops`).
+    vault_busy: bool,
+    /// Vault changes asked for, run one at a time, in order, each once no
+    /// save runs.
+    vault_ops: std::collections::VecDeque<renaming::VaultOp>,
     /// The highlighted recent note on the start screen.
     selected: usize,
     /// Notes the quick switcher finds, loaded from the index.
@@ -594,8 +595,8 @@ impl App {
             buffers,
             active,
             closing: Vec::new(),
-            moving: false,
-            deferred_move: None,
+            vault_busy: false,
+            vault_ops: std::collections::VecDeque::new(),
             selected: 0,
             candidates: Vec::new(),
             attachments: Vec::new(),
@@ -910,8 +911,9 @@ impl App {
             return Task::none();
         }
         // Unsaved text is kept until it is on disk. A save already running
-        // is let land first; the text typed since is saved after it.
-        if matches!(doc.save, Save::Running(_)) {
+        // is let land first; the text typed since is saved after it. While
+        // a vault change runs it waits for it (`vault_op_done`).
+        if matches!(doc.save, Save::Running(_)) || w.vault_busy {
             w.closing.push(doc);
             return Task::none();
         }
@@ -1153,8 +1155,16 @@ impl App {
                 self.delete_counted(path, folder, notes, attachments, linking);
                 Task::none()
             }
-            Message::FilesChanged(gone, result) => self.files_changed(gone, result),
-            Message::Moved(from, to, result) => self.moved(from, to, result),
+            // Both end a vault change: the next one, and saves held for it,
+            // go on.
+            Message::FilesChanged(gone, result) => {
+                let changed = self.files_changed(gone, result);
+                Task::batch([changed, self.vault_op_done()])
+            }
+            Message::Moved(from, to, result) => {
+                let moved = self.moved(from, to, result);
+                Task::batch([moved, self.vault_op_done()])
+            }
             Message::External(change) => self.external_change(change),
             Message::DiskState(path, bytes) => {
                 self.disk_state(path, bytes);

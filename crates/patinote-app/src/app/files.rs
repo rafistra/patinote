@@ -478,7 +478,7 @@ impl App {
                     return Task::none();
                 }
                 let to = join(folder_of(&path), name);
-                self.rename_folder(path, to)
+                self.queue_vault_op(super::renaming::VaultOp::RenameFolder { from: path, to })
             }
         }
     }
@@ -595,12 +595,12 @@ impl App {
                     if to == path {
                         return Task::none();
                     }
-                    self.rename_note(path, to)
+                    self.queue_vault_op(super::renaming::VaultOp::RenameNote { from: path, to })
                 }
             },
             Some(Dialog::DeleteNote { path, .. }) | Some(Dialog::DeleteFolder { path, .. }) => {
                 self.dialog = None;
-                self.trash(path)
+                self.queue_vault_op(super::renaming::VaultOp::Trash { path })
             }
             Some(Dialog::Move {
                 path,
@@ -621,9 +621,9 @@ impl App {
                     .workspace()
                     .is_some_and(|w| w.explorer.tree.is_folder(&path))
                 {
-                    self.rename_folder(path, to)
+                    self.queue_vault_op(super::renaming::VaultOp::RenameFolder { from: path, to })
                 } else {
-                    self.rename_note(path, to)
+                    self.queue_vault_op(super::renaming::VaultOp::RenameNote { from: path, to })
                 }
             }
             None => Task::none(),
@@ -731,7 +731,7 @@ impl App {
     }
 
     /// Moves a note or folder to `.trash/` through the write path (F-10.3).
-    fn trash(&mut self, path: String) -> Task<Message> {
+    pub(super) fn trash(&mut self, path: String) -> Task<Message> {
         // Text that cannot be saved would be closed with the note: the
         // trash only gets what is on disk.
         let prefix = format!("{path}/");
@@ -744,9 +744,11 @@ impl App {
         }
         // Open notes inside are saved first, then closed.
         let save = self.autosave(true);
-        let Some(w) = self.workspace() else {
+        let Some(w) = self.workspace_mut() else {
             return Task::none();
         };
+        // No save starts until the trash lands (`vault_op_done`).
+        w.vault_busy = true;
         let root = w.session.paths.root.clone();
         let journal = w.journal.clone();
         let p = path.clone();
