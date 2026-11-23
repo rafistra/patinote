@@ -87,6 +87,8 @@ never the names it matched. Never set this variable in CI.
 
 ## Documentation
 
+- [`docs/keys.md`](docs/keys.md): every key and `:` command in the app.
+
 Planning documents in `docs/` are written in Indonesian.
 
 - `docs/PRD.md`: product requirements and acceptance criteria.
