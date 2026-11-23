@@ -64,16 +64,22 @@ impl Tree {
         t
     }
 
+    /// Adds `dir` and links it, and each folder above it, to its parent.
+    /// Stops at the first folder already linked: its parents are linked too.
     fn add_folder(&mut self, dir: &str) {
         let mut path = dir;
-        while !path.is_empty() && !self.folders.contains_key(path) {
-            self.folders.insert(path.to_owned(), Default::default());
+        while !path.is_empty() {
+            self.folders.entry(path.to_owned()).or_default();
             let (up, name) = parent(path);
-            self.folders
+            let linked = !self
+                .folders
                 .entry(up.to_owned())
                 .or_default()
                 .0
                 .insert(name.to_owned());
+            if linked {
+                break;
+            }
             path = up;
         }
     }
@@ -260,6 +266,29 @@ mod tests {
                 ("Desain indeks Patinote".into(), 1),
                 ("Patinote".into(), 1),
                 ("Inbox".into(), 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn folders_holding_only_subfolders_show() {
+        // A folder whose files all sit in subfolders, seen through a deeper
+        // folder first, used to be left out of its parent.
+        let t = Tree::new(
+            ["Insight/AI/a.md", "Insight/Teknologi/b.md", "Personal/c.md"],
+            ["Arsip/2025/Q1"],
+            ["Insight".to_owned(), "Arsip".to_owned()].into(),
+        );
+        let rows: Vec<String> = t.rows().into_iter().map(|r| r.path).collect();
+        assert_eq!(
+            rows,
+            [
+                "Arsip",
+                "Arsip/2025",
+                "Insight",
+                "Insight/AI",
+                "Insight/Teknologi",
+                "Personal",
             ]
         );
     }
